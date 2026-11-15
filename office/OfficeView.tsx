@@ -8,7 +8,7 @@ import type { InboxItem, Story, UsageCard } from "../contract.ts";
 import { lookFor } from "./characters.ts";
 import { buildLayout, MIN_H_WIDE, MIN_W_WIDE, PORTRAIT_MIN_H, PORTRAIT_W, type Layout, type PokeKind, type Rect } from "./layout.ts";
 import { EVENT_KINDS, type EventKind } from "./life.ts";
-import { SEASONS, seasonsOf, type Season } from "./seasons.ts";
+import { SEASON_TITLE, SEASONS, seasonsOf, type Season } from "./seasons.ts";
 import { SAMPLE_NEWS, sampleThreads, sampleUsage } from "./sample.ts";
 import {
   ago,
@@ -29,7 +29,7 @@ import {
 } from "./model.ts";
 import { hash } from "./pixel.ts";
 import { Sound, type SoundName } from "./sound.ts";
-import { World, type Hit, type WorldThread } from "./world.ts";
+import { World, type Hit, type SeenState, type WorldThread } from "./world.ts";
 import { chairToneFor } from "./desks.ts";
 
 export const TOPIC_EMOJI: Record<Topic, string> = {
@@ -68,6 +68,19 @@ export interface OfficeThread extends ThreadLike {
   projectName: string;
   projectHue: number;
   providerName: string;
+  /** Force a Vision Pro (sample data); otherwise one or two threads get one. */
+  visionPro?: boolean;
+}
+
+/**
+ * The office keeps living while you're elsewhere in bb: one world per
+ * plugin, so coming back shows everyone where they were.
+ */
+const WORLDS = new Map<string, World>();
+
+/** When you last looked at the office (the buddy counts news since then). */
+export function lookKey(storageKey: string): string {
+  return `${storageKey}:look`;
 }
 
 export interface OfficeProps {
@@ -271,8 +284,19 @@ export function OfficeView(input: OfficeProps) {
   const play = useCallback((name: SoundName) => sound.play(name), [sound]);
 
   const worldRef = useRef<World | null>(null);
-  if (!worldRef.current) worldRef.current = new World((s, ambient) => sound.play(s, ambient));
+  if (!worldRef.current) {
+    let w = WORLDS.get(storageKey);
+    if (!w) {
+      w = new World((s, ambient) => sound.play(s, ambient));
+      WORLDS.set(storageKey, w);
+    }
+    worldRef.current = w;
+  }
   const world = worldRef.current;
+  useEffect(() => {
+    world.setEmit((s, ambient) => sound.play(s, ambient));
+    return () => world.setEmit(() => undefined);
+  }, [world, sound]);
 
   // ------------------------------------------------------------ sizing → layout
   useEffect(() => {
@@ -300,8 +324,8 @@ export function OfficeView(input: OfficeProps) {
   useEffect(() => {
     if (!fit) return;
     const L = buildLayout(fit.W, fit.H, { threads: headcount });
-    world.setLayout(L);
-    setLayout(L);
+    world.setLayout(L, `${fit.W}x${fit.H}:${headcount}`);
+    setLayout(world.layout);
   }, [fit?.W, fit?.H, headcount, world]); // eslint-disable-line react-hooks/exhaustive-deps
   const byId = useMemo(() => new Map(visible.map((t) => [t.id, t])), [visible]);
   const homeDesks = useRef<Map<string, number>>(
@@ -316,7 +340,14 @@ export function OfficeView(input: OfficeProps) {
     (instant: boolean) => {
       const L = world.layout;
       if (!L) return;
-      const { spots, overflow: over } = assignSpots(visible, world.allSpots(), world.currentSpots(), homeDesks.current, Date.now(), {
+      // A fresh office (bb was reloaded): start from what you saw last time.
+      const pretend = debugRef.current.sample === true || debugRef.current.demo === true;
+      const lastSeen = instant && !pretend
+        ? new Map(Object.entries(readJson<Record<string, SeenState>>(`${storageKey}:seen`, {})))
+        : undefined;
+      const previous = world.currentSpots();
+      if (lastSeen) for (const [id, s] of lastSeen) if (!previous.has(id)) previous.set(id, s.spotId);
+      const { spots, overflow: over } = assignSpots(visible, world.allSpots(), previous, homeDesks.current, Date.now(), {
         event: world.eventActive,
       });
       let desksChanged = false;
@@ -332,6 +363,14 @@ export function OfficeView(input: OfficeProps) {
         const live = new Set(visible.map((t) => t.id));
         writeJson(`${storageKey}:desks`, Object.fromEntries([...homeDesks.current].filter(([id]) => live.has(id)).slice(-80)));
       }
+      // One or two people work in a Vision Pro.
+      const vision = new Set(
+        visible
+          .filter((t) => t.visionPro ?? hash(t.id) % 5 === 2)
+          .map((t) => t.id)
+          .sort()
+          .slice(0, 2),
+      );
       const list: WorldThread[] = [];
       for (const t of visible) {
         const spotId = spots.get(t.id);
@@ -347,21 +386,44 @@ export function OfficeView(input: OfficeProps) {
           emblem: topicOf(t.displayTitle),
           deskStyle: deskStyleFor(t.model, t.providerId),
           chairTone: chairToneFor(t.providerId),
+          visionPro: vision.has(t.id),
         });
       }
-      world.sync(list, instant);
+      world.sync(list, instant, lastSeen);
       setOverflow(over.length);
+      // Remember what you're looking at, for next time.
+      if (!document.hidden && !pretend) {
+        writeJson(`${storageKey}:seen`, Object.fromEntries(Object.entries(world.seenStates()).slice(-200)));
+        writeJson(lookKey(storageKey), Date.now());
+      }
     },
     [visible, world, storageKey],
   );
 
   const syncRef = useRef(syncWorld);
   syncRef.current = syncWorld;
+  useEffect(() => {
+    const look = () => {
+      if (document.hidden || debugRef.current.sample || debugRef.current.demo) return;
+      writeJson(lookKey(storageKey), Date.now());
+      writeJson(`${storageKey}:seen`, Object.fromEntries(Object.entries(world.seenStates()).slice(-200)));
+    };
+    look();
+    const id = window.setInterval(look, 5_000);
+    document.addEventListener("visibilitychange", look);
+    return () => {
+      look();
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", look);
+    };
+  }, [storageKey, world]);
   const [officeEvent, setOfficeEvent] = useState<ReturnType<World["currentEvent"]>>(null);
 
   useEffect(() => {
     if (props.loading || !layout) return;
-    const instant = !synced.current;
+    // Everyone is placed at once only in a fresh office; otherwise just the
+    // threads whose state changed since you last looked get up and walk.
+    const instant = world.isEmpty;
     syncWorld(instant);
     synced.current = true;
     const after = new Map(visible.map((t) => [t.id, { mood: moodOf(t), title: t.displayTitle }]));
@@ -599,6 +661,18 @@ export function OfficeView(input: OfficeProps) {
   }, [tags, world]);
 
   const night = world.nightness(debug.hour ?? now.getHours() + now.getMinutes() / 60);
+  const today = seasonsFor(debug.season, now);
+  const festival = today.season ? SEASON_TITLE[today.season] : null;
+  const tvWeather: TvWeather =
+    today.season === "holidays" || today.season === "snowday"
+      ? "snow"
+      : (debug.rainy ?? isRainy(now))
+        ? "rain"
+        : night > 0.5
+          ? "night"
+          : night > 0.15
+            ? "cloud"
+            : "sun";
 
   const tooltip = useMemo<ReactNode>(() => {
     if (!hover) return null;
@@ -723,6 +797,9 @@ export function OfficeView(input: OfficeProps) {
               <Tv
                 style={box(layout.tvScreen)}
                 special={officeEvent ? { tag: "TODAY", text: officeEvent.tv } : null}
+                now={now}
+                weather={tvWeather}
+                festival={festival}
                 channel={channel}
                 tick={tvTick}
                 events={events}
@@ -892,6 +969,7 @@ const POKE_TIP: Record<PokeKind, string> = {
   whiteboard: "Planning room whiteboard · threads in plan mode",
   bell: "Reception bell",
   boss: "That's you · whistle for Biscuit",
+  server: "Server room · the AI cluster · click to train a model",
   cornhole: "Cornhole · toss a bag",
   globe: "Spin the globe",
 };
@@ -1039,7 +1117,7 @@ function Pinboard(props: {
 
 // -------------------------------------------------------------- TV
 
-type Channel = "hq" | "tech" | "inbox";
+type Channel = "hq" | "office" | "tech" | "inbox";
 
 const SOURCE_LABEL: Record<string, string> = {
   slack: "SLACK",
@@ -1067,6 +1145,11 @@ function eventText(e: OfficeEvent): { tag: string; text: string } {
   }
 }
 
+export type TvWeather = "sun" | "cloud" | "rain" | "snow" | "night";
+
+const WEATHER_ICON: Record<TvWeather, string> = { sun: "☀️", cloud: "⛅", rain: "🌧️", snow: "❄️", night: "🌙" };
+const WEATHER_TEXT: Record<TvWeather, string> = { sun: "Sunny", cloud: "Fair", rain: "Rainy", snow: "Snow", night: "Clear night" };
+
 function Tv(props: {
   style: CSSProperties;
   special: { tag: string; text: string } | null;
@@ -1076,11 +1159,14 @@ function Tv(props: {
   counts: Record<Mood, OfficeThread[]>;
   news: Story[];
   inbox: OfficeProps["inbox"];
+  now: Date;
+  weather: TvWeather;
+  festival: string | null;
   onNext: () => void;
   onOpenUrl: (url: string) => void;
   onOpenThread: (id: string) => void;
 }) {
-  const channels: Channel[] = ["hq"];
+  const channels: Channel[] = ["hq", "office"];
   if (props.news.length > 0) channels.push("tech");
   if (props.inbox.enabled && props.inbox.available && props.inbox.items.length > 0) channels.push("inbox");
   // Auto-flip channels every few items; clicks move to the next one.
@@ -1094,66 +1180,110 @@ function Tv(props: {
     const id = window.setTimeout(() => setStatic(false), 260);
     return () => window.clearTimeout(id);
   }, [key]);
+  const clock = props.now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const top = (logo: string, tone: string, right: ReactNode, showClock = true) => (
+    <div className="chq-tv-top">
+      <span className={`chq-tv-logo ${tone}`}>{logo}</span>
+      <span className="chq-tv-clock">{showClock ? clock : ""}</span>
+      {right}
+    </div>
+  );
 
   let body: ReactNode;
   if (ch === "hq") {
     const recent = props.events.filter((e) => Date.now() - e.at < 6 * 3_600_000);
     const c = props.counts;
-    const summary = [
-      c["needs-you"].length ? `${c["needs-you"].length} need you` : null,
-      c.working.length ? `${c.working.length} at work` : null,
-      c.done.length ? `${c.done.length} done` : null,
-      `${c.idle.length} on a break`,
-    ]
-      .filter(Boolean)
-      .join(" · ");
     const special = props.special && item % 2 === 0 ? props.special : null;
     const e = special ? undefined : recent[item % Math.max(1, recent.length)];
     const headline = special ?? (e ? eventText(e) : { tag: "LIVE", text: c.working.length ? "Agents hard at work. Coffee machine at full capacity." : "All quiet at HQ. Perfect time for a new idea." });
+    const need = c["needs-you"].length + c.error.length;
+    const stats: [number, string, string][] = [
+      [need, "need you", "need"],
+      [c.working.length + c.planning.length, "at work", "work"],
+      [c.done.length, "done", "done"],
+      [c.idle.length + c.drafting.length, "on a break", "idle"],
+    ];
     body = (
       <>
-        <div className="chq-tv-top">
-          <span className="chq-tv-logo">HQ NEWS</span>
-          <span className="chq-tv-live">● LIVE</span>
+        {top("HQ NEWS", "", <span className="chq-tv-live">● LIVE</span>)}
+        <div className="chq-tv-body">
+          <button
+            type="button"
+            className="chq-tv-card"
+            onClick={(ev) => {
+              ev.stopPropagation();
+              if (e && e.kind !== "left") props.onOpenThread(e.threadId);
+            }}
+          >
+            <span className={`chq-tv-tag tag-${special ? "today" : (e?.kind ?? "live")}`}>{headline.tag}</span>
+            <span className="chq-tv-text">{headline.text}</span>
+            {e ? (
+              <span className="chq-tv-time">
+                {ago(Date.now() - e.at)}
+                {ago(Date.now() - e.at) === "just now" ? "" : " ago"}
+              </span>
+            ) : null}
+          </button>
+          <div className="chq-tv-stats">
+            {stats.map(([n, label, tone]) => (
+              <div key={label} className={`chq-tv-stat ${tone}${n === 0 ? " zero" : ""}`}>
+                <b>{n}</b>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
         </div>
-        <button
-          type="button"
-          className="chq-tv-headline"
-          onClick={(ev) => {
-            ev.stopPropagation();
-            if (e && e.kind !== "left") props.onOpenThread(e.threadId);
-          }}
-        >
-          <span className={`chq-tv-tag tag-${e?.kind ?? "live"}`}>{headline.tag}</span>
-          <span className="chq-tv-text">{headline.text}</span>
-          {e ? <span className="chq-tv-time">{ago(Date.now() - e.at)}{ago(Date.now() - e.at) === "just now" ? "" : " ago"}</span> : null}
-        </button>
         <div className="chq-tv-ticker">
-          <span>{summary} · {recent.slice(0, 6).map((ev) => eventText(ev).text).join(" · ") || "Have a lovely day"} ·&nbsp;</span>
+          <i>HQ</i>
+          <span>{recent.slice(0, 6).map((ev) => eventText(ev).text).join("  ·  ") || "Have a lovely day at the office"} ·&nbsp;</span>
+        </div>
+      </>
+    );
+  } else if (ch === "office") {
+    const date = props.now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+    body = (
+      <>
+        {top("HQ WEATHER", "weather", null, false)}
+        <div className="chq-tv-weather">
+          <div className="chq-tv-sky">
+            <span className="chq-tv-icon">{WEATHER_ICON[props.weather]}</span>
+          </div>
+          <div className="chq-tv-today">
+            <b>{clock}</b>
+            <span>{date}</span>
+            <span className="chq-tv-forecast">
+              {WEATHER_TEXT[props.weather]}
+              {props.festival ? ` · ${props.festival}` : ""}
+            </span>
+          </div>
+        </div>
+        <div className="chq-tv-ticker">
+          <i>TODAY</i>
+          <span>{props.special ? props.special.text : props.festival ? `It's ${props.festival} season at the office` : "Forecast: a good day to ship something"} ·&nbsp;</span>
         </div>
       </>
     );
   } else if (ch === "tech") {
-    const s = props.news[(Math.floor(props.tick / 1) + props.channel) % props.news.length]!;
+    const s = props.news[(props.tick + props.channel) % props.news.length]!;
+    const rank = props.news.indexOf(s) + 1;
     body = (
       <>
-        <div className="chq-tv-top">
-          <span className="chq-tv-logo tech">TECH ▸ HN</span>
-          <span className="chq-tv-live">#{(props.news.indexOf(s) + 1).toString().padStart(2, "0")}</span>
-        </div>
+        {top("TECH ▸ HN", "tech", <span className="chq-tv-live">#{rank.toString().padStart(2, "0")}</span>)}
         <button
           type="button"
-          className="chq-tv-headline"
+          className="chq-tv-card big"
           onClick={(ev) => {
             ev.stopPropagation();
             props.onOpenUrl(s.url);
           }}
         >
-          <span className="chq-tv-text big">{s.title}</span>
+          <span className="chq-tv-rank">{rank}</span>
+          <span className="chq-tv-text">{s.title}</span>
         </button>
-        <div className="chq-tv-ticker static">
-          <span>
-            ▲ {s.score} · {s.comments} comments{s.site ? ` · ${s.site}` : ""}
+        <div className="chq-tv-ticker">
+          <i>▲ {s.score}</i>
+          <span className="static">
+            {s.comments} comments{s.site ? ` · ${s.site}` : ""}
           </span>
         </div>
       </>
@@ -1163,26 +1293,24 @@ function Tv(props: {
     const it = items[(props.tick + props.channel) % items.length]!;
     body = (
       <>
-        <div className="chq-tv-top">
-          <span className="chq-tv-logo inbox">INBOX</span>
-          <span className={`chq-tv-src src-${it.source}`}>{SOURCE_LABEL[it.source] ?? it.source.toUpperCase()}</span>
-        </div>
+        {top("INBOX", "inbox", <span className={`chq-tv-src src-${it.source}`}>{SOURCE_LABEL[it.source] ?? it.source.toUpperCase()}</span>)}
         <button
           type="button"
-          className="chq-tv-headline"
+          className="chq-tv-card big"
           onClick={(ev) => {
             ev.stopPropagation();
             props.onOpenUrl(it.url);
           }}
         >
-          <span className="chq-tv-text big">
+          <span className="chq-tv-text">
             {it.unread ? <b className="chq-unread">● </b> : null}
             {it.title}
           </span>
         </button>
-        <div className="chq-tv-ticker static">
-          <span>
-            {[it.author, it.context].filter(Boolean).join(" · ")} · {ago(Date.now() - Date.parse(it.updatedAt))}
+        <div className="chq-tv-ticker">
+          <i>{it.author ?? "NEW"}</i>
+          <span className="static">
+            {[it.context].filter(Boolean).join(" · ")} · {ago(Date.now() - Date.parse(it.updatedAt))}
           </span>
         </div>
       </>
@@ -1190,7 +1318,8 @@ function Tv(props: {
   }
 
   return (
-    <div className="chq-tv" style={props.style} onClick={props.onNext} role="group" aria-label="Office TV">
+    <div className={`chq-tv chq-ch-${ch} chq-wx-${props.weather}`} style={props.style} onClick={props.onNext} role="group" aria-label="Office TV">
+      <div className="chq-tv-bg" />
       <div className="chq-tv-screen" key={key}>
         {body}
       </div>

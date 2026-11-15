@@ -163,6 +163,29 @@ test("layouts fill any panel size and keep every spot reachable", () => {
   assert.ok(buildLayout(600, 460, { threads: 30 }).desks.length > buildLayout(600, 460, { threads: 4 }).desks.length, "pods follow the head count");
 });
 
+test("every office past the smallest has a server room, and tall ones don't sprawl", () => {
+  // A folded phone, a tablet in landscape and one held upright, and friends.
+  for (const [w, h, threads] of [[390, 600, 16], [600, 425, 16], [600, 698, 16], [600, 446, 12], [900, 420, 8], [345, 640, 8], [390, 844, 12], [700, 480, 8]] as const) {
+    const lay = buildLayout(w, h, { threads });
+    assert.ok(lay.server, `${w}×${h} has a server room`);
+    const s = lay.server!;
+    for (const r of lay.rooms) {
+      if (r.kind === "server") continue;
+      const overlap = r.rect.x < s.x + s.w && s.x < r.rect.x + r.rect.w && r.rect.y < s.y + s.h && s.y < r.rect.y + r.rect.h;
+      assert.ok(!overlap, `${w}×${h}: server room overlaps the ${r.kind}`);
+    }
+    // Nobody walks through the server room.
+    for (const spot of lay.spots) {
+      for (const p of spot.path) assert.ok(!(p.x > s.x && p.x < s.x + s.w && p.y > s.y && p.y < s.y + s.h), `${w}×${h}: ${spot.id} walks through the server room`);
+    }
+  }
+  const tall = buildLayout(600, 698, { threads: 16 });
+  assert.ok(tall.waiting.h <= 170, `waiting room stays compact (${tall.waiting.h})`);
+  assert.ok(tall.meeting.h <= 230, `meeting room stays compact (${tall.meeting.h})`);
+  assert.ok(tall.rooms.some((r) => r.kind === "garden"), "a garden fills the space under the waiting room");
+  assert.ok(tall.rooms.some((r) => r.kind === "library"), "a reading nook fills the tall lounge");
+});
+
 test("a phone held upright gets a stacked office without a big empty bottom", () => {
   for (const [w, h] of [[390, 844], [360, 900], [345, 640]] as const) {
     const lay = buildLayout(w, h);

@@ -43,6 +43,24 @@ const PRIORITY: Season[] = [
 
 export const SEASONS: readonly Season[] = PRIORITY;
 
+export const SEASON_TITLE: Record<Season, string> = {
+  valentines: "Valentine's Day",
+  carnival: "Carnival",
+  stpatricks: "St. Patrick's Day",
+  holi: "Holi",
+  easter: "Easter",
+  summer: "Summer",
+  diwali: "Diwali",
+  halloween: "Halloween",
+  laternenfest: "Laternenfest",
+  thanksgiving: "Thanksgiving",
+  holidays: "The holidays",
+  snowday: "Snow days",
+  lunarnewyear: "Lunar New Year",
+  spring: "Maifest",
+  oktoberfest: "Oktoberfest",
+};
+
 const dayNo = (y: number, m: number, d: number) => Math.floor(Date.UTC(y, m, d) / 86_400_000);
 const dayOf = (d: Date) => dayNo(d.getFullYear(), d.getMonth(), d.getDate());
 

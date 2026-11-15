@@ -51,7 +51,8 @@ export type SoundName =
   | "steeldrum"
   | "tusch"
   | "firecracker"
-  | "oompah";
+  | "oompah"
+  | "server";
 
 /** Quiet background sounds play softer than event sounds. */
 const AMBIENT = new Set<SoundName>(["pingpong", "bubble", "coffee", "roomba", "purr", "door", "marker", "toss", "giggle", "whistle", "walkie"]);
@@ -232,12 +233,20 @@ export class Sound {
         tone(2600 + Math.random() * 600, 0, 0.05, "sine", 0.05, 3400);
         tone(2400 + Math.random() * 600, 0.07, 0.04, "sine", 0.04, 3000);
         break;
-      case "brew":
-        // Grinding, then a gurgling pour and a hiss of steam.
-        noise(0, 0.5, 0.12, 400);
-        for (let i = 0; i < 8; i++) tone(180 + Math.random() * 140, 0.55 + i * 0.08, 0.07, "sine", 0.16, 320);
-        noise(1.2, 0.5, 0.08, 5000);
+      case "brew": {
+        // An espresso: the grinder whirs, the portafilter clicks in, the
+        // pump hums while it trickles into the cup, then a puff of steam.
+        for (let i = 0; i < 9; i++) noise(i * 0.055, 0.07, 0.07 + (i % 2) * 0.03, 1800 + (i % 3) * 500);
+        tone(220, 0, 0.5, "sawtooth", 0.012, 260);
+        tone(900, 0.62, 0.03, "square", 0.05);
+        tone(140, 0.66, 0.08, "sine", 0.12, 90);
+        tone(50, 0.85, 1.25, "square", 0.022);
+        tone(100, 0.85, 1.25, "sawtooth", 0.015);
+        for (let i = 0; i < 9; i++) tone(700 + ((i * 263) % 500), 1.0 + i * 0.12, 0.05, "sine", 0.05, 420);
+        noise(2.15, 0.7, 0.05, 6500);
+        tone(1320, 2.2, 0.35, "sine", 0.012, 1250);
         break;
+      }
       case "kettle":
         noise(0, 0.4, 0.05, 1200);
         tone(1900, 0.35, 0.9, "sine", 0.06, 2300);
@@ -398,6 +407,12 @@ export class Sound {
         });
         for (const f of [261.6, 329.6, 392, 523.3]) tone(f, 1.14, 0.7, "sawtooth", 0.035);
         noise(1.14, 0.6, 0.08, 6000);
+        break;
+      case "server":
+        // Fans spin up, then a burst of data chirps.
+        noise(0, 1.1, 0.07, 500);
+        tone(110, 0, 1.1, "sawtooth", 0.015, 220);
+        for (let i = 0; i < 10; i++) tone(1200 + ((i * 337) % 900), 0.3 + i * 0.07, 0.04, "square", 0.025);
         break;
       case "firecracker":
         // A string of firecrackers and a gong.

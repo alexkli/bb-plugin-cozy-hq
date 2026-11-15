@@ -38,6 +38,7 @@ export type SpotKind =
   | "arcade"
   | "piano"
   | "fishtank"
+  | "bench"
   | "event";
 
 export type SpotGroup = "desk" | "meeting" | "present" | "review" | "boss" | "break" | "lounge" | "nap" | "event";
@@ -75,6 +76,8 @@ export interface Spot {
   /** Waypoints from a hallway to the spot; the first point is on a hallway. */
   path: Point[];
   activity: string;
+  /** Draw the character this many pixels higher (sitting up on a sofa). */
+  lift?: number;
 }
 
 export interface Rect {
@@ -134,6 +137,14 @@ export type PropKind =
   | "cornhole"
   | "waiting-chair"
   | "waiting-sofa"
+  | "waiting-sofa-back"
+  | "waiting-armchair"
+  | "waiting-armchair-left"
+  | "lounge-table"
+  | "espresso"
+  | "server-rack"
+  | "ai-rack"
+  | "bench"
   | "side-table"
   | "reception"
   | "boss-desk"
@@ -161,7 +172,7 @@ export interface PlantPlacement {
   z: number;
 }
 
-export type RoomKind = "pod" | "meeting" | "boss" | "waiting" | "kitchen" | "lounge" | "games" | "library";
+export type RoomKind = "pod" | "meeting" | "boss" | "waiting" | "kitchen" | "lounge" | "games" | "library" | "server" | "garden";
 
 export interface Room {
   kind: RoomKind;
@@ -196,7 +207,8 @@ export type PokeKind =
   | "bell"
   | "boss"
   | "cornhole"
-  | "globe";
+  | "globe"
+  | "server";
 
 export interface Pokeable {
   id: string;
@@ -253,6 +265,8 @@ export interface Layout {
   fishtank: Rect;
   arcade: Rect | null;
   pingpong: Rect | null;
+  /** The glass server room, when there is room for one. */
+  server: Rect | null;
   couch: Rect;
   lamp: Point;
   wall: {
@@ -309,6 +323,7 @@ class Builder {
   rooms: Room[] = [];
   pokeables: Pokeable[] = [];
   seats: Spot[] = [];
+  server: Rect | null = null;
 
   prop(id: string, kind: PropKind, x: number, y: number, z: number, w?: number): void {
     this.props.push({ id, kind, x: Math.round(x), y: Math.round(y), z, w });
@@ -443,7 +458,10 @@ function buildMeeting(b: Builder, r: Rect, hallY: number): Rect {
       b.spot({ id: `meet-${i}`, kind: "meeting-seat", group: "meeting", x, y: bottomY, facing: "back", pose: "sit-back", path: lane(x, bottomY, bottomY + 6), activity: "planning in the meeting room" });
       b.prop(`meet-chair-${i}`, "meeting-chair-back", x - 8, bottomY - 14, bottomY + 2);
     }
-    if (r.h >= 180) b.prop("plan-rolls", "plan-rolls", r.x + 6, r.y + r.h - 34, r.y + r.h - 6);
+    if (r.h >= 180) {
+      b.prop("plan-rolls", "plan-rolls", r.x + 6, r.y + r.h - 34, r.y + r.h - 6);
+      b.plant("CACTUS", r.x + 26, r.y + r.h - 40);
+    }
   } else if (r.h >= 104) {
     const tableY = r.y + 56;
     const seatY = tableY + 38;
@@ -488,6 +506,7 @@ function buildBoss(b: Builder, r: Rect, hallY: number): Layout["boss"] {
   b.prop("boss-shelf", "library-shelf", r.x + r.w - 38, r.y - 6, r.y + 24);
   b.poke("globe", "globe", { x: r.x + r.w - 38, y: r.y - 6, w: 32, h: 14 });
   b.plant("LARGE_PLANT", r.x + 2, r.y + r.h - 58);
+  if (r.w >= 150) b.plant("PLANT", r.x + r.w - 56, r.y - 6);
   const dogBed = { x: r.x + r.w - 20, y: r.y + r.h - 10 };
   b.prop("dog-bed", "dog-bed", dogBed.x - 12, dogBed.y - 8, dogBed.y - 6);
   b.prop("boss-glass", "glass-front", r.x, r.y + r.h - 10, r.y + r.h + 1, r.w);
@@ -498,53 +517,110 @@ function buildBoss(b: Builder, r: Rect, hallY: number): Layout["boss"] {
 
 function buildWaiting(b: Builder, r: Rect, hallY: number): void {
   b.rooms.push({ kind: "waiting", rect: r });
-  const aisleX = r.x + 7;
+  const aisleX = r.x + 6;
   // A small reception stand with a bell, top right.
-  const recX = r.x + r.w - 40;
+  const recX = r.x + r.w - 38;
   b.prop("reception", "reception", recX, r.y + 2, r.y + 20);
   b.poke("bell", "bell", { x: recX, y: r.y - 4, w: 34, h: 24 });
-  const rowPitch = 38;
-  const firstRow = r.y + 36;
-  const pitch = 22;
-  const seat = (id: string, x: number, y: number) => {
-    const s = b.spot({
-      id,
-      kind: "review",
-      group: "review",
-      x,
-      y,
-      facing: "front",
-      pose: "sit-front",
-      path: [{ x: aisleX, y: hallY, c: true }, { x: aisleX, y: y - 22 }, { x, y: y - 22 }, { x, y }],
-      activity: "waiting for you",
-    });
-    b.seats.push(s);
+  // Sofa islands: a lounge table with a sofa facing you, an armchair either
+  // side and a sofa facing the table. Those facing you fill up first.
+  const front: Spot[] = [];
+  const sides: Spot[] = [];
+  const backs: Spot[] = [];
+  const seat = (list: Spot[], id: string, x: number, y: number, facing: Facing, pose: Pose, laneY: number, lift: number) => {
+    list.push({
+        id,
+        kind: "review",
+        group: "review",
+        x,
+        y,
+        facing,
+        pose,
+        path: [{ x: aisleX, y: hallY, c: true }, { x: aisleX, y: laneY }, { x, y: laneY }, { x, y }],
+        activity: "waiting for you",
+        lift,
+      });
   };
-  for (let row = 0, y = firstRow; y <= r.y + r.h - 4; row++, y += rowPitch) {
-    const xMax = row === 0 ? recX - 8 : r.x + r.w - 10;
-    if (row % 2 === 1) {
-      // Sofa rows: two-seaters with a little table between them.
-      for (let i = 0, x = r.x + 14; x + 42 <= xMax + 10; i++, x += 64) {
-        b.prop(`wait-sofa-${row}-${i}`, "waiting-sofa", x, y - 19, y - 2, 42);
-        seat(`wait-${row}-${i}a`, x + 11, y);
-        seat(`wait-${row}-${i}b`, x + 31, y);
-        if (x + 64 <= xMax + 10) b.prop(`wait-table-${row}-${i}`, "side-table", x + 44, y - 12, y - 1);
-      }
-      continue;
-    }
-    const x0 = r.x + 22 + (row % 4 === 2 ? 8 : 0);
-    for (let i = 0, x = x0; x <= xMax; i++, x += pitch) {
-      // Every fourth slot is a little table with magazines.
-      if (i % 4 === 3) {
-        b.prop(`wait-table-${row}-${i}`, "side-table", x - 8, y - 12, y - 1);
-        continue;
-      }
-      seat(`wait-${row}-${i}`, x, y);
-      b.prop(`wait-chair-${row}-${i}`, "waiting-chair", x - 8, y - 15, y - 2);
+  const islandW = 84;
+  const cols = Math.max(1, Math.floor((r.w - 10) / islandW));
+  const x0 = r.x + Math.round((r.w - cols * islandW) / 2) + islandW / 2;
+  for (let row = 0, cy = r.y + 50; cy + 30 <= r.y + r.h; row++, cy += 72) {
+    for (let col = 0; col < cols; col++) {
+      const cx = Math.round(x0 + col * islandW);
+      const id = `${row}-${col}`;
+      const above = cy - 38;
+      const below = cy + 34;
+      b.prop(`wait-table-${id}`, "lounge-table", cx - 13, cy - 7, cy + 3);
+      const ny = cy - 14;
+      b.prop(`wait-sofa-n-${id}`, "waiting-sofa", cx - 21, ny - 19, ny - 2, 42);
+      seat(front, `wait-${id}-n0`, cx - 10, ny, "front", "sit-front", above, 4);
+      seat(front, `wait-${id}-n1`, cx + 10, ny, "front", "sit-front", above, 4);
+      const sy = cy + 3;
+      b.prop(`wait-arm-w-${id}`, "waiting-armchair", cx - 41, sy - 18, sy - 1);
+      seat(sides, `wait-${id}-w`, cx - 32, sy, "right", "sit-front", below, 3);
+      b.prop(`wait-arm-e-${id}`, "waiting-armchair-left", cx + 25, sy - 18, sy - 1);
+      seat(sides, `wait-${id}-e`, cx + 32, sy, "left", "sit-front", below, 3);
+      const by = cy + 22;
+      b.prop(`wait-sofa-s-${id}`, "waiting-sofa-back", cx - 21, by - 11, by + 3, 42);
+      seat(backs, `wait-${id}-s0`, cx - 10, by, "back", "sit-back", below, 0);
+      seat(backs, `wait-${id}-s1`, cx + 10, by, "back", "sit-back", below, 0);
     }
   }
+  if (front.length === 0) {
+    // Too short for islands: one row of chairs.
+    const y = Math.min(r.y + 36, r.y + r.h - 4);
+    for (let i = 0, x = r.x + 22; x <= recX - 8; i++, x += 22) {
+      seat(front, `wait-c-${i}`, x, y, "front", "sit-front", y - 22, 2);
+      b.prop(`wait-chair-${i}`, "waiting-chair", x - 8, y - 15, y - 2);
+    }
+  }
+  // Seats fill in this order: facing you first, then the sides, then backs.
+  for (const s of [...front, ...sides, ...backs]) b.spot(s);
+  b.seats.push(...front, ...sides, ...backs);
   b.plant("PLANT", recX - 18, r.y - 8);
-  if (r.h > 90) b.plant("PLANT_2", r.x - 2, r.y + r.h - 32);
+  if (r.h > 90) {
+    b.plant("PLANT_2", r.x - 2, r.y + r.h - 32);
+    b.plant("LARGE_PLANT", r.x + r.w - 30, r.y + r.h - 46);
+  }
+}
+
+/** A little indoor garden: plants all round and benches to sit on. */
+function buildGarden(b: Builder, r: Rect, acc: Access): void {
+  b.rooms.push({ kind: "garden", rect: r });
+  b.plant("LARGE_PLANT", r.x + 2, r.y + r.h - 50);
+  b.plant("LARGE_PLANT", r.x + r.w - 34, r.y + r.h - 50);
+  const tops: PlantPlacement["sprite"][] = ["PLANT", "PLANT_2", "CACTUS", "PLANT_2", "PLANT"];
+  for (let i = 0, x = r.x + 8; x + 16 <= r.x + r.w - 8 && i < tops.length; i++, x += Math.max(30, Math.floor((r.w - 32) / 4))) {
+    b.plant(tops[i]!, x, r.y - 16, i % 2 === 0);
+  }
+  const n = r.w >= 180 ? 2 : 1;
+  const y = r.y + Math.min(r.h - 10, 58);
+  for (let i = 0; i < n; i++) {
+    const cx = r.x + Math.round(((i + 0.5) * r.w) / n);
+    b.prop(`bench-${i}`, "bench", cx - 17, y - 15, y - 2);
+    for (const [k, dx] of [
+      [0, -8],
+      [1, 8],
+    ] as const) {
+      b.spot({ id: `garden-${i}-${k}`, kind: "bench", group: "lounge", x: cx + dx, y, facing: "front", pose: "sit-front", path: via(acc, y - 22, cx + dx, y), activity: "enjoying the garden", lift: 2 });
+    }
+  }
+}
+
+/** A small glass server room: racks with blinking lights and an AI cluster. */
+function buildServerRoom(b: Builder, r: Rect): void {
+  b.rooms.push({ kind: "server", rect: r, walls: "glass", doorX: r.x + r.w - 12, doorSide: "top" });
+  const n = Math.max(2, Math.floor((r.w - 10) / 18));
+  const ai = Math.floor(n / 2);
+  const rackY = r.y + r.h - 4 - 32;
+  for (let i = 0; i < n; i++) {
+    const x = r.x + 5 + i * 18 + (i > ai ? 4 : 0);
+    if (x + 16 > r.x + r.w - 4) break;
+    b.prop(`rack-${i}`, i === ai ? "ai-rack" : "server-rack", x, rackY, rackY + 31, i === ai ? 20 : 16);
+  }
+  b.poke("server", "server", { x: r.x, y: r.y, w: r.w, h: r.h });
+  b.prop("server-glass", "glass-front", r.x, r.y + r.h - 10, r.y + r.h + 1, r.w);
+  b.server = r;
 }
 
 function buildKitchen(b: Builder, r: Rect, acc: Access): void {
@@ -553,12 +629,14 @@ function buildKitchen(b: Builder, r: Rect, acc: Access): void {
   const cw = Math.min(r.w - 52, 120);
   const cx = r.x + 4;
   b.prop("kitchen-counter", "kitchen-counter", cx, r.y - 8, r.y + 18, cw);
-  b.poke("coffee", "coffee", { x: cx + 4, y: r.y - 14, w: 16, h: 30 });
-  b.poke("kettle", "kettle", { x: cx + 24, y: r.y - 6, w: 12, h: 20 });
+  // A proper espresso machine on the counter, easy to spot.
+  b.prop("espresso", "espresso", cx + 1, r.y - 24, r.y + 18.5);
+  b.poke("coffee", "coffee", { x: cx + 1, y: r.y - 24, w: 26, h: 30 });
+  b.poke("kettle", "kettle", { x: cx + 30, y: r.y - 6, w: 12, h: 20 });
   if (cw >= 100) b.poke("microwave", "microwave", { x: cx + cw - 26, y: r.y - 8, w: 22, h: 22 });
   const counterLane = r.y + 30;
-  b.spot({ id: "coffee", kind: "coffee", group: "break", x: cx + 12, y: r.y + 26, facing: "back", pose: "stand", path: via(acc, counterLane, cx + 12, r.y + 26), activity: "making coffee" });
-  b.spot({ id: "tea", kind: "tea", group: "break", x: cx + 30, y: r.y + 26, facing: "back", pose: "stand", path: via(acc, counterLane, cx + 30, r.y + 26), activity: "brewing tea" });
+  b.spot({ id: "coffee", kind: "coffee", group: "break", x: cx + 14, y: r.y + 26, facing: "back", pose: "stand", path: via(acc, counterLane, cx + 14, r.y + 26), activity: "making coffee" });
+  b.spot({ id: "tea", kind: "tea", group: "break", x: cx + 35, y: r.y + 26, facing: "back", pose: "stand", path: via(acc, counterLane, cx + 35, r.y + 26), activity: "brewing tea" });
   // Fridge and vending machine on the right.
   const fx = r.x + r.w - 46;
   b.prop("fridge", "fridge", fx, r.y - 12, r.y + 22);
@@ -566,6 +644,7 @@ function buildKitchen(b: Builder, r: Rect, acc: Access): void {
   b.spot({ id: "fridge", kind: "fridge", group: "break", x: fx + 10, y: r.y + 30, facing: "back", pose: "stand", path: via(acc, counterLane + 4, fx + 10, r.y + 30), activity: "raiding the fridge" });
   const vx = r.x + r.w - 24;
   b.prop("vending", "vending", vx, r.y - 18, r.y + 24);
+  if (r.h >= 70) b.plant("PLANT_2", r.x + r.w - 16, r.y + r.h - 30);
   b.poke("vending", "vending", { x: vx, y: r.y - 18, w: 22, h: 42 });
   b.spot({ id: "vending", kind: "vending", group: "break", x: vx + 11, y: r.y + 34, facing: "back", pose: "stand", path: via(acc, counterLane + 6, vx + 11, r.y + 34), activity: "picking a snack" });
   // Island with snacks and stools.
@@ -748,6 +827,18 @@ function finish(
       } else x += 6;
     }
   }
+  // Hanging plants in a few free stretches of wall.
+  let hanging = 0;
+  for (const s of segments) {
+    for (let x = s.x0 + 10; x + 16 <= s.x1 - 10 && hanging < 4; x += 4) {
+      const free = !busy.some(([a, z]) => x < z + 2 && x + 16 > a - 2) && !pillars.some((p) => x < p + 8 && x + 16 > p - 8);
+      if (!free) continue;
+      b.plants.push({ sprite: "HANGING_PLANT", x, y: 0, z: 1 });
+      busy.push([x, x + 16]);
+      hanging++;
+      x += 40;
+    }
+  }
   const patrol: Point[] = [];
   for (const [i, hy] of net.halls.entries()) {
     const row = i % 2 ? [W - 12, 12] : [12, W - 12];
@@ -789,6 +880,7 @@ function finish(
     fishtank: parts.tvParts.fishtank,
     arcade: parts.gamesParts?.arcade ?? null,
     pingpong: parts.gamesParts?.pingpong ?? null,
+    server: b.server,
     couch: parts.tvParts.couch,
     lamp: parts.lamp,
     wall: { pinboard, legendNote, calendar, status, door, windows, clock, pillars, paintings },
@@ -834,7 +926,8 @@ function buildWide(W: number, H: number, opts: LayoutOptions): Layout {
   const net: Network = { halls: [hy], aisles: [a12, a23] };
   const leftAcc: Access = { hallY: hy, aisleX: a12 };
 
-  // Left column: pods above the hallway; kitchen (+ pods or games) below.
+  // Left column: pods above the hallway; below it the kitchen, then extra
+  // pods, a games room and a library as the height allows, utilities last.
   buildPods(b, { x: c1x, y: d1, w: c1w, h: hy - 8 - d1 }, leftAcc);
   let below: Rect = { x: c1x, y: hy + 10, w: c1w, h: H - 6 - (hy + 10) };
   const kitchenH = clamp(below.h, 64, 92);
@@ -848,31 +941,78 @@ function buildWide(W: number, H: number, opts: LayoutOptions): Layout {
     below = { ...below, y: below.y + POD_H + 6, h: below.h - POD_H - 6 };
   }
   if (below.h >= 104) {
-    games = { ...below, y: below.y + 6, h: below.h - 46 };
+    games = { ...below, y: below.y + 6, h: Math.min(150, below.h - 46) };
     gamesParts = buildGames(b, games, leftAcc);
+    const end = below.y + below.h;
+    below = { ...below, y: games.y + games.h, h: end - (games.y + games.h) };
+    if (below.h - 46 >= 96) {
+      const lib: Rect = { ...below, y: below.y + 14, h: below.h - 46 - 14 };
+      buildLibrary(b, lib, leftAcc);
+      below = { ...below, y: lib.y + lib.h, h: end - (lib.y + lib.h) };
+    }
   }
   const utilitiesAt = below.h >= 40 ? c1x + 4 : null;
 
-  // Center: the lounge under the big wall TV, the waiting room below.
+  // Center: the lounge under the big wall TV (a reading nook at the bottom
+  // when it's tall), the waiting room below (a garden under it when tall).
   const tvW = Math.min(c2w - 50, 144);
   const tvH = Math.min(Math.round(tvW * 0.56), d2 - 14);
   const wallTv: Rect = { x: c2x + Math.round((c2w - tvW) / 2), y: d2 - tvH - 6, w: tvW, h: tvH };
   const lounge: Rect = { x: c2x, y: d2, w: c2w, h: hy - 8 - d2 };
-  const tvParts = buildLounge(b, lounge, { hallY: hy, aisleX: a23 }, wallTv, games === null);
-  const waiting: Rect = { x: c2x, y: hy + 12, w: c2w, h: H - 6 - (hy + 12) };
+  const nook = lounge.h >= 260;
+  const loungeTop: Rect = nook ? { ...lounge, h: lounge.h - 94 } : lounge;
+  const centerAcc: Access = { hallY: hy, aisleX: a23 };
+  const tvParts = buildLounge(b, loungeTop, centerAcc, wallTv, games === null && !nook);
+  if (nook) buildLibrary(b, { x: c2x, y: lounge.y + lounge.h - 80, w: c2w, h: 80 }, centerAcc);
+  const fullWait = H - 6 - (hy + 12);
+  const garden = fullWait - 162 - 16 >= 96;
+  const waiting: Rect = { x: c2x, y: hy + 12, w: c2w, h: garden ? 162 : fullWait };
   buildWaiting(b, waiting, hy);
+  if (garden) buildGarden(b, { x: c2x, y: waiting.y + waiting.h + 16, w: c2w, h: fullWait - 162 - 16 }, { hallY: hy, aisleX: a12 });
 
-  // Right: the glass meeting room on top, your office below.
-  const meeting: Rect = { x: c3x, y: d3, w: c3w, h: hy - 8 - d3 };
+  // Right: the glass meeting room on top with the server room under it when
+  // there's height to spare (a corridor to the meeting room door on the
+  // right), your office below.
+  const topH = hy - 8 - d3;
+  const serverTop = topH >= 204;
+  const meeting: Rect = { x: c3x, y: d3, w: c3w, h: serverTop ? Math.min(230, topH - 54) : topH };
   const whiteboard = buildMeeting(b, meeting, hy);
-  const bossRoom: Rect = { x: c3x, y: hy + 12, w: c3w, h: clamp(H - 10 - (hy + 12), 96, 190) };
+  if (serverTop) {
+    const sy = meeting.y + meeting.h + 8;
+    buildServerRoom(b, { x: c3x, y: sy, w: c3w - 28, h: Math.min(64, hy - 10 - sy) });
+  }
+  const bossRoom: Rect = { x: c3x, y: hy + 12, w: c3w, h: clamp(H - 10 - (hy + 12), 96, 230) };
   const boss = buildBoss(b, bossRoom, hy);
+  const underBoss = H - 6 - (bossRoom.y + bossRoom.h + 8);
 
-  if (utilitiesAt !== null) utilities(b, H, utilitiesAt, hy);
+  if (utilitiesAt !== null) {
+    utilities(b, H, utilitiesAt, hy);
+    const sh = Math.min(48, below.h - 4);
+    if (!b.server && c1w - 80 >= 60) buildServerRoom(b, { x: c1x + 78, y: H - 4 - sh, w: c1w - 80, h: sh });
+    else if (b.server) {
+      // The server room went elsewhere: a row of plants by the water cooler.
+      const row: PlantPlacement["sprite"][] = ["PLANT", "POT", "PLANT_2", "CACTUS", "PLANT"];
+      for (let i = 0, x = c1x + 84; x + 16 <= c1x + c1w - 4 && i < row.length; i++, x += 34) {
+        b.plant(row[i]!, x, row[i] === "POT" ? H - 20 : H - 36, i % 2 === 0);
+      }
+    }
+  }
+  if (underBoss >= 40) {
+    const y = bossRoom.y + bossRoom.h + 8;
+    if (!b.server) buildServerRoom(b, { x: c3x, y, w: c3w, h: Math.min(56, underBoss) });
+    else {
+      b.plant("LARGE_PLANT", c3x + 4, H - 52);
+      b.plant("PLANT_2", c3x + c3w - 20, H - 36);
+      if (c3w >= 180) b.plant("CACTUS", c3x + Math.round(c3w / 2) - 8, H - 36);
+    }
+  }
+  if (!serverTop) b.plant("PLANT", W - 18, hy - 26);
   const lamp = boss.lamp;
   const couch = tvParts.couch;
-  const loungeFree = lounge.y + lounge.h - (couch.y + couch.h + 6);
-  const eventArea = games ?? { x: lounge.x + 16, y: couch.y + couch.h + 4, w: lounge.w - 32, h: Math.max(26, loungeFree) };
+  // Office events gather on the lounge floor when there's room, else in the games room.
+  const loungeFree = loungeTop.y + loungeTop.h - (couch.y + couch.h + 6);
+  const loungeFloor: Rect = { x: lounge.x + 16, y: couch.y + couch.h + 4, w: lounge.w - 32, h: Math.max(26, loungeFree) };
+  const eventArea = loungeFree >= 70 || games === null ? loungeFloor : games;
   b.plant("PLANT_2", a23 - 8, hy - 34);
   return finish(b, W, H, false, segments, net, {
     meeting,
@@ -976,7 +1116,7 @@ function buildPortrait(W: number, H: number, opts: LayoutOptions): Layout {
         break;
       case "waitingBoss": {
         const ww = Math.round(rect.w * 0.56);
-        waiting = { x: rect.x, y: rect.y + 4, w: ww - 4, h: rect.h - 44 };
+        waiting = { x: rect.x, y: rect.y + 4, w: ww - 4, h: rect.h - 54 };
         buildWaiting(b, waiting, hallY);
         const bossRoom: Rect = { x: rect.x + ww + 4, y: rect.y + 4, w: rect.w - ww - 4, h: Math.min(rect.h - 8, H - 4 - (rect.y + 4)) };
         boss = buildBoss(b, bossRoom, hallY);
@@ -985,6 +1125,12 @@ function buildPortrait(W: number, H: number, opts: LayoutOptions): Layout {
     }
   }
   utilities(b, H, x0 + 2, net.halls[net.halls.length - 1]!);
+  if (waiting) {
+    const w0 = waiting as Rect;
+    const top = w0.y + w0.h + 6;
+    const sw = w0.x + w0.w - (x0 + 78);
+    if (sw >= 60 && H - 4 - top >= 34) buildServerRoom(b, { x: x0 + 78, y: top, w: sw, h: Math.min(48, H - 4 - top) });
+  }
   const lamp = boss!.lamp;
   const eventArea = games ?? { x: lounge!.x + 10, y: tvParts!.couch.y + 30, w: lounge!.w - 20, h: Math.max(30, lounge!.y + lounge!.h - tvParts!.couch.y - 30) };
   return finish(b, W, H, true, segments, net, {

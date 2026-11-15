@@ -43,6 +43,12 @@ When an area is full, waiting threads fall back to a desk and drafts to the
 waiting room; threads that still do not fit are counted on a sign next to the
 door. Waiting-room title tags tier upward so they never overlap.
 
+The office keeps living while you're elsewhere in bb and remembers what each
+thread was doing when you last looked; coming back, only threads whose state
+changed since then walk to their new place. The office buddy's bubble counts
+threads with news since you last looked (none, no bubble). The number on the
+Cozy HQ rail icon counts threads waiting for your input.
+
 Characters that are not threads: you (the boss at the big desk), Biscuit the
 dog, Pixel the cat, a roomba, the cleaning crew (evenings and early mornings),
 a guard on occasional rounds, and kids on bring-your-kids-to-work day.

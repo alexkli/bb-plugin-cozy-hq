@@ -68,6 +68,15 @@ export interface WorldThread {
   emblem: string | null;
   deskStyle: DeskStyle;
   chairTone: ChairTone;
+  /** Works in a Vision Pro instead of on monitors. */
+  visionPro: boolean;
+}
+
+/** What a thread was doing the last time you looked at the office. */
+export interface SeenState {
+  spotId: string;
+  mood: Mood;
+  waitKind: WaitKind | null;
 }
 
 /** Sound callback; `ambient` marks background life rather than a reaction to a click. */
@@ -239,7 +248,7 @@ const KID_SPEED = 40;
 
 const inRect = (x: number, y: number, r: Rect) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
 
-const SEATED_KINDS = new Set(["desk", "couch", "beanbag", "armchair", "meeting-seat", "review", "boss-guest", "stool"]);
+const SEATED_KINDS = new Set(["desk", "couch", "beanbag", "armchair", "meeting-seat", "review", "boss-guest", "stool", "bench"]);
 
 export class World {
   private L: Layout | null = null;
@@ -285,6 +294,8 @@ export class World {
   /** Bumped when an event starts or ends, so the view reassigns spots. */
   eventVersion = 0;
 
+  private layoutKey = "";
+
   constructor(emit: Emit) {
     this.emit = emit;
     this.cat = { x: 0, y: 0, tx: 0, ty: 0, state: "loaf", until: 20, facing: "left", step: 0, visiting: null, lastMeow: -999 };
@@ -296,8 +307,32 @@ export class World {
     return this.L;
   }
 
+  /** Point sounds at a new player (the office keeps living across visits). */
+  setEmit(emit: Emit): void {
+    this.emit = emit;
+  }
+
+  /** What everyone is doing right now, to remember for next time. */
+  seenStates(): Record<string, SeenState> {
+    const out: Record<string, SeenState> = {};
+    for (const a of this.agents.values()) {
+      const spotId = a.target ?? a.spot?.id;
+      if (a.leaving || !spotId) continue;
+      out[a.id] = { spotId, mood: a.thread.mood, waitKind: a.thread.waitKind };
+    }
+    return out;
+  }
+
+  /** True until the first threads arrive. */
+  get isEmpty(): boolean {
+    return this.agents.size === 0;
+  }
+
   /** Swap in a layout for a new panel size; everyone hops to their places. */
-  setLayout(L: Layout): void {
+  setLayout(L: Layout, key = ""): void {
+    // Same panel size and head count as before: keep everything as it is.
+    if (key && key === this.layoutKey && this.L) return;
+    this.layoutKey = key;
     const first = this.L === null;
     this.L = L;
     this.bg = paintBackground(L);
@@ -452,10 +487,17 @@ export class World {
   // ------------------------------------------------------------------ sync
 
   /** Bring characters in line with the latest threads and assignments. */
-  sync(threads: readonly WorldThread[], instant: boolean): void {
+  /**
+   * Bring characters in line with the latest threads and assignments.
+   * `instant` places everyone without walking (a fresh office); `lastSeen`
+   * then says what each thread was doing when you last looked, so only the
+   * ones that changed since get up and walk, and new ones come in the door.
+   */
+  sync(threads: readonly WorldThread[], instant: boolean, lastSeen?: ReadonlyMap<string, SeenState>): void {
     const L = this.L;
     if (!L) return;
     const seen = new Set<string>();
+    const history = lastSeen !== undefined && lastSeen.size > 0;
     for (const t of threads) {
       seen.add(t.id);
       const spot = this.spotById(t.spotId) ?? null;
@@ -480,8 +522,15 @@ export class World {
           nextHobby: this.time + 4 + (hash(t.id) % 7),
         };
         this.agents.set(t.id, a);
-        if (instant && spot) this.place(a, spot);
-        else if (spot) {
+        const was = lastSeen?.get(t.id);
+        const before = was ? this.spotById(was.spotId) : undefined;
+        const same = was !== undefined && was.mood === t.mood && was.waitKind === t.waitKind;
+        if (instant && spot && (!history || same)) this.place(a, spot);
+        else if (instant && spot && before) {
+          // Changed while you were away: from where they were to where they go now.
+          this.place(a, before);
+          if (before.id !== spot.id) this.walkTo(a, spot);
+        } else if (spot) {
           this.emit("door", true);
           this.emit("arrive");
           this.doorOpenUntil = this.time + 1.6;
@@ -783,6 +832,13 @@ export class World {
       case "cornhole":
         this.emit("toss", false);
         break;
+      case "server":
+        this.anim.set("server", t + 3.5);
+        this.emit("server", false);
+        for (let i = 0; i < 10; i++) {
+          this.particles.push({ kind: "sparkle", x: r.x + this.rand() * r.w, y: r.y + 4 + this.rand() * (r.h - 10), vx: 0, vy: -6, life: 0, max: 0.6 + this.rand() * 0.6, color: this.rand() < 0.5 ? "#7fd1ff" : "#c39bff" });
+        }
+        break;
       case "clock":
         break;
     }
@@ -915,8 +971,10 @@ export class World {
         this.particles.push({ kind: "steam", x: p.rect.x + dx + this.rand() * 2, y: p.rect.y + dy, vx: 0, vy: -5, life: 0, max: 1.4, color: "#ffffff" });
       }
     };
-    if ((this.anim.get("coffee") ?? 0) > t) steamAt("coffee", 7, 4, 8);
-    else steamAt("coffee", 7, 6, 0.6);
+    if ((this.anim.get("coffee") ?? 0) > t) {
+      steamAt("coffee", 8, 17, 7);
+      steamAt("coffee", 23, 14, 3);
+    } else steamAt("coffee", 7, 0, 0.7);
     if ((this.anim.get("kettle") ?? 0) > t) steamAt("kettle", 9, 2, 14);
     const island = L.props.find((p) => p.kind === "kitchen-island");
     if (island && this.rand() < dt * 0.5) {
@@ -1721,7 +1779,7 @@ export class World {
   }
 
   private drawY(a: Agent): number {
-    if (this.settled(a) && a.spot!.kind === "review") return a.y - (a.spot!.id.endsWith("a") || a.spot!.id.endsWith("b") ? 4 : 2);
+    if (this.settled(a) && a.spot!.lift) return a.y - a.spot!.lift;
     return a.y;
   }
 
@@ -1744,21 +1802,23 @@ export class World {
     const mood = a.thread.mood;
     // The waiting room: seated, facing you.
     if (s.kind === "review") {
-      const facing: Facing = "front";
+      const facing = s.facing;
+      const back = facing === "back";
+      const seated = !back;
       switch (a.thread.waitKind) {
         case "question":
         case "approval":
-          return { pose: "raise", expr: Math.floor(t * 2) % 4 === 0 ? "open" : "surprised", facing, seated: true };
+          return { pose: "raise", expr: Math.floor(t * 2) % 4 === 0 ? "open" : "surprised", facing, seated };
         case "plan":
-          return { pose: "present-plan", expr: blink ? "blink" : "open", facing, seated: true };
+          return { pose: back ? "sit-back" : "present-plan", expr: blink ? "blink" : "open", facing, seated };
         case "error":
-          return { pose: "slump", expr: "worried", facing, seated: true };
+          return { pose: back ? "sit-back" : "slump", expr: "worried", facing, seated };
         case "drafting":
-          return { pose: "read", expr: blink ? "blink" : "open", facing, seated: true };
+          return { pose: back ? "sit-back" : "read", expr: blink ? "blink" : "open", facing, seated };
         default:
-          return this.cheering(a)
-            ? { pose: "cheer", expr: "happy", facing, seated: true }
-            : { pose: "present", expr: blink ? "blink" : "happy", facing, seated: true };
+          return this.cheering(a) && !back
+            ? { pose: "cheer", expr: "happy", facing, seated }
+            : { pose: back ? "sit-back" : "present", expr: blink ? "blink" : "happy", facing, seated };
       }
     }
     // Presenting a plan for your review at the whiteboard, now and then
@@ -1793,16 +1853,19 @@ export class World {
     }
     if (s.kind === "event") return this.eventPose(a, s, blink);
     switch (s.pose) {
-      case "sit-desk-front": {
-        const typing = Math.floor((t + (a.seed % 10) / 10) * 6) % 2;
-        const pause = Math.floor((t + (a.seed % 13)) / 3) % 5 === 0;
-        return { pose: pause ? "type0" : typing ? "type1" : "type0", expr: blink ? "blink" : pause ? "open" : "focus", facing: "front" };
-      }
-      case "sit-desk": {
-        const typing = Math.floor((t + (a.seed % 10) / 10) * 6) % 2;
-        const pause = Math.floor((t + (a.seed % 13)) / 3) % 5 === 0;
-        return { pose: pause ? "type0" : typing ? "type1" : "type0", expr: "focus", facing: "back" };
-      }
+      case "sit-desk-front":
+      case "sit-desk":
+        if (a.thread.visionPro) {
+          const pinch = Math.floor((t + (a.seed % 9)) / 2.2) % 4 === 0;
+          return { pose: pinch ? "raise" : "type0", expr: "focus", facing: s.pose === "sit-desk" ? "back" : "front" };
+        }
+        {
+          const typing = Math.floor((t + (a.seed % 10) / 10) * 6) % 2;
+          const pause = Math.floor((t + (a.seed % 13)) / 3) % 5 === 0;
+          const pose: CharPose = pause ? "type0" : typing ? "type1" : "type0";
+          if (s.pose === "sit-desk") return { pose, expr: "focus", facing: "back" };
+          return { pose, expr: blink ? "blink" : pause ? "open" : "focus", facing: "front" };
+        }
       case "draw": {
         const scribble = Math.floor((t + (a.seed % 7) / 7) * 3) % 2;
         return { pose: scribble ? "draw1" : "draw0", expr: "focus", facing: "back" };
@@ -1971,7 +2034,7 @@ export class World {
       const style: DeskStyle = who?.thread.deskStyle ?? "default";
       const desk = deskCanvas(style);
       const chair = chairCanvas(who?.thread.chairTone ?? "green", d.side);
-      const scr = screenFor(style, d.side);
+      const scr = screenFor(style, d.side, d.index, atDesk.get(d.index)?.thread.visionPro === true);
       const seated = atDesk.get(d.index);
       items.push({ z: d.y + 26, draw: () => ctx.drawImage(desk, d.x, d.y) });
       items.push({
@@ -2029,19 +2092,29 @@ export class World {
         this.drawSpeakers(ctx, env);
         break;
       }
+      case "espresso":
+        // Brewing: the display blinks and a thin stream runs into the cup.
+        if (on("coffee")) {
+          ctx.fillStyle = Math.floor(t * 4) % 2 ? "#ffd84a" : "#5ad18a";
+          ctx.fillRect(p.x + 10, p.y + 10, 6, 1);
+          ctx.fillStyle = "#6b3e1e";
+          ctx.fillRect(p.x + 9, p.y + 18 + (Math.floor(t * 10) % 2), 1, 2);
+          ctx.fillStyle = "#c48a52";
+          ctx.fillRect(p.x + 8, p.y + 20, 3, 1);
+        } else if (Math.floor(t * 0.7) % 5 === 0) {
+          ctx.fillStyle = "#9ff0b0";
+          ctx.fillRect(p.x + 10, p.y + 10, 1, 1);
+        }
+        break;
+      case "server-rack":
+      case "ai-rack":
+        this.drawRack(ctx, p);
+        break;
       case "kitchen-counter": {
         const w = p.canvas.width - 2;
-        // Espresso machine: lights and a drip into the cup while brewing.
-        if (on("coffee")) {
-          ctx.fillStyle = Math.floor(t * 6) % 2 ? "#ffd84a" : "#5ad18a";
-          ctx.fillRect(p.x + 14, p.y + 4, 1, 1);
-          ctx.fillStyle = "#6b3e1e";
-          const k = (t * 8) % 1;
-          ctx.fillRect(p.x + 12, p.y + 10 + Math.floor(k * 2), 1, 1);
-        }
         if (on("kettle")) {
           ctx.fillStyle = "#ffcf4a";
-          ctx.fillRect(p.x + 27, p.y + 13, 2, 1);
+          ctx.fillRect(p.x + 34, p.y + 13, 2, 1);
         }
         if (w >= 100 && on("microwave")) {
           const mx = p.x + w - 24;
@@ -2274,6 +2347,7 @@ export class World {
       ctx.fillStyle = "#ffd84a";
       ctx.fillRect(Math.round(a.x + 2), Math.round(y - ANCHOR_Y + 15), 2, 2);
     }
+    if (settled && s?.kind === "desk" && a.thread.visionPro) this.drawVisionPro(ctx, a, y, facing);
     if (settled && s?.kind === "event" && this.event) {
       const k = this.event.kind;
       if (k === "lanterns") drawCarriedLantern(ctx, a.x, y, facing, a.seed, this.time, true);
@@ -2292,6 +2366,97 @@ export class World {
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(hx + 1, hy - 6, 1, 1);
     }
+  }
+
+  /** Blinking drive lights, GPU fans and a cool glow in the server room. */
+  private drawRack(ctx: CanvasRenderingContext2D, p: Prop): void {
+    const t = this.time;
+    const busy = (this.anim.get("server") ?? 0) > t;
+    const speed = busy ? 14 : 3;
+    if (p.kind === "server-rack") {
+      for (let row = 0, y = p.y + 4; y < p.y + 29; row++, y += 4) {
+        for (let i = 0; i < 3; i++) {
+          const on = hash(`${p.id}:${row}:${i}:${Math.floor(t * speed + i * 0.37 + row * 0.21)}`) % 3 !== 0;
+          ctx.fillStyle = on ? (i === 2 ? "#ffcf4a" : row % 3 === 0 ? "#5ad1ff" : "#5ad18a") : "#1a2a22";
+          ctx.fillRect(p.x + 10 + i * 1, y + 1, 1, 1);
+        }
+      }
+    } else {
+      // The AI cluster: spinning fans and a breathing light bar.
+      const pulse = 0.5 + 0.5 * Math.sin(t * (busy ? 8 : 2));
+      ctx.fillStyle = `rgba(160,110,255,${0.55 + pulse * 0.45})`;
+      ctx.fillRect(p.x + 2, p.y + 2, 16, 5);
+      drawPixelText(ctx, "AI", p.x + 7, p.y + 2, busy ? "#ffffff" : "#f0e6ff");
+      for (let row = 0, y = p.y + 8; y < p.y + 29; row++, y += 6) {
+        for (const fx of [6.5, 12.5]) {
+          const a = t * (busy ? 30 : 9) + row + fx;
+          ctx.fillStyle = "#7fd1ff";
+          ctx.fillRect(Math.round(p.x + fx + Math.cos(a) * 1.2), Math.round(y + 1.5 + Math.sin(a) * 1.2), 1, 1);
+        }
+        ctx.fillStyle = Math.floor(t * 3 + row) % 4 ? "#86e07f" : "#c39bff";
+        ctx.fillRect(p.x + 15, y + 2, 1, 1);
+      }
+    }
+    // Glow
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const cx = p.x + p.canvas.width / 2;
+    const g = ctx.createRadialGradient(cx, p.y + 16, 0, cx, p.y + 16, 18);
+    const tint = p.kind === "ai-rack" ? "140,90,255" : "60,190,255";
+    g.addColorStop(0, `rgba(${tint},${busy ? 0.32 : 0.14})`);
+    g.addColorStop(1, `rgba(${tint},0)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(cx - 18, p.y - 2, 36, 36);
+    ctx.restore();
+  }
+
+  /** A Vision Pro headset, and a peek at the windows floating around them. */
+  private drawVisionPro(ctx: CanvasRenderingContext2D, a: Agent, y: number, facing: Facing): void {
+    const x = Math.round(a.x) - 1;
+    const top = Math.round(y - 24);
+    if (facing === "back") {
+      ctx.fillStyle = "#6b6f7a";
+      ctx.fillRect(x - 6, top + 5, 13, 2);
+      ctx.fillStyle = "#9aa3ad";
+      ctx.fillRect(x - 6, top + 5, 13, 1);
+    } else {
+      ctx.fillStyle = OUTLINE;
+      ctx.fillRect(x - 6, top + 4, 13, 5);
+      ctx.fillStyle = "#1c1f2a";
+      ctx.fillRect(x - 5, top + 5, 11, 3);
+      ctx.fillStyle = "#d5dbe2";
+      ctx.fillRect(x - 6, top + 4, 13, 1);
+      ctx.fillStyle = "#6fd3ff";
+      ctx.fillRect(x - 4, top + 5, 3, 1);
+      ctx.fillStyle = "#c9a2ff";
+      ctx.fillRect(x + 2, top + 6, 2, 1);
+      ctx.fillStyle = "#9aa3ad";
+      ctx.fillRect(x - 7, top + 5, 1, 3);
+      ctx.fillRect(x + 7, top + 5, 1, 3);
+    }
+    const t = this.time;
+    const panes: [number, number, number, number][] =
+      facing === "back"
+        ? [
+            [-18, -50, 14, 9],
+            [2, -53, 17, 11],
+          ]
+        : [
+            [-25, -36, 13, 9],
+            [12, -39, 14, 10],
+          ];
+    panes.forEach(([dx, dy, w, h], i) => {
+      const px = x + dx;
+      const py = Math.round(y + dy + Math.sin(t * 1.2 + a.seed + i) * 1.2);
+      ctx.globalAlpha = 0.65;
+      ctx.fillStyle = "#e8f6ff";
+      ctx.fillRect(px, py, w, h);
+      ctx.fillStyle = "#7fd1ff";
+      ctx.fillRect(px, py, w, 1);
+      ctx.fillStyle = "#9fb6d6";
+      for (let row = 2; row < h - 1; row += 2) ctx.fillRect(px + 2, py + row, Math.max(2, ((a.seed >> row) % (w - 4)) + 2), 1);
+      ctx.globalAlpha = 1;
+    });
   }
 
   private drawBoss(ctx: CanvasRenderingContext2D): void {
@@ -2522,40 +2687,43 @@ export class World {
   private drawScreen(ctx: CanvasRenderingContext2D, r: Rect, a: Agent | undefined): void {
     const { x, y, w, h } = r;
     const t = this.time;
-    if (!a) return; // PC is off
+    if (!a) return; // switched off
+    const cx = x + Math.floor(w / 2);
+    const cy = y + Math.floor(h / 2);
     switch (a.thread.mood) {
       case "needs-you":
         ctx.fillStyle = Math.floor(t * 2) % 2 === 0 ? "#ffcf4a" : "#e0a92c";
         ctx.fillRect(x, y, w, h);
         ctx.fillStyle = "#4a3410";
-        ctx.fillRect(x + 4, y + 1, 2, 2);
-        ctx.fillRect(x + 4, y + 4, 2, 1);
+        ctx.fillRect(cx - 1, cy - 2, 2, 3);
+        ctx.fillRect(cx - 1, cy + 2, 2, 1);
         return;
       case "done":
         ctx.fillStyle = "#3fbf6b";
         ctx.fillRect(x, y, w, h);
         ctx.fillStyle = "#e9ffe9";
-        for (const [dx, dy] of [[2, 2], [3, 3], [4, 2], [5, 1], [6, 0]] as const) ctx.fillRect(x + dx + 1, y + dy + 1, 1, 1);
+        for (const [dx, dy] of [[-3, 0], [-2, 1], [-1, 2], [0, 1], [1, 0], [2, -1], [3, -2]] as const) ctx.fillRect(cx + dx, cy + dy, 1, 1);
         return;
       case "error":
         ctx.fillStyle = "#b8383f";
         ctx.fillRect(x, y, w, h);
         ctx.fillStyle = "#ffe0e0";
-        for (let i = 0; i < 3; i++) {
-          ctx.fillRect(x + 3 + i, y + 1 + i, 1, 1);
-          ctx.fillRect(x + 6 - i, y + 1 + i, 1, 1);
+        for (let i = -2; i <= 2; i++) {
+          ctx.fillRect(cx + i, cy + i, 1, 1);
+          ctx.fillRect(cx - i, cy + i, 1, 1);
         }
         return;
       default: {
-        ctx.fillStyle = "#1f3a2c";
+        ctx.fillStyle = "#1f2a3c";
         ctx.fillRect(x, y, w, h);
-        const colors = ["#60c677", "#9ff0b0", "#7fd1ff", "#ffd479"];
+        const colors = ["#60c677", "#9ff0b0", "#7fd1ff", "#ffd479", "#c39bff"];
         const scroll = Math.floor(t * 3 + (a.seed % 11));
-        for (let row = 0; row < 2; row++) {
+        const rows = Math.max(1, Math.floor((h - 1) / 2));
+        for (let row = 0; row < rows; row++) {
           const n = scroll + row;
           const rr = hash(`${a.id}:${n}`);
-          const indent = rr % 3;
-          const len = 2 + ((rr >> 4) % (w - 3 - indent));
+          const indent = (rr % 3) * (w > 12 ? 2 : 1);
+          const len = 2 + ((rr >> 4) % Math.max(1, w - 3 - indent));
           ctx.fillStyle = colors[(rr >> 9) % colors.length]!;
           ctx.fillRect(x + 1 + indent, y + 1 + row * 2, Math.min(len, w - 2 - indent), 1);
         }
@@ -3215,6 +3383,9 @@ export class World {
         lights.push([c.x + Math.cos(a) * 30, c.y + Math.sin(a) * 12, 34, 0.8, colors[i]!, 0.2]);
       }
     }
+    if (L.server) lights.push([L.server.x + L.server.w / 2, L.server.y + L.server.h / 2, Math.max(36, L.server.w * 0.6), 0.9, "#7fb8ff", 0.24]);
+    const espresso = L.pokeables.find((q) => q.id === "coffee");
+    if (espresso) lights.push([espresso.rect.x + 13, espresso.rect.y + 10, 12, 0.7, "#5ad18a", 0.12]);
     if (this.season) lights.push(...seasonLights(L, this.season));
     if (this.event) {
       lights.push(...eventLights(this.event));

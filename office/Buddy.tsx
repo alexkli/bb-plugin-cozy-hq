@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { charSprite, lookFor, CHAR_W, CHAR_H, type CharPose, type Expression } from "./characters.ts";
-import { moodOf, topicOf, visibleThreads, waitKindOf, WAIT_LABEL, type ThreadLike, type WaitKind } from "./model.ts";
+import { moodOf, topicOf, visibleThreads, waitKindOf, WAIT_LABEL, type ThreadLike } from "./model.ts";
 
 export interface BuddyThread extends ThreadLike {
   projectHue: number;
@@ -22,23 +22,49 @@ const S = 3; // CSS px per sprite pixel
 const TOP = 12; // sprite pixels of headroom for the speech bubble
 const TRACK = 70; // CSS px it strolls back and forth
 
-function pickOrder(threads: BuddyThread[]): BuddyThread[] {
-  const needy = threads.filter((t) => waitKindOf(t) !== null);
-  return needy.length > 0 ? needy : threads;
+/** Threads with something new for you since you last looked at the office. */
+function freshSince(threads: BuddyThread[], since: number): BuddyThread[] {
+  return threads.filter((t) => {
+    const k = waitKindOf(t);
+    return k !== null && k !== "drafting" && (t.latestAttentionAt || t.updatedAt) > since;
+  });
 }
 
-const BUBBLE: Record<WaitKind, { icon: string; color: string }> = {
-  question: { icon: "?", color: "#9fd0ff" },
-  plan: { icon: "▤", color: "#9fc4ff" },
-  approval: { icon: "!", color: "#ffcf4a" },
-  drafting: { icon: "…", color: "#ffffff" },
-  done: { icon: "✓", color: "#7be08f" },
-  error: { icon: "✕", color: "#ff9a9a" },
-};
+function readLook(key: string): number {
+  try {
+    const raw = window.localStorage.getItem(key);
+    const n = raw ? Number(JSON.parse(raw)) : NaN;
+    if (Number.isFinite(n)) return n;
+    // First run: start counting from now rather than from all history.
+    const now = Date.now();
+    window.localStorage.setItem(key, JSON.stringify(now));
+    return now;
+  } catch {
+    return Date.now();
+  }
+}
+
+/** The bubble's color: something waits on you, something broke, or just news. */
+function bubbleColor(fresh: BuddyThread[]): string {
+  const kinds = new Set(fresh.map((t) => waitKindOf(t)));
+  if (kinds.has("question") || kinds.has("approval") || kinds.has("plan")) return "#ffcf4a";
+  if (kinds.has("error")) return "#ff9a9a";
+  return "#7be08f";
+}
 
 export function Buddy(props: Props) {
   const visible = useMemo(() => visibleThreads(props.threads) as BuddyThread[], [props.threads]);
-  const order = useMemo(() => pickOrder(visible), [visible]);
+  const lookAt = `${props.storageKey}:look`;
+  const [lastLook, setLastLook] = useState(() => readLook(lookAt));
+  useEffect(() => {
+    const id = window.setInterval(() => setLastLook(readLook(lookAt)), 4_000);
+    return () => window.clearInterval(id);
+  }, [lookAt]);
+  const fresh = useMemo(() => freshSince(visible, lastLook), [visible, lastLook]);
+  // Show off the ones with news; otherwise anyone.
+  const order = fresh.length > 0 ? fresh : visible;
+  const count = fresh.length;
+  const badge = count > 0 ? { text: count > 9 ? "9+" : String(count), color: bubbleColor(fresh) } : null;
   const [index, setIndex] = useState(0);
   const current = order.length > 0 ? order[index % order.length]! : null;
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -72,9 +98,8 @@ export function Buddy(props: Props) {
     const look = lookFor(current.id, current.projectHue);
     const emblem = topicOf(current.displayTitle);
     const mood = moodOf(current);
-    const kind = waitKindOf(current);
-    const waiting = kind !== null;
-    const bubble = kind ? BUBBLE[kind] : null;
+    const waiting = badge !== null;
+    const bubble = badge;
     let raf = 0;
     let last = performance.now();
     const st = state.current;
@@ -117,24 +142,26 @@ export function Buddy(props: Props) {
       ctx.fillRect((px + 5) * S, (TOP + CHAR_H - 1) * S, 10 * S, 2 * S);
       ctx.drawImage(sprite, px * S, TOP * S, CHAR_W * S, CHAR_H * S);
       if (bubble) {
+        // How many threads have news for you since you last looked.
         const bob = Math.round(Math.abs(Math.sin(st.t * 3)) * 2);
+        const wide = bubble.text.length > 1 ? 3 : 0;
         const bx = (px + 12) * S;
         const by = (1 - bob / S) * S;
         ctx.fillStyle = "#2a1e2e";
-        ctx.fillRect(bx - S, by - S, 11 * S, 10 * S);
+        ctx.fillRect(bx - S, by - S, (11 + wide) * S, 10 * S);
         ctx.fillRect(bx, by + 9 * S, 3 * S, 2 * S);
         ctx.fillStyle = bubble.color;
-        ctx.fillRect(bx, by, 9 * S, 8 * S);
+        ctx.fillRect(bx, by, (9 + wide) * S, 8 * S);
         ctx.fillStyle = "#2a1e2e";
         ctx.font = `bold ${6 * S}px ui-monospace, Menlo, monospace`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(bubble.icon, bx + 4.5 * S, by + 4.3 * S);
+        ctx.fillText(bubble.text, bx + (4.5 + wide / 2) * S, by + 4.3 * S);
       }
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [current, props.hidden]);
+  }, [current, props.hidden, badge?.text, badge?.color]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (props.hidden || !current) return null;
   const kind = waitKindOf(current);
@@ -190,7 +217,10 @@ export function Buddy(props: Props) {
       {hover ? (
         <span className="chq-buddy-tip">
           <b>{current.displayTitle}</b>
-          <span>{kind ? WAIT_LABEL[kind] : moodOf(current) === "working" ? "Working" : "Hanging out"} · open Cozy HQ</span>
+          <span>
+            {count > 0 ? `${count} ${count === 1 ? "update" : "updates"} since you last looked` : kind ? WAIT_LABEL[kind] : moodOf(current) === "working" ? "Working" : "Hanging out"} · open
+            Cozy HQ
+          </span>
         </span>
       ) : null}
     </div>

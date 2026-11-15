@@ -257,19 +257,47 @@
   position: absolute;
   overflow: hidden;
   cursor: pointer;
+  container-type: size;
   font-family: var(--chq-mono);
-  color: #e8f4ff;
-  background: radial-gradient(120% 120% at 50% 40%, #1e2a4a 0%, #0c1020 70%, #05060c 100%);
-  border-radius: calc(var(--s) * 1.5);
-  box-shadow: inset 0 0 calc(var(--s) * 6) rgba(0, 0, 0, 0.75);
-  text-shadow: 0 0 calc(var(--s) * 1.2) rgba(120, 190, 255, 0.55);
+  color: #f2f7ff;
+  background: #0c1020;
+  border-radius: calc(var(--s) * 1.2);
+  box-shadow: inset 0 0 calc(var(--s) * 4) rgba(0, 0, 0, 0.55);
 }
+/* Each channel has its own studio colors. */
+.chq-tv-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(70% 90% at 85% 10%, rgba(255, 255, 255, 0.16), transparent 60%),
+    linear-gradient(160deg, #1d3d74 0%, #2c6cb0 48%, #163460 100%);
+}
+.chq-tv-bg::after {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, 0.08) 50%, transparent 58%);
+  animation: chq-tv-sweep 9s linear infinite;
+}
+@keyframes chq-tv-sweep {
+  from { transform: translateX(-40%); }
+  to { transform: translateX(40%); }
+}
+.chq-ch-tech .chq-tv-bg { background: radial-gradient(70% 90% at 85% 10%, rgba(255, 220, 160, 0.2), transparent 60%), linear-gradient(160deg, #5a2a10 0%, #b4541c 52%, #4a210c 100%); }
+.chq-ch-inbox .chq-tv-bg { background: radial-gradient(70% 90% at 85% 10%, rgba(220, 200, 255, 0.2), transparent 60%), linear-gradient(160deg, #2c1e66 0%, #6244c4 52%, #22175a 100%); }
+.chq-ch-office .chq-tv-bg { background: linear-gradient(180deg, #4aa8e8 0%, #8fd3ff 60%, #d9f2ff 100%); }
+.chq-ch-office.chq-wx-night .chq-tv-bg { background: radial-gradient(2px 2px at 20% 30%, #fff 50%, transparent 51%), radial-gradient(2px 2px at 70% 20%, #fff 50%, transparent 51%), radial-gradient(1.5px 1.5px at 45% 55%, #fff 50%, transparent 51%), linear-gradient(180deg, #0e1440 0%, #23306e 70%, #3a3a7a 100%); }
+.chq-ch-office.chq-wx-rain .chq-tv-bg { background: linear-gradient(180deg, #4c5a72 0%, #7d8ca6 60%, #a9b6c9 100%); }
+.chq-ch-office.chq-wx-snow .chq-tv-bg { background: linear-gradient(180deg, #8ea9c9 0%, #c9dcf0 60%, #f4f9ff 100%); }
+.chq-ch-office.chq-wx-cloud .chq-tv-bg { background: linear-gradient(180deg, #f39a6b 0%, #ffc98f 55%, #ffe7c2 100%); }
+
 .chq-tv-screen {
   position: absolute;
   inset: 0;
   display: flex;
   flex-direction: column;
-  padding: calc(var(--s) * 2) calc(var(--s) * 2.5) calc(var(--s) * 1.5);
+  gap: 2.5cqh;
+  padding: 3.5cqh 3cqw 0;
   animation: chq-tv-on 300ms ease-out;
 }
 @keyframes chq-tv-on {
@@ -278,88 +306,176 @@
 }
 .chq-tv-top {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  font-size: calc(var(--s) * 2.6);
+  gap: 2.5cqw;
+  font-size: 4.6cqw;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
 }
 .chq-tv-logo {
-  padding: calc(var(--s) * 0.3) calc(var(--s) * 1.2);
+  padding: 0.3cqh 1.6cqw;
   background: #e5484d;
   color: #fff;
-  text-shadow: none;
+  border-radius: 0.8cqw;
+  box-shadow: 0 0.6cqw 0 rgba(0, 0, 0, 0.25);
 }
 .chq-tv-logo.tech { background: #ff7a1a; }
 .chq-tv-logo.inbox { background: #7c5cff; }
-.chq-tv-live { color: #ff8a8a; animation: chq-blink 1.6s steps(2) infinite; }
-.chq-tv-src { color: #c9b8ff; }
-.chq-tv-src.src-slack { color: #f2c94c; }
-.chq-tv-src.src-github { color: #e8f4ff; }
-.chq-tv-src.src-teams { color: #9aa8ff; }
+.chq-tv-logo.weather { background: #ffffff; color: #1d5d9e; }
+.chq-tv-clock { margin-left: auto; opacity: 0.9; }
+.chq-tv-live { color: #ffb3b3; animation: chq-blink 1.6s steps(2) infinite; }
+.chq-tv-src { color: #ffe9a8; }
 @keyframes chq-blink { 50% { opacity: 0.35; } }
 
-.chq-tv-headline {
+.chq-tv-body {
   flex: 1;
   min-height: 0;
   display: flex;
+  gap: 2.5cqw;
+}
+/* The lower-third headline card. */
+.chq-tv-card {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: calc(var(--s) * 0.8);
-  border: 0;
-  padding: 0;
+  gap: 1.5cqh;
   margin: 0;
-  background: none;
-  color: inherit;
+  padding: 2cqh 3cqw;
+  border: 0;
+  border-left: 1.4cqw solid #ffd84a;
+  border-radius: 1cqw;
+  background: rgba(255, 255, 255, 0.92);
+  color: #14213a;
   font: inherit;
   text-align: left;
   cursor: pointer;
+  box-shadow: 0 1cqw 0 rgba(0, 0, 0, 0.22);
 }
-.chq-tv-headline:hover .chq-tv-text { text-decoration: underline; text-underline-offset: 2px; }
+.chq-tv-card.big { flex: 1; flex-direction: row; align-items: center; gap: 3cqw; }
+.chq-ch-tech .chq-tv-card { border-left-color: #ff7a1a; }
+.chq-ch-inbox .chq-tv-card { border-left-color: #a48bff; }
+.chq-tv-card:hover .chq-tv-text { text-decoration: underline; text-underline-offset: 2px; }
 .chq-tv-tag {
   align-self: flex-start;
-  font-size: calc(var(--s) * 2.3);
+  font-size: 3.4cqw;
   font-weight: 800;
-  letter-spacing: 0.1em;
-  color: #0c1020;
+  letter-spacing: 0.08em;
+  color: #14213a;
   background: #ffd84a;
-  padding: 0 calc(var(--s) * 1);
-  text-shadow: none;
+  padding: 0 1.2cqw;
+  border-radius: 0.6cqw;
 }
-.chq-tv-tag.tag-error { background: #ff6b6b; }
-.chq-tv-tag.tag-done { background: #7be08f; }
-.chq-tv-tag.tag-arrived { background: #7fd1ff; }
-.chq-tv-tag.tag-started { background: #9fc4ff; }
-.chq-tv-tag.tag-left { background: #c9b8ff; }
+.chq-tv-tag.tag-error { background: #ff8a8a; }
+.chq-tv-tag.tag-done { background: #8fe6a0; }
+.chq-tv-tag.tag-arrived { background: #8fdcff; }
+.chq-tv-tag.tag-started { background: #b3cfff; }
+.chq-tv-tag.tag-left { background: #d9ccff; }
+.chq-tv-tag.tag-today { background: #ff9fd0; }
 .chq-tv-text {
-  font-size: calc(var(--s) * 3.5);
-  font-weight: 700;
-  line-height: 1.22;
+  font-size: 5.4cqw;
+  font-weight: 800;
+  line-height: 1.18;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
 }
-.chq-tv-text.big { font-size: calc(var(--s) * 3.8); -webkit-line-clamp: 4; }
-.chq-tv-time { font-size: calc(var(--s) * 2.3); color: #9fb6d6; }
-.chq-unread { color: #ffd84a; }
+.chq-tv-card.big .chq-tv-text { font-size: 6cqw; -webkit-line-clamp: 3; }
+.chq-tv-time { font-size: 3.2cqw; color: #5b6b86; }
+.chq-tv-rank {
+  flex: none;
+  font-size: 14cqw;
+  font-weight: 900;
+  line-height: 1;
+  color: #ff7a1a;
+}
+.chq-unread { color: #c4383f; }
+
+/* Live head counts. */
+.chq-tv-stats {
+  flex: none;
+  width: 34%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.6cqw;
+}
+.chq-tv-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border-radius: 1cqw;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 -0.8cqw 0 rgba(0, 0, 0, 0.18);
+}
+.chq-tv-stat b { font-size: 9cqw; line-height: 1; }
+.chq-tv-stat span { font-size: 2.8cqw; opacity: 0.9; white-space: nowrap; }
+.chq-tv-stat.need { background: #ffcf4a; color: #3b2500; }
+.chq-tv-stat.work { background: #5aa9ff; color: #08203d; }
+.chq-tv-stat.done { background: #6fdc8c; color: #0b3018; }
+.chq-tv-stat.idle { background: #c9b8ff; color: #241650; }
+.chq-tv-stat.zero { filter: saturate(0.25) brightness(0.9); opacity: 0.75; }
+
+/* The weather and calendar channel. */
+.chq-tv-weather {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  gap: 4cqw;
+  color: #0f2747;
+}
+.chq-wx-night .chq-tv-weather,
+.chq-wx-rain .chq-tv-weather { color: #f2f7ff; }
+.chq-tv-sky { flex: none; width: 30%; display: grid; place-items: center; }
+.chq-tv-icon { font-size: 17cqw; line-height: 1; filter: drop-shadow(0 1cqw 0 rgba(0, 0, 0, 0.18)); animation: chq-tv-float 4s ease-in-out infinite; }
+@keyframes chq-tv-float { 50% { transform: translateY(-3%); } }
+.chq-tv-today { display: flex; flex-direction: column; gap: 1cqh; min-width: 0; }
+.chq-tv-today b { font-size: 12cqw; line-height: 1; font-weight: 900; white-space: nowrap; }
+.chq-tv-today span { font-size: 4.2cqw; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chq-tv-forecast { opacity: 0.85; }
+
+/* The ticker along the bottom. */
 .chq-tv-ticker {
+  flex: none;
+  display: flex;
+  align-items: center;
   overflow: hidden;
   white-space: nowrap;
-  font-size: calc(var(--s) * 2.4);
-  color: #ffd84a;
-  border-top: calc(var(--s) * 0.4) solid rgba(255, 216, 74, 0.35);
-  padding-top: calc(var(--s) * 0.6);
+  margin: 0 -3cqw;
+  height: 13cqh;
+  font-size: 3.8cqw;
+  font-weight: 700;
+  background: rgba(8, 12, 28, 0.82);
+  color: #fff4c2;
 }
+.chq-tv-ticker i {
+  flex: none;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  padding: 0 2cqw;
+  font-style: normal;
+  font-weight: 900;
+  color: #fff;
+  background: #e5484d;
+  z-index: 1;
+}
+.chq-ch-tech .chq-tv-ticker i { background: #ff7a1a; }
+.chq-ch-inbox .chq-tv-ticker i { background: #7c5cff; }
+.chq-ch-office .chq-tv-ticker i { background: #1d5d9e; }
 .chq-tv-ticker span {
   display: inline-block;
   padding-left: 100%;
   animation: chq-ticker 28s linear infinite;
 }
-.chq-tv-ticker.static span {
-  padding-left: 0;
+.chq-tv-ticker span.static {
+  padding-left: 2cqw;
   animation: none;
-  color: #9fb6d6;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 @keyframes chq-ticker {
   from { transform: translateX(0); }
@@ -369,7 +485,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px calc(var(--s) * 1));
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.1) 0 1px, transparent 1px calc(var(--s) * 1));
   mix-blend-mode: multiply;
 }
 .chq-tv-static {
@@ -387,10 +503,11 @@
 }
 .chq-tv-ch {
   position: absolute;
-  right: calc(var(--s) * 1.5);
-  bottom: calc(var(--s) * 1);
-  font-size: calc(var(--s) * 2);
-  color: rgba(159, 182, 214, 0.55);
+  right: 1.5cqw;
+  top: 0.6cqh;
+  font-size: 2.4cqw;
+  font-family: var(--chq-mono);
+  color: rgba(255, 255, 255, 0.55);
   pointer-events: none;
 }
 
@@ -565,6 +682,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .chq-tv-ticker span { animation: none; padding-left: 0; }
+  .chq-tv-bg::after,
+  .chq-tv-icon { animation: none; }
   .chq-pinboard { transition: none; }
 }
 

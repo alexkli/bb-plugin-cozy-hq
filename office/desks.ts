@@ -119,38 +119,112 @@ function sideMonitorBack(): Grid {
   return g;
 }
 
-/** The screen setup on a desk, by desk style and seat side. */
-export function screenFor(style: DeskStyle, side: "north" | "south"): Screen {
-  const key = `${style}-${side}`;
-  const PC_SCREEN: Rect = { x: 3, y: 5, w: 10, h: 5 };
+type Flat = "black" | "silver" | "white" | "big";
+
+const BEZEL: Record<Flat, { bezel: string; edge: string; stand: string; back: string }> = {
+  black: { bezel: "#24262e", edge: "#3a3d48", stand: "#3a3d48", back: "#3a3d48" },
+  big: { bezel: "#1c1e25", edge: "#33363f", stand: "#4a4d58", back: "#33363f" },
+  silver: { bezel: "#cfd5dc", edge: "#e9edf1", stand: "#b5bcc6", back: "#c9ced6" },
+  white: { bezel: "#f1f2f4", edge: "#ffffff", stand: "#d5dbe2", back: "#e6e9ee" },
+};
+
+/** Keyboard and mouse at the front of a desk, as on the Pixel Agents PC. */
+function keyboard(g: Grid, x: number, y: number): void {
+  g.rect(x, y, 11, 4, "#c9ced6");
+  for (let i = 0; i < 5; i++) g.set(x + 1 + i * 2, y + 1, "#9aa3ad").set(x + 2 + i * 2, y + 2, "#9aa3ad");
+  g.rect(x + 13, y + 1, 3, 3, "#c9ced6").set(x + 14, y + 1, "#9aa3ad");
+}
+
+/** A flat screen seen from the front (we look at the screen), 16 or 22 wide. */
+function flatFront(kind: Flat): Grid {
+  const big = kind === "big";
+  const w = big ? 22 : 16;
+  const c = BEZEL[kind];
+  const g = new Grid(w, 32);
+  const sh = big ? 11 : 9;
+  g.rect(1, 1, w - 2, sh + 2, c.bezel);
+  g.rect(1, 1, w - 2, 1, c.edge);
+  g.rect(2, 2, w - 4, sh, "#1b1e26");
+  if (kind === "silver") g.rect(1, sh + 3, w - 2, 2, c.bezel).set(Math.floor(w / 2), sh + 3, "#9aa3ad");
+  const neck = kind === "silver" ? sh + 5 : sh + 3;
+  g.rect(Math.floor(w / 2) - 1, neck, 2, 3, c.stand);
+  g.rect(Math.floor(w / 2) - 4, neck + 3, 8, 1, c.stand);
+  keyboard(g, big ? 3 : 0, 18);
+  g.outline(OUTLINE);
+  return g;
+}
+
+/** A flat screen seen from behind (the person faces us). */
+function flatBack(kind: Flat): Grid {
+  const big = kind === "big";
+  const w = big ? 22 : 16;
+  const c = BEZEL[kind];
+  const g = new Grid(w, 32);
+  const top = big ? 7 : 8;
+  g.rect(1, top, w - 2, big ? 11 : 9, c.back);
+  g.rect(1, top, w - 2, 1, c.edge);
+  g.rect(Math.floor(w / 2) - 2, top + 3, 4, 3, kind === "silver" || kind === "white" ? "#fbfcfd" : "#4a4d58");
+  g.rect(Math.floor(w / 2) - 1, top + (big ? 11 : 9), 2, 3, c.stand);
+  g.rect(Math.floor(w / 2) - 4, top + (big ? 14 : 12), 8, 1, c.stand);
+  g.outline(OUTLINE);
+  return g;
+}
+
+/** Nothing but a keyboard: whoever sits here works in a headset. */
+function bareFront(): Grid {
+  const g = new Grid(16, 32);
+  keyboard(g, 0, 18);
+  g.outline(OUTLINE);
+  return g;
+}
+
+/**
+ * The screen setup on a desk, by desk style and seat side. `variant` (the
+ * desk index) varies the monitor model, with an old CRT here and there;
+ * `vision` leaves the desk bare for someone in a Vision Pro.
+ */
+export function screenFor(style: DeskStyle, side: "north" | "south", variant = 0, vision = false): Screen {
+  const front = side === "south";
+  if (vision) {
+    return front
+      ? { canvas: cache.get("screen-bare", bareFront), dx: 0, dy: 0, screens: [] }
+      : { canvas: once("screen-none", () => layered(1, 1, [])), dx: 0, dy: 0, screens: [] };
+  }
   switch (style) {
     case "opus":
-      // Dual monitors: the PC plus a second screen on the side.
-      return side === "south"
+      // Dual flat screens.
+      return front
         ? {
-            canvas: once(key, () => layered(30, 32, [[sideMonitorFront().toCanvas(), 15, 1], [pa("PC_FRONT_OFF"), 0, 0]])),
+            canvas: once("opus-front", () => layered(32, 32, [[flatFront("black").toCanvas(), 0, 0], [flatFront("black").toCanvas(), 16, 0]])),
             dx: -8,
             dy: 0,
-            screens: [PC_SCREEN, { x: 18, y: 5, w: 8, h: 5 }],
+            screens: [
+              { x: 2, y: 2, w: 12, h: 9 },
+              { x: 18, y: 2, w: 12, h: 9 },
+            ],
           }
-        : {
-            canvas: once(key, () => layered(30, 32, [[sideMonitorBack().toCanvas(), 15, 8], [pa("PC_BACK"), 0, 0]])),
-            dx: 0,
-            dy: 0,
-            screens: [],
-          };
+        : { canvas: once("opus-back", () => layered(32, 32, [[flatBack("black").toCanvas(), 0, 0], [flatBack("black").toCanvas(), 16, 0]])), dx: -8, dy: 0, screens: [] };
     case "haiku":
-      return side === "south"
-        ? { canvas: cache.get(`screen-${key}`, laptopFront), dx: -1, dy: 12, screens: [{ x: 4, y: 3, w: 10, h: 5 }] }
-        : { canvas: cache.get(`screen-${key}`, laptopBack), dx: -1, dy: 12, screens: [] };
+      return front
+        ? { canvas: cache.get("screen-laptop-front", laptopFront), dx: -1, dy: 12, screens: [{ x: 4, y: 3, w: 10, h: 5 }] }
+        : { canvas: cache.get("screen-laptop-back", laptopBack), dx: -1, dy: 12, screens: [] };
     case "gpt":
-      return side === "south"
-        ? { canvas: cache.get(`screen-${key}`, ultrawideFront), dx: -8, dy: 4, screens: [{ x: 4, y: 4, w: 24, h: 5 }] }
-        : { canvas: cache.get(`screen-${key}`, ultrawideBack), dx: -2, dy: 8, screens: [] };
-    default:
-      return side === "south"
-        ? { canvas: pa("PC_FRONT_OFF"), dx: 0, dy: 0, screens: [PC_SCREEN] }
-        : { canvas: pa("PC_BACK"), dx: 0, dy: 0, screens: [] };
+      return front
+        ? { canvas: cache.get("screen-ultra-front", ultrawideFront), dx: -8, dy: 4, screens: [{ x: 4, y: 4, w: 24, h: 5 }] }
+        : { canvas: cache.get("screen-ultra-back", ultrawideBack), dx: -2, dy: 8, screens: [] };
+    default: {
+      // Mostly modern flat screens; a retro CRT on about one desk in nine.
+      if (variant % 9 === 4) {
+        return front
+          ? { canvas: pa("PC_FRONT_OFF"), dx: 0, dy: 0, screens: [{ x: 3, y: 5, w: 10, h: 5 }] }
+          : { canvas: pa("PC_BACK"), dx: 0, dy: 0, screens: [] };
+      }
+      const kind = (["black", "silver", "black", "big", "white", "silver"] as Flat[])[variant % 6]!;
+      const big = kind === "big";
+      return front
+        ? { canvas: cache.get(`flat-front-${kind}`, () => flatFront(kind)), dx: big ? -3 : 0, dy: 0, screens: [{ x: 2, y: 2, w: big ? 18 : 12, h: big ? 11 : 9 }] }
+        : { canvas: cache.get(`flat-back-${kind}`, () => flatBack(kind)), dx: big ? -3 : 0, dy: 0, screens: [] };
+    }
   }
 }
 

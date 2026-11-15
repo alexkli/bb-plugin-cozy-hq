@@ -36,6 +36,14 @@ function useOfficeThreads(withDetails: boolean): { threads: OfficeThread[]; load
   const rpc = useRpc<RpcContract>();
   const [models, setModels] = useState<Record<string, string>>({});
   const [interactions, setInteractions] = useState<Record<string, InteractionKind>>({});
+  // Hold the office back until we know what kind of question each waiting
+  // thread has (or 2.5 s pass), so nobody is seated twice on load.
+  const [infoReady, setInfoReady] = useState(!withDetails);
+  useEffect(() => {
+    if (infoReady) return;
+    const id = window.setTimeout(() => setInfoReady(true), 2_500);
+    return () => window.clearTimeout(id);
+  }, [infoReady]);
 
   const ids = useMemo(() => threads.filter((t) => !t.isHidden && !t.isArchived).map((t) => t.id), [threads]);
   const pending = useMemo(
@@ -51,8 +59,9 @@ function useOfficeThreads(withDetails: boolean): { threads: OfficeThread[]; load
       (r) => {
         setModels(r.models);
         setInteractions(r.interactions);
+        setInfoReady(true);
       },
-      () => undefined,
+      () => setInfoReady(true),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rpc, withDetails, idsKey, pendingKey, busyKey]);
@@ -88,7 +97,7 @@ function useOfficeThreads(withDetails: boolean): { threads: OfficeThread[]; load
       providerName: providerName.get(t.providerId) ?? t.providerId,
     }));
   }, [threads, projects, providers, drafts, interactions, models]);
-  return { threads: office, loading: status === "loading" };
+  return { threads: office, loading: status === "loading" || (ids.length > 0 && !infoReady) };
 }
 
 function useBuddySetting(): [boolean, (on: boolean) => void] {

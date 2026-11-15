@@ -32,7 +32,7 @@ Cozy HQ appears as **Cozy HQ** in bb's sidebar rail (route
 | Running, background work, queued message | At a desk; its screen scrolls code |
 | Plan mode | Meeting room: sketching at the whiteboard, or at the table with papers and blueprints |
 | Plan ready for your review | Meeting room, beside the whiteboard holding the blueprint |
-| Asking a question, waiting for an approval | Waiting room, hand up |
+| Asking a question, waiting for an approval | Waiting room sofas, hand up |
 | Finished, unread | Waiting room, holding its page |
 | Errored, unread | Waiting room, under a rain cloud |
 | You have an unsent draft for it | Your office, across the desk from you |
@@ -43,16 +43,24 @@ Cozy HQ appears as **Cozy HQ** in bb's sidebar rail (route
 Threads waiting for you get a title tag above their heads; the tags stack so
 they never overlap, and clicking one opens the thread. So does clicking a
 character. Desks are furnished by the thread's model (Opus walnut with dual
-monitors, Sonnet oak, Haiku white with a laptop, GPT/Codex black with an
-ultrawide), chairs by provider, and a shirt badge shows what the thread is
-about.
+flat screens, Sonnet oak, Haiku white with a laptop, GPT/Codex black with an
+ultrawide; everyone else gets a flat screen, with the odd retro CRT), chairs
+by provider, and a shirt badge shows what the thread is about. One or two
+people work in a Vision Pro.
+
+The office keeps going while you're elsewhere in bb, and it remembers what
+everyone was doing when you last looked: coming back, only the threads whose
+state changed since then get up and walk.
 
 ## What else is going on
 
 - **The wall is a home screen**: a pinboard with every enabled provider's
   usage, a calendar, a status light board, the door (a new thread), a cuckoo
-  clock (hover for the time) and a big TV with HQ news, Hacker News headlines
-  and your Work Dashboard inbox, if you use that plugin.
+  clock (hover for the time) and a big TV: HQ news with live head counts, the
+  office weather and clock, Hacker News headlines and your Work Dashboard
+  inbox, if you use that plugin. Click the TV to switch channels.
+- **A small server room** with blinking racks and a glowing AI cluster (click
+  it to train a model).
 - **You're the boss** at the big desk, with Biscuit the corgi asleep in the
   corner. Pixel the cat, a roomba, the fish, a cleaning crew in the evening and
   a night guard on the occasional round keep the place alive.
@@ -84,9 +92,15 @@ about.
 - **Day and night** follow your clock, with sunsets, stars and lamps, and
   rainy days now and then.
 - **Office buddy**: an agent from the office strolls in a corner of bb
-  wherever you are (drag it anywhere, click it to open Cozy HQ).
+  wherever you are (drag it anywhere, click it to open Cozy HQ). Its bubble
+  counts the threads with news for you since you last looked at the office:
+  yellow when one waits on you, red for an error, green when they're just
+  done. No news, no bubble.
+- **Rail badge**: the number on the Cozy HQ icon counts threads waiting for
+  your input (a question, an approval or a plan to review).
 - **Fits any panel**: a wide floor plan in landscape, rooms stacked top to
-  bottom on a phone held upright.
+  bottom on a phone held upright. Taller panels get a reading nook in the
+  lounge, a library and a small indoor garden instead of empty floor.
 
 ## Settings
 
@@ -109,8 +123,9 @@ bb plugin config cozy-hq set inbox false    # Work Dashboard inbox on the TV
   (`hacker-news.firebaseio.com`), at most every 20 minutes, for the TECH
   channel. Turn it off with `techNews false`.
 - Only `http`/`https` links from headlines and inbox items are opened.
-- Preferences (sound, the buddy's position, remembered desks, recent office
-  news) stay in your browser's local storage.
+- Preferences (sound, the buddy's position, remembered desks, what everyone
+  was doing when you last looked, recent office news) stay in your browser's
+  local storage.
 
 ## Develop
 

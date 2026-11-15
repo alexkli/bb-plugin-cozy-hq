@@ -455,15 +455,9 @@ function kitchenCounterSprite(w: number): HTMLCanvasElement {
     g.rect(1, top + 7, w, 17, "#6f9fb8");
     g.rect(1, top + 7, w, 1, "#8fbcd2");
     for (let x = 4; x < w - 6; x += 22) g.rect(x, top + 10, 18, 11, "#7fafc6").set(x + 9, top + 15, "#e9d3a8");
-    // Espresso machine (tall, chrome).
-    g.rect(4, 0, 16, 16, "#c9ced6");
-    g.rect(4, 0, 16, 2, "#e9edf1");
-    g.rect(6, 3, 12, 4, "#3a3a46").set(16, 4, "#ff5a5a").set(14, 4, "#5ad18a");
-    g.rect(9, 8, 6, 2, "#6b7280");
-    g.rect(10, 11, 4, 4, "#f4efe6").set(13, 12, "#f4efe6");
-    // Kettle
-    g.rrect(24, 6, 9, 9, "#e5484d", 2);
-    g.rect(26, 4, 5, 2, "#c4383f").set(33, 9, "#c4383f");
+    // Kettle (the espresso machine is its own prop, at the left end)
+    g.rrect(31, 6, 9, 9, "#e5484d", 2);
+    g.rect(33, 4, 5, 2, "#c4383f").set(40, 9, "#c4383f");
     // Sink
     if (w >= 80) {
       g.rect(42, top + 1, 16, 5, "#b9c2cc");
@@ -477,7 +471,142 @@ function kitchenCounterSprite(w: number): HTMLCanvasElement {
       g.rect(w - 9, 3, 3, 8, "#22222c").set(w - 8, 4, "#5ad18a");
     }
     // Mugs
-    g.rect(36, top - 4, 3, 4, "#7fb8d6").rect(w >= 100 ? w - 34 : w - 8, top - 4, 3, 4, "#ef6f9a");
+    g.rect(w >= 80 ? 60 : 30, top - 4, 3, 4, "#7fb8d6").rect(w >= 100 ? w - 34 : w - 8, top - 4, 3, 4, "#ef6f9a");
+    g.outline(OUTLINE);
+    return g;
+  });
+}
+
+/** A big red espresso machine: chrome top with cups, a display, two group heads. */
+function espressoSprite(): HTMLCanvasElement {
+  return cache.get("espresso", () => {
+    const g = new Grid(26, 30);
+    const red = "#d6453d";
+    const redHi = "#ee6b5f";
+    const redLo = "#a8322c";
+    const chrome = "#d5dbe2";
+    const chromeLo = "#9aa3ad";
+    // Cups warming on top
+    g.rect(5, 1, 4, 3, "#fbfaf5").rect(10, 1, 4, 3, "#fbfaf5").rect(16, 2, 4, 2, "#f2c14e");
+    g.rect(2, 4, 22, 2, chrome).rect(2, 4, 22, 1, "#ffffff");
+    // Body
+    g.rrect(2, 6, 22, 16, red, 1);
+    g.rect(3, 7, 20, 1, redHi);
+    g.rect(2, 20, 22, 2, redLo);
+    // Display and buttons
+    g.rect(8, 8, 10, 4, "#1d2b22").rect(9, 9, 4, 1, "#5ad18a").rect(14, 9, 3, 1, "#5ad18a").rect(9, 10, 6, 1, "#2f6b4a");
+    g.set(5, 9, "#fff3a3").set(5, 11, "#ffffff").set(20, 9, "#ffffff").set(20, 11, "#fff3a3");
+    // Group heads and portafilters
+    for (const x of [6, 15]) {
+      g.rect(x, 13, 5, 3, chromeLo);
+      g.rect(x + 1, 16, 3, 1, "#2a2a32");
+      g.rect(x - 2, 14, 2, 1, "#2a2a32");
+    }
+    // Steam wand
+    g.rect(23, 12, 1, 7, chrome).set(22, 18, chrome);
+    // Drip tray with a cup
+    g.rect(3, 22, 20, 3, chromeLo);
+    for (let x = 4; x < 22; x += 2) g.set(x, 23, "#6b7280");
+    g.rect(7, 19, 3, 3, "#fbfaf5").set(10, 20, "#fbfaf5");
+    // Badge
+    g.rect(11, 18, 4, 2, "#f2c14e");
+    g.rect(2, 25, 22, 2, "#3a3a46");
+    g.outline(OUTLINE);
+    return g;
+  });
+}
+
+/** A sofa seen from behind, for people sitting facing a table. */
+function sofaBackSprite(w: number): HTMLCanvasElement {
+  return cache.get(`sofa-back-${w}`, () => {
+    const g = new Grid(w + 2, 16);
+    const body = "#d9823f";
+    g.rect(1, 1, w, 10, "#b0632a");
+    g.rect(1, 1, w, 2, body);
+    g.rect(3, 3, w - 4, 1, "#c9733a");
+    g.rect(1, 11, w, 2, "#8a4a20");
+    g.rect(2, 13, 2, 2, "#5a3a24").rect(w - 2, 13, 2, 2, "#5a3a24");
+    g.outline(OUTLINE);
+    return g;
+  });
+}
+
+/** An armchair seen from the side, facing right (flip for left). */
+function armchairSideSprite(left: boolean): HTMLCanvasElement {
+  return cache.get(`arm-side-${left}`, () => {
+    const g = new Grid(18, 20);
+    const body = "#d9823f";
+    const hi = "#f2a65e";
+    const lo = "#b0632a";
+    g.rrect(1, 1, 5, 15, lo, 1);
+    g.rect(2, 2, 2, 12, body);
+    g.rect(5, 9, 11, 6, body);
+    g.rect(5, 9, 11, 2, hi);
+    g.rect(13, 7, 4, 8, lo).rect(13, 7, 4, 1, body);
+    g.rect(1, 15, 16, 2, lo);
+    g.rect(2, 17, 2, 2, "#5a3a24").rect(14, 17, 2, 2, "#5a3a24");
+    g.outline(OUTLINE);
+    return left ? g.flipped() : g;
+  });
+}
+
+/** A wooden garden bench, seen from the front. */
+function benchSprite(): HTMLCanvasElement {
+  return cache.get("bench", () => {
+    const g = new Grid(36, 16);
+    for (const y of [1, 4]) g.rect(2, y, 32, 2, "#b97c46").rect(2, y, 32, 1, "#d9a066");
+    g.rect(4, 3, 2, 6, "#3a3546").rect(30, 3, 2, 6, "#3a3546");
+    g.rect(1, 8, 34, 3, "#c48a52").rect(1, 8, 34, 1, "#e0a868");
+    g.rect(3, 11, 2, 4, "#3a3546").rect(31, 11, 2, 4, "#3a3546");
+    g.outline(OUTLINE);
+    return g;
+  });
+}
+
+/** A low round table with magazines and a little plant. */
+function loungeTableSprite(): HTMLCanvasElement {
+  return cache.get("lounge-table", () => {
+    const g = new Grid(28, 12);
+    g.ellipse(13.5, 4.5, 12.5, 4, "#c48a52");
+    g.ellipse(13.5, 4, 11.5, 3, "#d9a066");
+    g.rect(5, 3, 6, 3, "#7fb8d6").rect(6, 3, 4, 1, "#fbfaf5");
+    g.rect(11, 4, 5, 3, "#ff9fb2");
+    g.rect(18, 2, 3, 3, "#c4622d").set(19, 0, "#3f9a5a").set(18, 1, "#57b86f").set(20, 1, "#57b86f");
+    g.rect(12, 8, 3, 3, "#8a5a34");
+    g.outline(OUTLINE);
+    return g;
+  });
+}
+
+/** A server rack: blank panels and drive bays (the blinking lights are live). */
+function serverRackSprite(): HTMLCanvasElement {
+  return cache.get("server-rack", () => {
+    const g = new Grid(16, 33);
+    g.rect(1, 1, 14, 30, "#22252e");
+    g.rect(1, 1, 14, 1, "#3a3f4c");
+    for (let y = 3; y < 29; y += 4) {
+      g.rect(3, y, 10, 3, "#2f3440");
+      g.rect(3, y, 10, 1, "#3d4352");
+      g.rect(4, y + 1, 5, 1, "#1a1d24");
+    }
+    g.rect(1, 31, 14, 1, "#111318");
+    g.outline(OUTLINE);
+    return g;
+  });
+}
+
+/** The AI cluster: a wider rack of GPU sleds behind a smoked door. */
+function aiRackSprite(): HTMLCanvasElement {
+  return cache.get("ai-rack", () => {
+    const g = new Grid(20, 33);
+    g.rect(1, 1, 18, 30, "#181a22");
+    g.rect(1, 1, 18, 6, "#4b2f7a");
+    for (let y = 8; y < 29; y += 6) {
+      g.rect(3, y, 14, 4, "#262a36");
+      g.ellipse(6.5, y + 1.5, 1.5, 1.5, "#0f1016");
+      g.ellipse(12.5, y + 1.5, 1.5, 1.5, "#0f1016");
+    }
+    g.rect(1, 31, 18, 1, "#111318");
     g.outline(OUTLINE);
     return g;
   });
@@ -815,6 +944,27 @@ export function paintBackground(L: Layout): HTMLCanvasElement {
       case "games":
         carpet(ctx, r, "#4f6b8a", "#5f7fa0", "#6f8fb0");
         break;
+      case "garden": {
+        // Grass with a stone path through it.
+        for (let y = r.y; y < r.y + r.h; y += 4) {
+          for (let x = r.x; x < r.x + r.w; x += 4) rect(ctx, x, y, 4, 4, ((x + y) >> 2) % 2 ? "#78a85e" : "#82b366");
+        }
+        for (let i = 0; i < r.w * r.h / 40; i++) rect(ctx, r.x + ((i * 37) % r.w), r.y + ((i * 53) % r.h), 1, 2, "#5f8f4a");
+        for (let x = r.x + 10; x < r.x + r.w - 10; x += 14) {
+          const y = r.y + r.h - 18 + Math.round(Math.sin(x * 0.08) * 3);
+          rect(ctx, x, y, 9, 5, "#c9bfae");
+          rect(ctx, x + 1, y, 7, 1, "#e2dacb");
+        }
+        rect(ctx, r.x, r.y, r.w, 2, "#5f8f4a");
+        break;
+      }
+      case "server": {
+        // A raised floor of dark tiles with a cool glow along the edges.
+        tiles(ctx, r, "#232838", "#1d2130", 6);
+        rect(ctx, r.x, r.y + r.h - 2, r.w, 2, "#3fd6ff");
+        rect(ctx, r.x, r.y, r.w, 1, "#8f6bff");
+        break;
+      }
       case "library":
         carpet(ctx, r, "#6f9a6a", "#93bd8a", "#7fae78");
         break;
@@ -1034,6 +1184,22 @@ function canvasFor(p: PropPlacement, L: Layout): HTMLCanvasElement {
       return waitingChairSprite();
     case "waiting-sofa":
       return waitingSofaSprite(p.w ?? 42);
+    case "waiting-sofa-back":
+      return sofaBackSprite(p.w ?? 42);
+    case "waiting-armchair":
+      return armchairSideSprite(false);
+    case "waiting-armchair-left":
+      return armchairSideSprite(true);
+    case "lounge-table":
+      return loungeTableSprite();
+    case "bench":
+      return benchSprite();
+    case "espresso":
+      return espressoSprite();
+    case "server-rack":
+      return serverRackSprite();
+    case "ai-rack":
+      return aiRackSprite();
     case "side-table":
       return sideTableSprite();
     case "reception":
