@@ -1,6 +1,6 @@
 // Which agents wear a soft glow: warm for one that just finished (or started
-// waiting on you) and that you haven't opened since, cool for one on its way
-// to start new work. Pure logic (but for updateOpened, which keeps the record
+// waiting on you) and that you haven't opened since, cool for one that got to
+// work since you last looked, for as long as it works. Pure logic (but for updateOpened, which keeps the record
 // in localStorage), so it can be unit tested with node --test.
 //
 // bb sets a thread's lastReadAt when you open it, but clears it when you mark
@@ -10,7 +10,7 @@
 
 import { moodOf, type Mood, type ThreadLike } from "./model.ts";
 
-/** Warm: finished, new for you. Cool: off to start new work. */
+/** Warm: finished, new for you. Cool: got to work since you last looked. */
 export type Highlight = "finished" | "started";
 
 /** What we know about one thread beyond bb's own fields. */
@@ -104,10 +104,15 @@ export function startsWork(from: Mood | null, to: Mood): boolean {
   return isWork(to) && (from === null || !isWork(from));
 }
 
-/** The glow an agent wears right now: a new finish until opened, a start only while walking to work (positional: called every frame). */
-export function highlightOf(mood: Mood, unopened: boolean, starting: boolean, walking: boolean): Highlight | null {
+/** Whether the cool glow is on after a mood change: it comes on when work starts and stays until the work ends (planning into working is the same work). */
+export function keepsStarted(was: boolean, from: Mood | null, to: Mood): boolean {
+  return startsWork(from, to) || (was && isWork(to));
+}
+
+/** The glow an agent wears right now: a new finish until opened, a start for as long as it works (positional: called every frame). */
+export function highlightOf(mood: Mood, unopened: boolean, started: boolean): Highlight | null {
   if (unopened) return "finished";
-  if (starting && walking && isWork(mood)) return "started";
+  if (started && isWork(mood)) return "started";
   return null;
 }
 

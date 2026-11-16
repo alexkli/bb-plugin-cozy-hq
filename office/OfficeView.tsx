@@ -1316,7 +1316,7 @@ const LEGEND: { title: string; text: string; color: string; icon: string }[] = [
   { title: "Waiting room · rain cloud", text: "Hit an error", color: "#ffd6e5", icon: "☁" },
   { title: "Desk & chair", text: "Desk = model, chair = provider", color: "#ffe9c7", icon: "◧" },
   { title: "Name tags", text: "Solid = unread, outlined = read", color: "#fff3a3", icon: "▸" },
-  { title: "A soft glow", text: "Warm: finished, not opened yet · cool: off to work", color: "#ffe9c7", icon: "✧" },
+  { title: "A soft glow", text: "Warm = finished, not opened yet; cool = at work since you last looked", color: "#ffe9c7", icon: "✧" },
   { title: "Shirt badge", text: "What the thread is about", color: "#d9f7c9", icon: "★" },
   { title: "Matching lanyards", text: "A thread and its child threads", color: "#e8dcff", icon: "∪" },
   { title: "Kitchen · cooler", text: "Idle under 20 min", color: "#ffe9c7", icon: "☕" },

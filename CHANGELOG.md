@@ -31,7 +31,7 @@
 - A soft glow picks out what's new:
   - Warm gold around a thread that finished, failed or asked you something and that you haven't opened since, walking to the waiting room and sitting there; its name tag gets a matching halo.
   - Opening the thread once ends it. Marking it unread again to keep as a reminder doesn't bring it back; only a new finish does.
-  - Cool blue around a thread that just started new work, while it walks to its desk.
+  - Cool blue around a thread that got to work since you last looked: on its way to its desk (or the meeting room, to plan) and while it works there, until it stops. At night its desk lamp takes on the same blue.
 - For scenery authors: `clickables` and `click` hooks for things to click in the scenery, which can ask idle people over with lines and sounds.
 - Subagents help out at the desk: while a thread works with background agents of its own, they come in as small helpers in caps of its color and stand next to its desk, pointing at the screen, holding up a page or a laptop, nodding, now and then a word.
   - Up to three per desk (two at desks with their back to you), the rest as "+n"; hover a helper to see whose it is, click it to open the thread.

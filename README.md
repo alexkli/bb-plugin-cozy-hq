@@ -67,9 +67,9 @@ failed or started waiting on you and you haven't opened it since: it glows
 on its way to the waiting room (or the whiteboard, with a plan) and while it
 waits there, and its name tag gets a matching halo. Opening the thread once
 ends it; marking it unread again to keep it around as a reminder doesn't
-bring it back, only a new finish does. A cool blue glow means a thread just
-started new work and is on its way to its desk (or the meeting room to
-plan); it fades once it sits down.
+bring it back, only a new finish does. A cool blue glow means a thread got
+to work since you last looked: it glows on its way to its desk (or the
+meeting room, to plan) and while it works there, until it stops.
 
 Idle threads get together every minute or so for a coffee, water-cooler
 talk, a hallway chat, the couch, ping-pong or darts, mostly with comic speech

@@ -61,9 +61,10 @@ started waiting on you (question, approval, plan) and you haven't opened it
 since; it glows walking to the waiting room and sitting there, and its name
 tag gets a gold halo. Opening the thread once ends it; marking it unread
 again doesn't bring it back, only a new finish does (the office remembers
-which threads you opened, per browser). Cool blue: the thread just started
-new work and is walking to its desk or the meeting room; it fades once it
-sits down.
+which threads you opened, per browser). Cool blue: the thread got to work
+since you last looked at the office; it glows walking to its desk or the
+meeting room and while it works there, and fades when the work ends. Threads
+already working when you last looked don't glow.
 
 The office keeps living while you're elsewhere in bb and remembers what each
 thread was doing when you last looked; coming back, only threads whose state

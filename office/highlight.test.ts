@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { highlightOf, isUnopened, NO_RECORD, noteOpened, parseOpened, startsWork, type OpenedRecord } from "./highlight.ts";
+import { highlightOf, isUnopened, keepsStarted, NO_RECORD, noteOpened, parseOpened, startsWork, type OpenedRecord } from "./highlight.ts";
 import { moodOf, type ThreadLike } from "./model.ts";
 
 const NOW = 1_800_000_000_000;
@@ -130,15 +130,22 @@ test("the record keeps only what bb doesn't, drops gone threads and survives loa
   assert.deepEqual(parseOpened(JSON.stringify({ at: "x" })), NO_RECORD);
 });
 
-test("starting work glows only while walking there", () => {
+test("starting work glows on the way to the desk and while it works there", () => {
   assert.equal(startsWork("idle", "working"), true);
   assert.equal(startsWork("needs-you", "working"), true, "answered: back to the desk");
   assert.equal(startsWork(null, "planning"), true, "a new thread comes in to plan");
   assert.equal(startsWork("planning", "working"), false, "already at work");
   assert.equal(startsWork("working", "done"), false);
-  assert.equal(highlightOf("working", false, true, true), "started", "on the way to the desk");
-  assert.equal(highlightOf("working", false, true, false), null, "seated at the desk");
-  assert.equal(highlightOf("working", false, false, true), null, "moving desks is not news");
-  assert.equal(highlightOf("done", true, false, true), "finished", "walking to the waiting room");
-  assert.equal(highlightOf("done", true, false, false), "finished", "sitting there");
+  // The glow through a thread's day: starts, plans then builds, finishes, starts again.
+  let on = keepsStarted(false, "idle", "planning");
+  assert.equal(on, true, "starts");
+  on = keepsStarted(on, "planning", "working");
+  assert.equal(on, true, "plan into work: same stretch of work");
+  assert.equal(highlightOf("working", false, on), "started", "seated at the desk, still glowing");
+  on = keepsStarted(on, "working", "done");
+  assert.equal(on, false, "done: the cool glow ends");
+  assert.equal(keepsStarted(false, "working", "working"), false, "already working when you looked: no glow");
+  assert.equal(keepsStarted(on, "done", "working"), true, "back to work");
+  assert.equal(highlightOf("working", false, false), null, "moving desks is not news");
+  assert.equal(highlightOf("done", true, false), "finished", "walking to the waiting room and sitting there");
 });

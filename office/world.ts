@@ -26,7 +26,7 @@ import { Crew, drawLanyard, type DeskWork } from "./crew.ts";
 import { buildProps, paintBackground, roombaSprite, speakerSprite, type Prop } from "./furniture.ts";
 import type { Facing, Green, Layout, Point, PokeKind, Rect, Spot } from "./layout.ts";
 import { waitsForYou, type DeskStyle, type Mood, type WaitKind } from "./model.ts";
-import { highlightOf, startsWork, type Highlight } from "./highlight.ts";
+import { highlightOf, keepsStarted, startsWork, type Highlight } from "./highlight.ts";
 import { chairCanvas, deskCanvas, screenFor, type ChairTone } from "./desks.ts";
 import { hash, mix, rng } from "./pixel.ts";
 import { drawPixelText, pixelTextWidth } from "./pixelfont.ts";
@@ -170,8 +170,8 @@ interface Agent extends Walker {
   huddle: number | null;
   /** Shuffling along after a mishap. */
   slow: boolean;
-  /** On the way to start new work: a cool glow until seated. */
-  starting: boolean;
+  /** Got to work since you last looked: a cool glow until the work ends. */
+  started: boolean;
 }
 
 type HuddleKind = "coffee" | "cooler" | "chat" | "couch" | "pingpong" | "darts";
@@ -801,7 +801,7 @@ export class World {
           nextHobby: this.time + 4 + (hash(t.id) % 7),
           huddle: null,
           slow: false,
-          starting: false,
+          started: false,
           // Everyone walks a little differently: their own lane, corner cutting and pace.
           lane: { x: ((hash(t.id) >>> 2) % 11) - 5, y: ((hash(t.id) >>> 6) % 9) - 4 },
           cut: 7 + ((hash(t.id) >>> 9) % 10),
@@ -817,7 +817,7 @@ export class World {
           this.place(a, before);
           if (before.id !== spot.id) {
             this.walkTo(a, spot);
-            a.starting = startsWork(was?.mood ?? null, t.mood);
+            a.started = startsWork(was?.mood ?? null, t.mood);
           }
         } else if (spot) {
           this.emit("door", true);
@@ -825,7 +825,7 @@ export class World {
           this.doorOpenUntil = this.time + 1.6;
           this.burst(L.entrance.x, L.entrance.y - 16, "sparkle", 8);
           this.walkTo(a, spot);
-          a.starting = startsWork(was?.mood ?? null, t.mood);
+          a.started = startsWork(was?.mood ?? null, t.mood);
           if (this.dog.state !== "follow" && this.dog.goal !== "event" && this.rand() < 0.35) this.dogTo("greet");
         }
         continue;
@@ -834,7 +834,7 @@ export class World {
       a.thread = t;
       if (prevMood !== t.mood) {
         a.moodSince = this.time;
-        a.starting = !instant && startsWork(prevMood, t.mood);
+        a.started = !instant && keepsStarted(a.started, prevMood, t.mood);
         if (!instant) this.onMoodChange(a, prevMood, t.mood);
       }
       a.leaving = false;
@@ -887,7 +887,6 @@ export class World {
     a.target = null;
     a.path = [];
     a.approach = [...spot.path];
-    a.starting = false;
   }
 
   private walkTo(a: Agent, spot: Spot): void {
@@ -3949,10 +3948,10 @@ export class World {
 
   private rims = new WeakMap<HTMLCanvasElement, Map<Highlight, HTMLCanvasElement>>();
 
-  /** Warm for a new finish you haven't opened, cool for one off to start work (see highlight.ts). */
+  /** Warm for a new finish you haven't opened, cool for work that started since you last looked (see highlight.ts). */
   private glowOf(a: Agent): Highlight | null {
     if (a.leaving) return null;
-    return highlightOf(a.thread.mood, a.thread.unopened === true, a.starting, !this.settled(a));
+    return highlightOf(a.thread.mood, a.thread.unopened === true, a.started);
   }
 
   /** A faint rim of light around them (and a soft pool at their feet when standing), breathing slowly. */
@@ -5439,7 +5438,9 @@ export class World {
     for (const win of L.wall.windows) lights.push([win.x + win.w / 2, win.y + win.h / 2, 40, 0.4, "#c9d6ff", 0.04]);
     for (const [index, a] of desks) {
       const desk = L.desks[index]!;
-      const tint = a.thread.mood === "needs-you" ? "#ffcf4a" : a.thread.mood === "error" ? "#ff6b6b" : a.thread.mood === "done" ? "#7be08f" : "#8ff0b0";
+      // Work that started since you last looked lights the desk in the cool glow.
+      const glow = this.glowOf(a);
+      const tint = glow ? GLOW_HAZE[glow] : a.thread.mood === "needs-you" ? "#ffcf4a" : a.thread.mood === "error" ? "#ff6b6b" : a.thread.mood === "done" ? "#7be08f" : "#8ff0b0";
       lights.push([desk.spot.x, desk.side === "north" ? desk.y + 4 : desk.y + 10, 28, 0.85, tint, 0.16]);
     }
     const fridge = L.pokeables.find((p) => p.id === "fridge");
@@ -5474,9 +5475,9 @@ export class World {
       }
     }
     if (lit?.lights) lights.push(...lit.lights(L, this.paintInfo(env)));
-    // The glow stays gentle at night: a small pool of light goes with them.
+    // The glow stays gentle at night: a small pool of light goes with them (at a desk, the desk lamp has it).
     for (const a of this.agents.values()) {
-      const glow = this.glowOf(a);
+      const glow = a.spot?.kind === "desk" && this.settled(a) ? null : this.glowOf(a);
       if (glow) lights.push([a.x, a.y - 10, 22, 0.5, GLOW_HAZE[glow], 0.14]);
     }
     for (const [x, y, r, k] of lights) if (r > 0) hole(x, y, r, k);
