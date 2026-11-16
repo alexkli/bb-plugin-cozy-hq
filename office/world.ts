@@ -3103,7 +3103,7 @@ export class World {
 
   private updateWeather(): void {
     const t = this.time;
-    if (this.weather !== "storm") {
+    if (this.weather !== "storm" || this.theme.windowWeather === false) {
       this.nextLightning = -1;
       return;
     }
@@ -5145,6 +5145,10 @@ export class World {
       ctx.fillRect(x, y + Math.floor((i * h) / bands), w, Math.ceil(h / bands) + 1);
     }
     const t = this.time;
+    if (this.theme.windowWeather === false) {
+      this.theme.outside?.(ctx, win, index, { t, hour: env.hour, night: sky.night, weather: env.weather, date: env.date, season: this.season, sky, windows: this.L!.wall.windows });
+      return;
+    }
     if (sky.night > 0.4) {
       for (const s of this.stars) {
         if (!inRect(s.x, s.y, win)) continue;

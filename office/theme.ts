@@ -11,7 +11,7 @@ import type { Facing, Layout, LayoutOptions, PlantPlacement, Point, PokeKind, Po
 import type { Drawable, Season } from "./life.ts";
 import type { DeskStyle } from "./model.ts";
 
-export type SceneryId = "classic" | "neon" | "redwoods" | "beach" | "skyline" | "annex" | "school";
+export type SceneryId = "classic" | "neon" | "redwoods" | "beach" | "skyline" | "annex" | "school" | "startup" | "cabin" | "lair" | "spaceship";
 
 /** Sky gradient for the hour; `night` is 0 by day, 1 at night (it drives lamps and darkness). */
 export interface SkyColors {
@@ -223,6 +223,13 @@ export interface Theme {
    * drawn by the office around this (clipped to the window).
    */
   outside?(ctx: CanvasRenderingContext2D, win: Rect, index: number, info: OutsideInfo): void;
+  /**
+   * False when the windows don't look out at the local weather (space, deep
+   * underground): the office then paints only the sky colors into them and
+   * your `outside` draws everything else (no sun, moon, stars, clouds, rain or
+   * lightning from the office). Default true.
+   */
+  windowWeather?: boolean;
   /**
    * Replaces the string lights along the top of the wall. Called twice per
    * frame: `glow` false before people, true after the night darkness (draw
