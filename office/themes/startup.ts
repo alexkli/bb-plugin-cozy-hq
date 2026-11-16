@@ -5,6 +5,7 @@
 // pool (a bit green), a grill and a hammock between two palms.
 // See office/themes/README.md for the hooks; the pieces live in ./startup/:
 //   plan.ts    the floor plan (the house, the garage, the backyard)
+//   squeeze.ts where the rest work when the desks are full; nooks.ts their seats and laptops
 //   house.ts   floors, walls with doorways, windows, the wall fixtures
 //   props.ts   furniture and plants;  desks.ts  desks, chairs, screens, speakers
 //   view.ts    the street out the front windows, the door and windows opening

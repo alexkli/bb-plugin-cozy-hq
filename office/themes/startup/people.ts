@@ -1,13 +1,15 @@
 // Startup House: the people. Hoodies, fleece vests and joggers; headphones
 // on half the house; a laptop under the arm on the way to the kitchen. You're
 // the founder; the visitors are an investor in a fleece vest swinging by,
-// the cleaner, the internet installer and the pizza delivery.
+// the cleaner, the internet installer and the pizza delivery. Squeezed in
+// when the desks are full: a laptop on the lap (./nooks.ts).
 
 import type { VisitorKind } from "../../theme.ts";
 import { wearsAtNeck, type CharPose, type Look } from "../../characters.ts";
 import type { Facing } from "../../layout.ts";
 import { hash, shade } from "../../themekit.ts";
 import { OUTLINE } from "./kit.ts";
+import { laptopOnLap } from "./nooks.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -68,9 +70,13 @@ function vest(ctx: Ctx, x: number, y: number, facing: Facing, bob: number, color
   px(ctx, hi, fx, bt, 4, 1);
 }
 
-/** Vests, hoodie strings, a laptop under the arm on the way somewhere. */
-export function startupDress(ctx: Ctx, a: { x: number; y: number; facing: Facing; pose: CharPose; seed: number; seated: boolean; look: Look }, t: number): void {
-  void t;
+/** Vests, hoodie strings, a laptop under the arm on the way somewhere, or on the lap squeezed in somewhere. */
+export function startupDress(ctx: Ctx, a: { x: number; y: number; facing: Facing; pose: CharPose; seed: number; seated: boolean; look: Look; spot?: string | null }, t: number): void {
+  dressFor(ctx, a);
+  laptopOnLap(ctx, a, t);
+}
+
+function dressFor(ctx: Ctx, a: { x: number; y: number; facing: Facing; pose: CharPose; seed: number }): void {
   const { x, y, facing, pose, seed } = a;
   if (pose === "nap" || pose === "slump") return;
   const bob = pose === "walk1" || pose === "walk3" ? -1 : 0;

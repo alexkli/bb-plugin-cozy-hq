@@ -8,6 +8,7 @@
 // a galley kitchen along the front wall with the bunk room as a box room
 // behind it; the garage with the servers, the arcade cabinet and the water
 // jug; the entryway where everyone waits; your room at the end of the hall.
+// When the desks are full the rest squeeze in with laptops (./squeeze.ts).
 // Pure geometry (no canvas): the layout tests run it in Node.
 
 import type { Layout, Point, Rect, Spot } from "../../layout.ts";
@@ -28,6 +29,7 @@ import {
   type Network,
   type WallSegment,
 } from "../../themekit.ts";
+import { columnsFromRight, cycle, inRows, squeezeIn, type Nook, type Zone } from "./squeeze.ts";
 
 /** What a stretch of floor is in the house (it picks the floor and the walls around it). */
 export type CellKind = "living" | "kitchen" | "garage" | "entry" | "yard";
@@ -89,6 +91,10 @@ export interface StartupPlan {
   /** Where the house's back wall runs above the patio (null: no patio). */
   patio: { y: number; x0: number; x1: number } | null;
   lot: Lot;
+  /** Where the busy ones squeeze in when the desks are full (desk-group spots after the desks). */
+  nooks: Nook[];
+  /** The old futon behind the couch, when some of them sit on it. */
+  futon: Rect | null;
   /** Walks besides the spots' own paths (the gags, the technician): walls open there too. */
   extra: Point[][];
 }
@@ -289,6 +295,76 @@ function deskCount(threads: number): number {
 function podsIn(b: Builder, r: Rect, cols: number, acc: Access): void {
   const w = cols * 48;
   buildPods(b, { x: r.x + Math.floor((r.w - w) / 2), y: r.y, w, h: POD_H }, acc);
+}
+
+// ------------------------------------------------------------------ squeezing in
+
+/** The old futon pushed up against the back of the couch, facing you. */
+function futonZone(couch: Rect, bottom: number, entry: Point): Zone[] {
+  const y = couch.y + couch.h + 24;
+  if (y + 5 > bottom) return [];
+  return [{ at: [20, 41, 62].map((dx) => ({ x: couch.x + dx, y })), seat: () => "futon", entry, max: 3 }];
+}
+
+/** Floor cushions and beanbags in a row along the bottom of the living room. */
+function floorZone(lounge: Rect, y: number, entry: Point, max?: number, avoid?: Rect[]): Zone {
+  return { at: inRows({ x: lounge.x + 12, y, w: lounge.w - 24, h: 0 }, 22, 28), seat: cycle("cushion", "beanbag"), entry, max, avoid };
+}
+
+/** Camping chairs in the garage, in a row above the water jug and the server cage (the rehearsal keeps the floor above). */
+function garageZone(G: Rect, hallY: number): Zone {
+  // In from the hallway down the water jug's way; up to the arcade cabinet's.
+  return { at: inRows({ x: G.x + 12, y: G.y + G.h - 46, w: G.w - 60, h: 0 }, 22, 28), seat: () => "camp", activity: "coding in a camping chair in the garage", entry: { x: G.x + 10, y: hallY }, max: 5 };
+}
+
+/** Out back: loungers under the pool beside the hammock, then camping chairs, towels and beanbags across the lawn (from the pool's side). */
+function yardZones(yard: Yard, e: Rect, aisles: number[]): Zone[] {
+  const out: Zone[] = [];
+  const { pool, hammock: hm, access } = yard;
+  const wet: Rect = { x: pool.x - 4, y: pool.y - 4, w: pool.w + 8, h: pool.h + 10 };
+  const entry = { x: access.aisleX, y: access.hallY };
+  if (hm) {
+    const x0 = hm.x + hm.w + 14;
+    out.push({ at: inRows({ x: x0, y: hm.y, w: pool.x + pool.w - 8 - x0, h: 0 }, 22, 28), seat: () => "lounger", entry, lane: hm.y + 8, max: 3 });
+  }
+  // The lawn's left part stays the party lawn.
+  const lawn: Rect = { x: e.x + 130, y: e.y + 26, w: e.w - 142, h: e.h - 28 };
+  if (lawn.w >= 0 && lawn.h >= 0) {
+    const side = aisles.find((a) => a >= yard.r.x - 1 && a < pool.x - 10);
+    // A little out of line, the way chairs and towels end up on a lawn.
+    const at = columnsFromRight(lawn, 22, 28).map((p, k) => ({ x: p.x + ((k * 7) % 5) - 2, y: p.y + ((k * 3) % 5) - 2 }));
+    out.push({
+      at,
+      seat: cycle("camp", "towel", "beanbag"),
+      entry: side === undefined ? entry : { x: side, y: access.hallY },
+      lane: side === undefined ? pool.y + pool.h + 9 : undefined,
+      avoid: [wet],
+    });
+  }
+  return out;
+}
+
+/** Kitchen stools: the floor beside the island and below its stools, reached along the island stools' lane. */
+function kitchenZone(L: Layout, bottom: number): Zone | null {
+  const stool = L.byId.get("stool-0");
+  const k = L.kitchen;
+  if (!stool || stool.path.length < 3) return null;
+  const lane = stool.path[1]!.y;
+  const at = [lane - 4, lane + 20].filter((y) => y + 2 <= bottom).flatMap((y) => inRows({ x: k.x + 12, y, w: k.w - 24, h: 0 }, 22, 28));
+  return { at, seat: () => "stool", entry: stool.path[0]!, lane, max: 4 };
+}
+
+/** Squeeze the rest of the head count in, then make room: the futon's size, the party lawn left of the laptops. */
+function squeeze(L: Layout, threads: number, zones: Zone[], yard: Yard | null): { nooks: Nook[]; futon: Rect | null } {
+  const nooks = squeezeIn(L, zones, threads - L.desks.length);
+  const e = L.eventArea;
+  const lawn = yard ? nooks.filter((n) => n.x >= e.x && n.x <= e.x + e.w && n.y >= e.y && n.y <= e.y + e.h + 2) : [];
+  if (lawn.length > 0) L.eventArea = { ...e, w: Math.min(...lawn.map((n) => n.x)) - 14 - e.x };
+  const fut = nooks.filter((n) => n.seat === "futon");
+  if (fut.length === 0) return { nooks, futon: null };
+  const x0 = Math.min(...fut.map((n) => n.x)) - 14;
+  const x1 = Math.max(...fut.map((n) => n.x)) + 14;
+  return { nooks, futon: { x: x0, y: fut[0]!.y - 25, w: x1 - x0, h: 26 } };
 }
 
 // ------------------------------------------------------------------ finishing
@@ -547,7 +623,18 @@ function wide(W: number, H: number, threads: number): Layout {
     lamp: boss.lamp,
     wallTv,
   });
-  return done(L, { cells, yard, garage, bunk, patio, lot }, wallTv);
+  // When the desks are full: the futon behind the couch, cushions on the floor, camping chairs in
+  // the garage, then out back (or, in a short house, wherever the living room has floor left).
+  const inLiving = { x: a23, y: h1 };
+  const floorY = h1 - HALF - 8;
+  const party = yard ? [] : [L.eventArea];
+  const zones: Zone[] = [...futonZone(tvParts.couch, h1 - HALF - 2, inLiving), floorZone(lounge, floorY, inLiving, 4, party)];
+  if (garage?.door) zones.push(garageZone({ x: c1x, y: lowY, w: c1w, h: hB }, h1));
+  if (yard) zones.push(...yardZones(yard, L.eventArea, net.aisles));
+  zones.push(floorZone(lounge, floorY, inLiving, undefined, party));
+  const stools = two ? null : kitchenZone(L, H - 4);
+  if (stools) zones.splice(2, 0, stools);
+  return done(L, { cells, yard, garage, bunk, patio, lot, ...squeeze(L, threads, zones, yard) }, wallTv);
 }
 
 // ------------------------------------------------------------------ the phone held upright: a narrow house
@@ -612,6 +699,8 @@ function portrait(W: number, H: number, threads: number): Layout {
   let patio: StartupPlan["patio"] = null;
   let back = H;
   let placed = 0;
+  let podRow: { rect: Rect; hallY: number } | null = null;
+  let loungeHall = 0;
   for (const { row, rect, hallY } of plan) {
     const acc: Access = { hallY, aisleX };
     const band = { x: hx0 + 4, y: rect.y - (rect.y > top ? 2 : 6), w: aisleX - HALF + 2 - (hx0 + 4), h: rect.h + (rect.y > top ? 4 : 6) };
@@ -621,6 +710,7 @@ function portrait(W: number, H: number, threads: number): Layout {
         const cols = Math.min(colsMax, Math.max(1, Math.ceil((desks - placed) / 2)));
         podsIn(b, { ...rect, h: POD_H }, cols, acc);
         placed += cols * 2;
+        podRow ??= { rect, hallY };
         cells.push({ kind: "living", r: band, sides: { t: false, b: true, l: false, r: true } });
         break;
       }
@@ -635,6 +725,7 @@ function portrait(W: number, H: number, threads: number): Layout {
       }
       case "lounge": {
         lounge = rect;
+        loungeHall = hallY;
         // The arcade cabinet in the TV corner on the right, before the lounge (which would put it by the keyboard).
         if (rect.w >= 230) {
           const cx = rect.x + rect.w - 30;
@@ -689,7 +780,32 @@ function portrait(W: number, H: number, threads: number): Layout {
     doorX: aisleX,
     lamp: boss!.lamp,
   });
-  return done(L, { cells, yard, garage, bunk, patio, lot: { x0: hx0, x1: hx1, front: M, back: Math.min(back, H) } }, null);
+  // When the desks are full: either side of the desks, stools by the fridge, around the TV, then out back.
+  const zones: Zone[] = [];
+  const pods = podRow ? L.rooms.find((r) => r.kind === "pod" && r.rect.y === podRow!.rect.y)?.rect : undefined;
+  if (podRow && pods) {
+    const r = podRow.rect;
+    const inRow = L.desks.filter((d) => d.spot.y > r.y && d.spot.y < r.y + POD_H);
+    const lane = Math.max(...inRow.map((d) => d.spot.path[1]!.y));
+    const entry = { x: aisleX, y: podRow.hallY };
+    const right = pods.x + pods.w + 12;
+    zones.push({ at: inRows({ x: right, y: r.y + 54, w: aisleX - 20 - right, h: 42 }, 22, 42), seat: cycle("beanbag", "cushion"), entry, lane });
+    zones.push({ at: inRows({ x: Math.round((hx0 + 4 + pods.x) / 2), y: r.y + 54, w: 0, h: 42 }, 22, 42), seat: () => "cushion", entry, lane });
+  }
+  const kitchenCell = cells.find((c) => c.kind === "kitchen")?.r;
+  const stools = kitchenCell ? kitchenZone(L, kitchenCell.y + kitchenCell.h - 2) : null;
+  if (stools) zones.push(stools);
+  const tvRoom: Zone = {
+    at: [0, 1, 2].flatMap((k) => inRows({ x: lounge!.x + 12, y: couch.y - 14 - k * 28, w: lounge!.w - 24, h: 0 }, 22, 28)),
+    seat: cycle("cushion", "beanbag"),
+    activity: "squeezed in by the TV with a laptop",
+    entry: { x: aisleX, y: loungeHall },
+    lane: couch.y - 8,
+  };
+  zones.push({ ...tvRoom, max: 6 });
+  if (yard) zones.push(...yardZones(yard, L.eventArea, net.aisles));
+  zones.push(tvRoom);
+  return done(L, { cells, yard, garage, bunk, patio, lot: { x0: hx0, x1: hx1, front: M, back: Math.min(back, H) }, ...squeeze(L, threads, zones, yard) }, null);
 }
 
 /** The Startup House floor plan for a panel (already at least the minimum size). */

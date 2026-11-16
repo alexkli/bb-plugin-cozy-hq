@@ -3,8 +3,9 @@
 // pool loungers, the lemon tree, the pool shimmering (lit from inside at
 // night) and bistro lights over the patio; indoors the TV console, the
 // energy-drink pyramid, the bunk bed, the garage's workbench, bike, surfboard
-// and box fans, the shoe pile by the door; the weather out in the yard; and
-// every lamp that keeps the house glowing at 2 a.m.
+// and box fans, the shoe pile by the door, the squeeze-ins' seats (./nooks.ts);
+// the weather out in the yard; and every lamp that keeps the house glowing at
+// 2 a.m.
 
 import type { Drawable, Light, PaintInfo, WallLightsInfo } from "../../theme.ts";
 import type { Layout, Point, Rect } from "../../layout.ts";
@@ -12,6 +13,7 @@ import { cached, floorPlan, mix, shade } from "../../themekit.ts";
 import { C, CANS, can, fill, ih, OUTLINE, sprite, STICKERS } from "./kit.ts";
 import { planOf, type StartupPlan } from "./plan.ts";
 import { clickDecor, clickLights, clickOverlay, clickUnderlay, pyramidAt, pyramidDown, rehearsalSpots } from "./clicks.ts";
+import { lounger, nookDecor, nookLights } from "./nooks.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -132,19 +134,6 @@ function grillSprite(lidUp: boolean): HTMLCanvasElement {
     g.rect(17, 12, 6, 3, C.fence).rect(17, 12, 6, 1, C.fenceHi);
     g.vline(18, 15, 8, C.fenceLo).vline(22, 15, 8, C.fenceLo);
     g.rect(18, 10, 4, 2, "#e8c080");
-  });
-}
-
-function lounger(): HTMLCanvasElement {
-  // A white plastic pool lounger, the back propped up behind whoever's on it (14×28).
-  return sprite("lounger", 14, 28, (g) => {
-    g.rrect(1, 0, 12, 10, "#f4f2ea", 2);
-    for (let y = 2; y < 9; y += 2) g.rect(2, y, 10, 1, "#d8d4c8");
-    g.rect(1, 10, 12, 16, "#f4f2ea");
-    for (let y = 11; y < 25; y += 2) g.rect(2, y, 10, 1, "#d8d4c8");
-    // A towel draped over it.
-    g.rect(3, 12, 8, 9, "#ff5fa2").rect(3, 14, 8, 1, "#ffffff").rect(3, 17, 8, 1, "#ffffff");
-    g.set(1, 26, "#b8b4a8").set(12, 26, "#b8b4a8");
   });
 }
 
@@ -440,8 +429,10 @@ function spotsOf(L: Layout): Spots {
       for (const r of fp.find(w, h, 12, within)) if (!taken.some((t) => r.x < t.x + t.w + 4 && t.x < r.x + r.w + 4 && r.y < t.y + t.h + 4 && t.y < r.y + r.h + 4)) return r;
       return null;
     };
-    // Keep the floor clear where the demo-day rehearsal stands.
+    // Keep the floor clear where the demo-day rehearsal stands, and around the squeeze-ins' seats.
     const taken: Rect[] = rehearsalSpots(L).map((p) => ({ x: p.x - 10, y: p.y - 26, w: 20, h: 30 }));
+    for (const n of plan?.nooks ?? []) taken.push({ x: n.x - 13, y: n.y - 26, w: 24, h: 28 });
+    if (plan?.futon) taken.push(plan.futon);
     const keep = (r: Rect | null) => {
       if (r) taken.push(r);
       return r;
@@ -561,6 +552,7 @@ export function startupDecor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
       },
     });
   }
+  nookDecor(ctx, L, info, out);
   out.push(...clickDecor(ctx, L, info));
   return out;
 }
@@ -752,7 +744,7 @@ function bistroBulbs(L: Layout): Point[] {
 
 export function startupLights(L: Layout, info: PaintInfo): Light[] {
   const out = staticLights(L);
-  const extra = clickLights(L, info);
+  const extra = [...clickLights(L, info), ...nookLights(L, info)];
   return extra.length > 0 ? [...out, ...extra] : out;
 }
 

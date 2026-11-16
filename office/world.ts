@@ -4111,7 +4111,7 @@ export class World {
     ctx.drawImage(sprite, Math.round(a.x - ANCHOR_X), Math.round(y - ANCHOR_Y));
     if (this.theme.dress && m?.phase !== "zap") {
       const seatedNow = onChair === true || (settled && s !== null && SEATED_KINDS.has(s.kind));
-      this.theme.dress(ctx, { x: Math.round(a.x - ANCHOR_X), y: Math.round(y - ANCHOR_Y), facing, pose, seed: a.seed, seated: seatedNow, look: this.lookOf(a.thread.look, a.id) }, this.time);
+      this.theme.dress(ctx, { x: Math.round(a.x - ANCHOR_X), y: Math.round(y - ANCHOR_Y), facing, pose, seed: a.seed, seated: seatedNow, look: this.lookOf(a.thread.look, a.id), spot: settled && s ? s.id : null }, this.time);
     }
     if (a.thread.family) drawLanyard(ctx, Math.round(a.x - ANCHOR_X), Math.round(y - ANCHOR_Y), facing, pose, a.thread.family);
     if (a.thread.isPinned) {

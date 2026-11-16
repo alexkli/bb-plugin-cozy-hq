@@ -76,7 +76,9 @@ Think of what each place *is* in your scenery, then dress it:
   clock (hands are live), the speakers next to the TV.
 - **People** are the same sprites: `look` may change shirt, pants, accent,
   accessory, hair style and colors, but keep who they are recognizable (skin,
-  usually hair). `dress` can draw small extras on top (a backpack, a visor).
+  usually hair). `dress` can draw small extras on top (a backpack, a visor);
+  `a.spot` is the id of the spot they've settled at, to dress someone by
+  where they are.
   You (the boss) are who the user picked in the settings. Your
   `npc("boss")` outfit (shirt, pants, accent) applies, but the office keeps
   the user's skin, hair, top, hat and decorations over it, and their shirt
@@ -153,7 +155,12 @@ The office looks some places up by id or kind: `coffee`, `tea`, `fridge`,
 `piano`, `arcade`, `desk-<n>`, `boss-guest-*`, `present-*`, the waiting seats,
 the `boss-shelf` prop (globe) and the clickables. The builders create them;
 custom rooms should keep the ones they replace, or that bit of life (coffee
-chats, darts, ping-pong) quietly goes missing. The event area
+chats, darts, ping-pong) quietly goes missing. Working threads only ever go
+to the desk group, which fills in `L.spots` order: a plan with fewer desks
+than its head count can add desk-group spots of another kind after the desks
+(ids not `desk-<n>`; with the `sit-desk-front` pose they type away facing
+you), so the rest squeeze in somewhere instead of ending up in the "+N" by
+the door. The event area
 (`L.eventArea`) hosts parties, lunch, kids and the roomba: give it open floor.
 
 ## Pets, the roomba, the fish tank, visitors

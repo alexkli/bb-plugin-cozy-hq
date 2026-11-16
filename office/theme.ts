@@ -299,8 +299,11 @@ export interface Theme {
    * Draw something on an agent after its sprite (a backpack, a visor, a lei).
    * `x, y` is the top-left of the 20×28 character sprite (the same grid as
    * characters.ts: head from row 2, body from row 14, feet at row 27).
+   * `spot` is the id of the spot they've settled at (null on the way), to
+   * dress someone by where they are: say, a laptop on the lap at a spot of
+   * the plan's own in the desk group.
    */
-  dress?(ctx: CanvasRenderingContext2D, a: { x: number; y: number; facing: Facing; pose: CharPose; seed: number; seated: boolean; look: Look }, t: number): void;
+  dress?(ctx: CanvasRenderingContext2D, a: { x: number; y: number; facing: Facing; pose: CharPose; seed: number; seated: boolean; look: Look; spot?: string | null }, t: number): void;
 
   /**
    * The office pets, any animal you like: the dog (20×15 sprite, drawn at
