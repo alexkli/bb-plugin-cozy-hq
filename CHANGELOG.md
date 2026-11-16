@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Redwood Camp has no back wall any more: the forest runs to the top edge.
+  - The usage board stands on log posts, and the clock, calendar and status board hang on trunks.
+  - The door is a trailhead gate.
+  - The windows are gaps in the treeline that look out of the woods at the sky.
+  - The weather falls on the whole camp: rain with puddles, snow that settles, fog between the trunks, storm gusts and cloud shadows.
+- For scenery authors: an `openWindow` hook, and the "Open the window" hover text goes through `labels.words`.
+
 ## 0.4.0 (2026-11-15)
 
 Every scenery is now its own place, not only a new look for the classic office.

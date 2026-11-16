@@ -1,5 +1,6 @@
-// Redwood Camp, live drawing: the forest out the windows, lanterns on a rope,
-// the campfire, dappled sun, ground fog, fireflies, a squirrel, and the light at night.
+// Redwood Camp, live drawing: the view out of the woods through the gaps in
+// the treeline, lanterns on a rope, the campfire, dappled sun, ground fog,
+// fireflies, a squirrel, the weather and the light at night.
 import type { Drawable, Light, OutsideInfo, PaintInfo, SkyColors, WallLightsInfo } from "../../theme.ts";
 import type { Layout, PropPlacement, Rect } from "../../layout.ts";
 import { floorPlan, hash, makeCanvas, mix, OUTLINE, rng } from "../../themekit.ts";
@@ -8,6 +9,8 @@ import { decorSprite, type DecorKind } from "./decor.ts";
 import { creekShimmer, festoonGlow, festoonLights, forestItems, treeLanterns } from "./forest.ts";
 import { campData } from "./plan.ts";
 import { bindTentCtx, tentItems, tentLights } from "./tents.ts";
+import { gateOpen } from "./treeline.ts";
+import { weatherOver, weatherUnder } from "./weather.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -37,169 +40,99 @@ export function sky(hour: number): SkyColors {
   return { top: "#88c4dc", bottom: "#d6ecd8", night: 0 };
 }
 
-// ------------------------------------------------------------------ the forest view
+// ------------------------------------------------------------------ the view out of the woods
 
 interface ViewPal {
-  haze: string;
-  farTree: string;
   far: string;
   farHi: string;
-  mist: string;
   mid: string;
-  midHi: string;
-  near: string;
-  nearHi: string;
-  nearDk: string;
-  canopy: string;
-  canopyHi: string;
-  fern: string;
-  fernHi: string;
-  ground: string;
+  midDk: string;
+  mist: string;
+  meadow: string;
+  meadowHi: string;
+  meadowDk: string;
 }
 
 const VIEW: Record<"day" | "dusk" | "night", ViewPal> = {
   day: {
-    haze: "rgba(196,222,206,0.5)",
-    farTree: "#8fb09c",
-    far: "#b49a8c",
-    farHi: "#c9b9ac",
-    mist: "rgba(236,242,232,0.55)",
-    mid: "#94503a",
-    midHi: "#b06a4a",
-    near: "#7a3426",
-    nearHi: "#a24e34",
-    nearDk: "#4a1e16",
-    canopy: "#2f5230",
-    canopyHi: "#4f7a3e",
-    fern: "#3f7a38",
-    fernHi: "#62a248",
-    ground: "#4e3c2a",
+    far: "#9cb3c4",
+    farHi: "#c4d4de",
+    mid: "#6d8f78",
+    midDk: "#4f705c",
+    mist: "rgba(232,240,240,0.55)",
+    meadow: "#86a95a",
+    meadowHi: "#a6c66e",
+    meadowDk: "#5f8040",
   },
   dusk: {
-    haze: "rgba(236,186,160,0.4)",
-    farTree: "#8a6a6a",
-    far: "#b0807a",
-    farHi: "#c49088",
-    mist: "rgba(246,206,176,0.45)",
-    mid: "#6e3428",
-    midHi: "#8a4a36",
-    near: "#4e2018",
-    nearHi: "#6a3022",
-    nearDk: "#2a100c",
-    canopy: "#24321f",
-    canopyHi: "#34482a",
-    fern: "#2a4424",
-    fernHi: "#3c5e30",
-    ground: "#2e2218",
+    far: "#9a7e94",
+    farHi: "#c69ca6",
+    mid: "#5e4a5a",
+    midDk: "#45354a",
+    mist: "rgba(246,200,176,0.4)",
+    meadow: "#6a663e",
+    meadowHi: "#8a7a48",
+    meadowDk: "#4a4a2c",
   },
   night: {
-    haze: "rgba(40,54,80,0.45)",
-    farTree: "#1c283a",
     far: "#26324a",
-    farHi: "#2e3c56",
-    mist: "rgba(140,156,186,0.32)",
-    mid: "#1a2232",
-    midHi: "#222c40",
-    near: "#121722",
-    nearHi: "#1a2130",
-    nearDk: "#0a0d14",
-    canopy: "#0e1520",
-    canopyHi: "#141e2a",
-    fern: "#121c1a",
-    fernHi: "#1a2a24",
-    ground: "#0c1014",
+    farHi: "#34425e",
+    mid: "#18202e",
+    midDk: "#10161f",
+    mist: "rgba(120,140,170,0.22)",
+    meadow: "#1a2420",
+    meadowHi: "#24302a",
+    meadowDk: "#121a16",
   },
 };
 
-/** The forest beyond one window, in one palette (the shapes are the same in all three). */
+/** Out past the trees: far blue ridges, a fir-topped hill, a meadow (the same shapes in all three palettes). */
 function viewLayer(win: Rect, index: number, which: keyof typeof VIEW): HTMLCanvasElement {
-  return cached(`redwoods|view|${win.w}x${win.h}|${index % 5}|${which}`, () =>
+  return cached(`redwoods|view|${win.x}|${win.w}x${win.h}|${which}`, () =>
     makeCanvas(win.w, win.h, (ctx) => {
       const P = VIEW[which];
-      const { w, h } = win;
-      const r = rng(hash(`view-${index % 5}-${w}`));
-      const ground = h - 5;
-      // Haze deepening toward the forest floor
-      ctx.fillStyle = P.haze;
-      ctx.fillRect(0, Math.round(h * 0.28), w, ground - Math.round(h * 0.28));
-      ctx.fillRect(0, Math.round(h * 0.5), w, ground - Math.round(h * 0.5));
-      // Young firs far away
-      for (let i = 0; i < 5; i++) {
-        const cx = Math.floor(r() * w);
-        const th = 10 + Math.floor(r() * 12);
-        ctx.fillStyle = P.farTree;
-        for (let j = 0; j < th; j++) {
-          const half = Math.floor((j / th) * 4) + (j % 4 === 3 ? 1 : 0);
-          ctx.fillRect(cx - half, ground - th + j, half * 2 + 1, 1);
-        }
-      }
-      // Far trunks in the haze
-      for (let i = 0; i < 6; i++) {
-        const x = Math.floor(r() * w);
-        const tw = 2 + Math.floor(r() * 2);
-        ctx.fillStyle = P.far;
-        ctx.fillRect(x, 0, tw, ground);
-        ctx.fillStyle = P.farHi;
-        ctx.fillRect(x, 0, 1, ground);
-      }
-      // Mist lying low among the trees
-      ctx.fillStyle = P.mist;
-      ctx.fillRect(0, Math.round(h * 0.5), w, Math.round(h * 0.35));
-      ctx.fillRect(0, Math.round(h * 0.42), w, 2);
-      // Middle trunks, with a few green boughs
-      for (let i = 0; i < 3; i++) {
-        const x = Math.floor(((i + 0.3 + r() * 0.5) * w) / 3) - 2;
-        const tw = 4 + Math.floor(r() * 3);
-        ctx.fillStyle = P.mid;
-        ctx.fillRect(x, 0, tw, ground + 1);
-        ctx.fillStyle = P.midHi;
-        ctx.fillRect(x, 0, 1, ground + 1);
-        ctx.fillRect(x - 1, ground - 1, tw + 2, 2);
-        for (let b = 0; b < 2; b++) {
-          const by = 6 + Math.floor(r() * (h * 0.4));
-          const dir = r() < 0.5 ? -1 : 1;
-          const bx = dir < 0 ? x - 6 : x + tw;
-          ctx.fillStyle = P.canopy;
-          ctx.fillRect(bx, by, 6, 2);
-          ctx.fillRect(bx + (dir < 0 ? 1 : 0), by - 1, 5, 1);
-          ctx.fillStyle = P.canopyHi;
-          ctx.fillRect(bx + 1, by - 1, 3, 1);
-        }
-      }
-      // Canopy: dark clumps across the top with gaps of sky.
+      const { x: wx, w, h } = win;
+      const ground = h - 10;
+      // The far ridge, with a lit edge
       for (let x = 0; x < w; x++) {
-        const d = 2 + Math.round(3 + Math.sin(x * 0.55 + index) * 2 + Math.sin(x * 0.21 + index * 2) * 3);
-        if (d <= 2) continue;
-        ctx.fillStyle = P.canopy;
-        ctx.fillRect(x, 0, 1, d);
-        if ((x + index) % 3 === 0) {
-          ctx.fillStyle = P.canopyHi;
-          ctx.fillRect(x, d - 2, 1, 1);
+        const ax = wx + x;
+        const ry = Math.round(h * 0.4 + 4 * Math.sin(ax * 0.07 + 1) + 2.5 * Math.sin(ax * 0.23) + Math.abs(Math.sin(ax * 0.31)) * 2);
+        ctx.fillStyle = P.far;
+        ctx.fillRect(x, ry, 1, ground - ry);
+        ctx.fillStyle = P.farHi;
+        ctx.fillRect(x, ry, 1, 1);
+      }
+      // Mist in the valley
+      ctx.fillStyle = P.mist;
+      ctx.fillRect(0, Math.round(h * 0.56), w, 3);
+      ctx.fillRect(0, Math.round(h * 0.56) + 3, w, 2);
+      // A nearer hill topped with firs
+      for (let x = 0; x < w; x++) {
+        const ax = wx + x;
+        const hy = Math.round(h * 0.64 + 2 * Math.sin(ax * 0.11 + 2) + 1.5 * Math.sin(ax * 0.29));
+        ctx.fillStyle = P.mid;
+        ctx.fillRect(x, hy, 1, ground - hy + 1);
+        if ((ax * 7) % 5 < 2) {
+          const fh = 3 + ((ax * 13) % 5);
+          ctx.fillStyle = P.midDk;
+          ctx.fillRect(x, hy - fh, 1, fh);
+          if (fh > 4) {
+            ctx.fillRect(x - 1, hy - fh + 3, 3, fh - 3);
+          }
         }
       }
-      // A near trunk, big and close, on one side.
-      const left = index % 2 === 0;
-      const nw = 9 + (index % 3);
-      const nx = left ? -2 : w - nw + 2;
-      ctx.fillStyle = P.near;
-      ctx.fillRect(nx, 0, nw, h);
-      ctx.fillStyle = P.nearHi;
-      ctx.fillRect(nx + 1, 0, 2, h);
-      ctx.fillStyle = P.nearDk;
-      for (let i = 0; i < 4; i++) ctx.fillRect(nx + 3 + i * 2, Math.floor(r() * 8), 1, h);
-      ctx.fillRect(nx + nw - 1, 0, 1, h);
-      // Forest floor and ferns
-      ctx.fillStyle = P.ground;
+      // The meadow
+      ctx.fillStyle = P.meadow;
       ctx.fillRect(0, ground, w, h - ground);
-      for (let x = 1; x < w; x += 4 + Math.floor(r() * 3)) {
-        const fh = 3 + Math.floor(r() * 4);
-        ctx.fillStyle = P.fern;
-        for (let j = 0; j < fh; j++) {
-          ctx.fillRect(x - Math.floor(j / 2), ground - j, 1, 1);
-          ctx.fillRect(x + Math.floor(j / 2) + 1, ground - j, 1, 1);
+      ctx.fillStyle = P.meadowHi;
+      ctx.fillRect(0, ground, w, 1);
+      ctx.fillStyle = P.meadowDk;
+      for (let x = (index * 3) % 4; x < w; x += 4) ctx.fillRect(x, ground + 1 + (x % 3), 1, 1);
+      if (which === "day") {
+        for (let x = 2 + (index % 5); x < w; x += 7) {
+          ctx.fillStyle = x % 3 ? "#f4e6a0" : "#e8a0b8";
+          ctx.fillRect(x, ground + 2 + (x % 2), 1, 1);
         }
-        ctx.fillStyle = P.fernHi;
-        ctx.fillRect(x, ground - fh, 1, fh);
       }
     }),
   );
@@ -250,26 +183,14 @@ export function outside(ctx: Ctx, win: Rect, index: number, info: OutsideInfo): 
   }
   const t = info.t;
   const wx = info.weather;
-  const clear = wx === "clear" || wx === "partly";
-  // Sun rays slanting down through the canopy.
-  if (n < 0.35 && clear) {
-    const a0 = (0.13 + 0.05 * Math.sin(t * 0.7 + index)) * (1 - n / 0.35);
-    ctx.fillStyle = `rgba(255,246,206,${a0.toFixed(3)})`;
-    for (const [rx, rw] of [
-      [6, 4],
-      [17, 3],
-      [27, 5],
-    ] as const) {
-      ctx.beginPath();
-      ctx.moveTo(x + rx, y);
-      ctx.lineTo(x + rx + rw, y);
-      ctx.lineTo(x + rx + rw + 12, y + h);
-      ctx.lineTo(x + rx + 12, y + h);
-      ctx.closePath();
-      ctx.fill();
-    }
+  if (wx === "snow") {
+    // Snow lying on the meadow and dusting the hills
+    ctx.fillStyle = n > 0.5 ? "rgba(150,160,190,0.5)" : "rgba(240,244,250,0.42)";
+    ctx.fillRect(x, y + Math.round(h * 0.4), w, h - 10 - Math.round(h * 0.4));
+    ctx.fillStyle = n > 0.5 ? "rgba(170,180,206,0.8)" : "rgba(246,249,252,0.9)";
+    ctx.fillRect(x, y + h - 10, w, 10);
   }
-  // Now and then a deer wanders past, from window to window.
+  // Now and then a deer wanders across the meadow, from gap to gap.
   if (n < 0.45 && wx !== "rain" && wx !== "storm") {
     const wins = info.windows && info.windows.length > 0 ? info.windows : [win];
     const gx0 = Math.min(...wins.map((q) => q.x));
@@ -281,39 +202,25 @@ export function outside(ctx: Ctx, win: Rect, index: number, info: OutsideInfo): 
     if (ph < walk + 4) {
       const graze0 = walk * 0.42;
       const grazing = ph >= graze0 && ph < graze0 + 4;
-      const k = ph < graze0 ? ph : grazing ? graze0 : ph - 4;
+      const k2 = ph < graze0 ? ph : grazing ? graze0 : ph - 4;
       const dir = Math.floor(t / period) % 2 ? -1 : 1;
-      const dx = dir > 0 ? gx0 - 12 + k * speed : gx1 + 4 - k * speed;
+      const dx = dir > 0 ? gx0 - 12 + k2 * speed : gx1 + 4 - k2 * speed;
       if (dx > x - 10 && dx < x + w + 2) {
-        deer(ctx, Math.round(dx), y + h - 9, grazing ? 0 : Math.floor(t * 5), dir, grazing, n < 0.2 ? "#9a6a44" : "#6a4630", "#3a2418");
+        deer(ctx, Math.round(dx), y + h - 15, grazing ? 0 : Math.floor(t * 5), dir, grazing, n < 0.2 ? "#9a6a44" : "#6a4630", "#3a2418");
       }
     }
   }
-  // Night: fog drifting between the trunks, an owl, a few fireflies.
+  // Night: mist on the meadow, a few fireflies.
   if (n > 0.55) {
     ctx.fillStyle = `rgba(170,184,206,${(0.16 * (n - 0.5)).toFixed(3)})`;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
       const fx = x + ((t * (1.5 + i * 0.6) + i * 19 + index * 13) % (w + 30)) - 25;
-      ctx.fillRect(Math.round(fx), y + h - 12 - i * 5, 22, 2);
-      ctx.fillRect(Math.round(fx) + 4, y + h - 13 - i * 5, 12, 1);
+      ctx.fillRect(Math.round(fx), y + h - 14 - i * 4, 22, 2);
     }
-    if (index % 3 === 1) {
-      const ox = index % 2 === 0 ? x + 9 : x + w - 12;
-      const oy = y + 12;
-      ctx.fillStyle = "#1a1612";
-      ctx.fillRect(ox, oy, 4, 5);
-      ctx.fillRect(ox - 2, oy + 5, 8, 1);
-      if (Math.floor(t * 1.3) % 7 !== 0) {
-        ctx.fillStyle = "#ffd84a";
-        ctx.fillRect(ox, oy + 1, 1, 1);
-        ctx.fillRect(ox + 3, oy + 1, 1, 1);
-      }
-    }
-    for (let i = 0; i < 3; i++) {
-      const on = Math.sin(t * 2 + i * 2.1 + index) > 0.4;
-      if (!on) continue;
+    for (let i = 0; i < 2; i++) {
+      if (Math.sin(t * 2 + i * 2.1 + index) <= 0.4) continue;
       ctx.fillStyle = "#e8ff8a";
-      ctx.fillRect(Math.round(x + 6 + ((i * 13 + index * 7) % (w - 10)) + Math.sin(t * 0.6 + i) * 3), Math.round(y + h - 10 - i * 4 + Math.cos(t * 0.5 + i) * 2), 1, 1);
+      ctx.fillRect(Math.round(x + 6 + ((i * 13 + index * 7) % (w - 10)) + Math.sin(t * 0.6 + i) * 3), Math.round(y + h - 13 - i * 4 + Math.cos(t * 0.5 + i) * 2), 1, 1);
     }
   }
 }
@@ -336,7 +243,11 @@ interface Rope {
 const LANTERN_COLORS = ["#ffb84a", "#ffd27a", "#ff9a6a", "#d8ec8a", "#ffd27a"];
 
 function rope(L: Layout): Rope {
-  return cached(`redwoods|rope|${L.W}x${L.H}|${L.segments.map((s) => `${s.x0}-${s.x1}`).join(",")}`, () => {
+  const door = L.wall.door;
+  // The rope runs behind the trailhead's sign.
+  const sx0 = door.x + door.w / 2 - 10;
+  const sx1 = door.x + door.w / 2 + 10;
+  return cached(`redwoods|rope|${L.W}x${L.H}|${door.x}|${L.segments.map((s) => `${s.x0}-${s.x1}`).join(",")}`, () => {
     const out: Rope = { rope: [], bulbs: [] };
     let n = 0;
     for (const seg of L.segments) {
@@ -346,6 +257,7 @@ function rope(L: Layout): Rope {
         for (let x = x0; x < x1; x++) {
           const k = (x - x0) / (x1 - x0);
           const y = 1 + Math.round(Math.sin(k * Math.PI) * 3);
+          if (x >= sx0 && x <= sx1) continue;
           out.rope.push({ x, y });
           if ((x - x0) % 10 === 5) {
             const lantern = n % 3 === 1;
@@ -566,22 +478,8 @@ export function underlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
   const t = info.t;
   const wx = info.weather;
   creekShimmer(ctx, L, t, info.night);
-  // Rain running down the canvas walls.
-  if (wx === "rain" || wx === "storm" || wx === "drizzle") {
-    const heavy = wx === "storm" ? 1.6 : wx === "drizzle" ? 0.5 : 1;
-    for (const [si, sg] of L.segments.entries()) {
-      const n = Math.round(((sg.x1 - sg.x0) / 26) * heavy);
-      for (let i = 0; i < n; i++) {
-        const x = sg.x0 + ((i * 37 + si * 11) % Math.max(1, sg.x1 - sg.x0));
-        const run = sg.depth - 16;
-        const y = 6 + ((t * (14 + (i % 5) * 3) + i * 17) % run);
-        ctx.fillStyle = "rgba(80,70,50,0.12)";
-        ctx.fillRect(x, 6, 1, Math.round(y) - 6);
-        ctx.fillStyle = "rgba(200,220,236,0.75)";
-        ctx.fillRect(x, Math.round(y), 1, 2);
-      }
-    }
-  }
+  // Wet trails and puddles, settled snow.
+  weatherUnder(ctx, L, info);
   const sun = wx === "clear" ? 1 : wx === "partly" ? 0.55 : 0;
   const dayK = Math.max(0, 1 - info.night * 2.5) * sun;
   if (dayK > 0.02) {
@@ -824,6 +722,8 @@ export function overlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
     }
     ctx.globalAlpha = 1;
   }
+  // Rain, snow and gusts over the whole camp, cloud shadows.
+  weatherOver(ctx, L, info);
 }
 
 // ------------------------------------------------------------------ light at night
@@ -849,33 +749,17 @@ export function lights(L: Layout, info: PaintInfo): Light[] {
   const mt = propsOf(L, "meeting-table")[0];
   if (mt) out.push([mt.x + 6, mt.y + 4, 40, 0.75, "#ffd27a", 0.18]);
   for (const p of propsOf(L, "lounge-table")) out.push([p.x + 22, p.y + 2, 18, 0.6, "#ffcf7a", 0.14]);
+  // The lantern under the trailhead's lintel
+  const door = L.wall.door;
+  out.push([door.x + door.w - 3, door.y + 4, 22, 0.7, "#ffd27a", 0.16]);
   const rec = propsOf(L, "reception")[0];
   if (rec) out.push([rec.x + 30, rec.y + 2, 26, 0.7, "#ffd27a", 0.16]);
   return out;
 }
 
-/** The plank door swung open onto the lit lodge inside. */
+/** The trailhead gate swung open while someone comes or goes. */
 export function doorOpen(ctx: Ctx, d: Rect, info: PaintInfo): boolean {
-  ctx.fillStyle = OUTLINE;
-  ctx.fillRect(d.x, d.y + 1, d.w, d.h - 1);
-  ctx.fillStyle = info.night > 0.5 ? "#4a3018" : "#3a2a1e";
-  ctx.fillRect(d.x + 1, d.y + 2, d.w - 2, d.h - 3);
-  // Lantern light spilling across the floor inside
-  ctx.fillStyle = info.night > 0.5 ? "#c8843a" : "#6a4a2a";
-  ctx.fillRect(d.x + 2, d.y + d.h - 8, d.w - 4, 6);
-  ctx.fillStyle = "#ffd27a";
-  ctx.fillRect(d.x + d.w / 2 - 1, d.y + 8, 3, 4);
-  // The plank leaf swung back against the frame
-  ctx.fillStyle = OUTLINE;
-  ctx.fillRect(d.x - 5, d.y + 1, 5, d.h - 1);
-  ctx.fillStyle = C.deck;
-  ctx.fillRect(d.x - 4, d.y + 2, 3, d.h - 3);
-  ctx.fillStyle = C.deckHi;
-  ctx.fillRect(d.x - 4, d.y + 2, 1, d.h - 3);
-  ctx.fillStyle = C.iron;
-  ctx.fillRect(d.x - 4, d.y + 9, 3, 1);
-  ctx.fillRect(d.x - 4, d.y + d.h - 3, 3, 1);
-  return true;
+  return gateOpen(ctx, d, info);
 }
 
 export function darkness(night: number, _weather: unknown, classic: number): number {

@@ -925,7 +925,7 @@ export function OfficeView(input: OfficeProps) {
         return (
           <>
             <div className="chq-tip-hint">{weatherLine}</div>
-            <div className="chq-tip-hint chq-tip-sub">Open the window</div>
+            <div className="chq-tip-hint chq-tip-sub">{relabel(named, "Open the window")}</div>
           </>
         );
       case "roomba":

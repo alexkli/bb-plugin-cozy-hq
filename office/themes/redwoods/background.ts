@@ -1,10 +1,11 @@
-// Redwood Camp backdrop: forest floor, boardwalks, deck platforms, the canvas
-// wall between giant redwood trunks, tents, the cabin and the wall fixtures.
+// Redwood Camp backdrop: forest floor, trails, deck platforms, the treeline
+// along the top, tents, the cabin and the camp fixtures.
 import type { BackgroundSteps } from "../../theme.ts";
 import type { Layout, Rect, Room } from "../../layout.ts";
-import { blit, Grid, hash, mix, OUTLINE, pa, parseColor, rect, rng, shade } from "../../themekit.ts";
+import { blit, Grid, hash, mix, OUTLINE, parseColor, rect, rng, shade } from "../../themekit.ts";
 import { barkFill, boards, C, hlog, logEnd, plaidFill } from "./kit.ts";
-import { paintBridges, paintCreek, treeCovers, treeShadows } from "./forest.ts";
+import { paintBridges, paintCreek, treeShadows } from "./forest.ts";
+import { noticeBoard, paintGap, paintTreeline, trailhead } from "./treeline.ts";
 import { campData } from "./plan.ts";
 import { paintBellPeak, paintDeskTent, paintTentShells } from "./tents.ts";
 
@@ -361,139 +362,6 @@ function porchIslands(r: Rect): { cx: number; cy: number }[] {
   return out;
 }
 
-// ------------------------------------------------------------------ the wall
-
-interface Span {
-  a: number;
-  b: number;
-}
-
-function wallBusy(L: Layout): Span[] {
-  const w = L.wall;
-  const busy: Span[] = [
-    { a: w.pinboard.x - 3, b: w.pinboard.x + w.pinboard.w + 3 },
-    { a: w.calendar.x - 2, b: w.calendar.x + w.calendar.w + 2 },
-    { a: w.legendNote.x - 2, b: w.legendNote.x + w.legendNote.w + 2 },
-    { a: w.door.x - 4, b: w.door.x + w.door.w + 4 },
-    { a: w.clock.x - w.clock.r - 6, b: w.clock.x + w.clock.r + 6 },
-  ];
-  for (const win of w.windows) busy.push({ a: win.x - 4, b: win.x + win.w + 4 });
-  for (const p of w.paintings) busy.push({ a: p.x - 2, b: p.x + 20 });
-  const seg = L.segments.find((s) => L.tv.x >= s.x0 && L.tv.x < s.x1);
-  if (seg && L.tv.y < seg.depth) busy.push({ a: L.tv.x - 18, b: L.tv.x + L.tv.w + 18 });
-  for (const p of L.plants) if (p.sprite === "HANGING_PLANT") busy.push({ a: p.x - 1, b: p.x + 17 });
-  return busy;
-}
-
-/** Where the big trunks stand: at the pillars and in free stretches of wall. */
-export function trunkSpans(L: Layout): { x: number; w: number; depth: number }[] {
-  const busy = wallBusy(L);
-  const out: { x: number; w: number; depth: number }[] = [];
-  for (const px of L.wall.pillars) {
-    const left = L.segments.find((s) => s.x1 === px);
-    const right = L.segments.find((s) => s.x0 === px);
-    const d = Math.max(left?.depth ?? 64, right?.depth ?? 64);
-    out.push({ x: px - 12, w: 24, depth: d });
-  }
-  for (const s of L.segments) {
-    const cuts = busy.filter((b) => b.b > s.x0 && b.a < s.x1).sort((p, q) => p.a - q.a);
-    let x = s.x0;
-    const gaps: Span[] = [];
-    for (const c of cuts) {
-      if (c.a > x) gaps.push({ a: x, b: c.a });
-      x = Math.max(x, c.b);
-    }
-    if (x < s.x1) gaps.push({ a: x, b: s.x1 });
-    for (const g of gaps) {
-      // Keep clear of the pillar trunks.
-      const a = Math.max(g.a, ...L.wall.pillars.filter((p) => p <= g.a + 14).map((p) => p + 14));
-      const b = Math.min(g.b, ...L.wall.pillars.filter((p) => p >= g.b - 14).map((p) => p - 14));
-      const len = b - a;
-      const atEdge = a <= 1 || b >= L.W - 1;
-      if (len < (atEdge ? 12 : 20)) continue;
-      const w = Math.min(28, len - (atEdge ? 0 : 4));
-      const x0 = a <= 1 ? 0 : b >= L.W - 1 ? L.W - w : Math.round((a + b - w) / 2);
-      out.push({ x: x0, w, depth: s.depth });
-    }
-  }
-  return out;
-}
-
-function canvasWall(ctx: Ctx, x0: number, x1: number, d: number, i: number): void {
-  const w = x1 - x0;
-  if (w <= 0) return;
-  const g = new Grid(w, d);
-  g.rect(0, 0, w, d, C.canvas);
-  // Sagging panels between seams: a little darker toward each seam.
-  const seam = 30;
-  const off = (i * 11) % seam;
-  for (let x = 0; x < w; x++) {
-    const k = ((x + off) % seam) / seam;
-    const edge = Math.min(k, 1 - k);
-    if (edge < 0.08) g.rect(x, 0, 1, d, C.canvasLo);
-    else if (edge > 0.3) g.rect(x, 4, 1, d - 4, mix(C.canvas, C.canvasHi, 0.45));
-    if (((x + off) % seam) === 0) {
-      g.rect(x, 0, 1, d, C.canvasSeam);
-      if (x + 1 < w) g.rect(x + 1, 0, 1, d, C.canvasHi);
-      for (let y = 3; y < d - 8; y += 3) g.set(x - 1, y, C.canvasDk);
-    }
-  }
-  // Leaf shadow from the canopy at the top, soft dapples lower down.
-  for (let x = 0; x < w; x++) {
-    const sh = 3 + Math.round(2 + Math.sin((x0 + x) * 0.19) * 1.5 + Math.sin((x0 + x) * 0.07) * 2);
-    for (let y = 0; y < sh; y++) g.set(x, y, y < sh - 2 ? mix(C.canvasDk, C.canvasLo, 0.3) : C.canvasLo);
-  }
-  const r = rng(hash(`dapple-${x0}-${d}`));
-  for (let n = 0; n < w / 16; n++) {
-    const cx = Math.floor(r() * w);
-    const cy = 10 + Math.floor(r() * Math.max(1, d - 30));
-    g.ellipse(cx, cy, 2 + r() * 2, 1 + r(), mix(C.canvas, C.canvasLo, 0.6));
-  }
-  // Tie-downs above the base beam.
-  for (let x = 6 + (i * 7) % 15; x < w - 2; x += 15) {
-    g.set(x, d - 10, C.iron).set(x, d - 9, C.canvasDk).set(x, d - 8, "#8a7552").set(x, d - 7, "#8a7552");
-  }
-  // Base beam: the edge of the deck the tent stands on.
-  g.rect(0, d - 6, w, 1, C.logHi).rect(0, d - 5, w, 3, C.log).rect(0, d - 2, w, 1, C.logLo).rect(0, d - 1, w, 1, C.logDk);
-  for (let x = 4 + (i * 5) % 9; x < w; x += 18) g.set(x, d - 4, C.logLo).set(x + 1, d - 4, C.logLo);
-  paintGrid(ctx, g, x0, 0);
-  ctx.fillStyle = "rgba(30,18,10,0.3)";
-  ctx.fillRect(x0, d, w, 2);
-  ctx.fillStyle = "rgba(30,18,10,0.14)";
-  ctx.fillRect(x0, d + 2, w, 2);
-}
-
-function trunk(ctx: Ctx, x: number, w: number, d: number, seed: number): void {
-  const flare = 5;
-  const gw = w + flare * 2;
-  const gh = d + 5;
-  const g = new Grid(gw, gh);
-  barkFill(g, flare, 0, w, gh, seed);
-  // Root flare: the trunk widens into the ground.
-  for (let y = d - 12; y < gh; y++) {
-    const k = (y - (d - 12)) / 16;
-    const grow = Math.round(Math.pow(Math.max(0, k), 1.6) * flare * 1.3);
-    for (let i = 1; i <= grow; i++) {
-      g.set(flare - i, y, i === grow ? C.barkDk : C.barkHi);
-      g.set(flare + w - 1 + i, y, i === grow ? C.barkDk : C.bark);
-    }
-  }
-  // Moss on the roots, a bracket fungus higher up.
-  const r = rng(seed + 7);
-  for (let i = 0; i < w; i++) {
-    if (r() < 0.6) g.set(flare + i, d - 3 - Math.floor(r() * 3), r() < 0.5 ? C.moss : C.mossHi);
-  }
-  g.rect(flare - 3, gh - 2, 3, 1, C.mossHi).rect(flare + w, gh - 2, 3, 1, C.moss);
-  if (d > 60) {
-    const fy = Math.floor(d * 0.45 + r() * 8);
-    g.rect(flare + w - 2, fy, 4, 1, "#e0b77e").rect(flare + w - 1, fy + 1, 3, 1, "#b58652");
-  }
-  g.outline(OUTLINE);
-  // Clear the outline across the very top: the trunk carries on up.
-  for (let xx = 0; xx < gw; xx++) if (g.get(xx, 0) === OUTLINE) g.set(xx, 0, null);
-  paintGrid(ctx, g, x - flare, 0);
-}
-
 // ------------------------------------------------------------------ room shells
 
 function tentWalls(ctx: Ctx, room: Room, atWall: boolean): void {
@@ -614,33 +482,6 @@ function cabinWalls(ctx: Ctx, room: Room, atWall: boolean): void {
 
 // ------------------------------------------------------------------ fixtures
 
-function windowFrame(ctx: Ctx, win: Rect): void {
-  const { x, y, w, h } = win;
-  const g = new Grid(w + 6, h + 9);
-  const ox = 3;
-  const oy = 3;
-  // Timber frame around the glass hole (glass: x+4..x+w-4, y+3..y+h-3).
-  const wood = C.log;
-  g.rect(ox, oy, w, h, wood);
-  g.rect(ox, oy, w, 1, C.logHi).rect(ox, oy, 1, h, C.logHi);
-  g.rect(ox + w - 1, oy, 1, h, C.logLo);
-  g.rect(ox + 2, oy + 2, w - 4, h - 4, C.logLo);
-  // Sill
-  g.rect(ox - 2, oy + h - 1, w + 4, 3, C.logLo).rect(ox - 2, oy + h - 1, w + 4, 1, C.logHi);
-  // Rolled canvas flap over the top, with two ties.
-  g.rect(ox - 2, oy - 3, w + 4, 5, C.canvas);
-  g.rect(ox - 2, oy - 3, w + 4, 1, C.canvasHi).rect(ox - 2, oy + 1, w + 4, 1, C.canvasDk);
-  g.rect(ox - 2, oy - 1, w + 4, 1, C.canvasLo);
-  for (const tx of [6, w - 7]) g.rect(ox + tx, oy - 3, 2, 5, "#9a7a4e").set(ox + tx, oy - 1, "#7a5a36");
-  g.outline(OUTLINE);
-  // Cut the glass hole back out.
-  for (let j = oy + 3; j < oy + h - 2; j++) for (let i = ox + 4; i < ox + w - 3; i++) g.set(i, j, null);
-  // Thin mullions and the hanging ties.
-  for (let j = oy + 3; j < oy + h - 2; j++) g.set(ox + Math.floor(w / 2), j, C.logDk);
-  for (const tx of [6, w - 7]) g.set(ox + tx, oy + 2, "#9a7a4e").set(ox + tx + 1, oy + 3, "#9a7a4e").set(ox + tx, oy + 4, "#7a5a36");
-  paintGrid(ctx, g, x - ox, y - oy);
-}
-
 function pinboard(ctx: Ctx, r: Rect): void {
   const { x, y, w, h } = r;
   const g = new Grid(w + 2, h + 2);
@@ -690,36 +531,6 @@ function statusBoard(ctx: Ctx, s: Rect): void {
   paintGrid(ctx, g, s.x - 1, s.y - 1);
 }
 
-function door(ctx: Ctx, d: Rect): void {
-  const g = new Grid(d.w + 6, d.h + 4);
-  // Log door frame
-  g.rect(0, 2, d.w + 6, d.h + 2, C.logLo);
-  g.rect(0, 2, 2, d.h + 2, C.logHi).rect(0, 2, d.w + 6, 1, C.logHi);
-  // Plank door
-  g.rect(3, 4, d.w, d.h, C.deck);
-  for (let x = 3; x < d.w + 3; x += 4) g.rect(x, 4, 1, d.h, C.deckLo);
-  g.rect(3, 4, d.w, 1, C.deckHi);
-  // Z brace
-  g.rect(3, 10, d.w, 2, C.deckLo).rect(3, d.h - 2, d.w, 2, C.deckLo);
-  for (let i = 0; i < d.h - 14; i++) g.set(3 + Math.round((i / (d.h - 14)) * (d.w - 2)), d.h - 2 - i, C.deckGap);
-  // Round window and iron hardware
-  g.ellipse(3 + d.w / 2 - 0.5, 18, 3, 3, C.logDk);
-  g.ellipse(3 + d.w / 2 - 0.5, 18, 2, 2, "#cfe0d8");
-  g.set(3 + d.w / 2 - 1, 17, "#ffffff");
-  for (const hy of [11, d.h - 1]) g.rect(4, hy, 5, 1, C.iron);
-  g.rect(d.w - 1, 24, 2, 3, C.iron).set(d.w - 1, 25, C.brass);
-  g.outline(OUTLINE);
-  paintGrid(ctx, g, d.x - 3, d.y - 3);
-  // The "+" sign: a little carved plaque on twine.
-  const sg = new Grid(14, 11);
-  sg.set(3, 0, "#9a7a4e").set(10, 0, "#9a7a4e").set(4, 1, "#9a7a4e").set(9, 1, "#9a7a4e");
-  sg.rect(1, 2, 12, 8, "#3f6b3a");
-  sg.rect(1, 2, 12, 1, "#5a8a4a");
-  sg.rect(6, 3, 2, 6, C.cream).rect(4, 5, 6, 2, C.cream);
-  sg.outline(OUTLINE);
-  paintGrid(ctx, sg, d.x + d.w / 2 - 7, Math.max(0, d.y - 13));
-}
-
 function legend(ctx: Ctx, n: Rect): void {
   const g = new Grid(n.w + 2, n.h + 2);
   g.rect(1, 1, n.w, n.h, "#f6e6a6");
@@ -730,36 +541,6 @@ function legend(ctx: Ctx, n: Rect): void {
   g.outline(OUTLINE);
   paintGrid(ctx, g, n.x - 1, n.y - 1);
   rect(ctx, n.x + Math.floor(n.w / 2), n.y, 2, 2, C.plaid);
-}
-
-function painting(ctx: Ctx, p: Layout["wall"]["paintings"][number]): void {
-  const src = pa(p.sprite);
-  const w = src.width;
-  const h = src.height;
-  const g = new Grid(w, h);
-  const fx = 1;
-  const fy = Math.max(1, h - Math.min(h - 2, Math.round(w * 0.9)) - 1);
-  const fw = w - 2;
-  const fh = h - fy - 1;
-  g.rect(fx, fy, fw, fh, C.logLo);
-  g.rect(fx, fy, fw, 1, C.logHi);
-  const ix = fx + 2;
-  const iy = fy + 2;
-  const iw = fw - 4;
-  const ih = fh - 4;
-  // A pressed-paper print: sky, a ridge and two pines.
-  g.rect(ix, iy, iw, ih, "#e9dcb8");
-  g.rect(ix, iy, iw, Math.ceil(ih / 2), "#cfe0d4");
-  g.set(ix + iw - 3, iy + 1, "#f2c14e");
-  for (let i = 0; i < iw; i++) {
-    const ry = iy + Math.round(ih * 0.55 - Math.abs(i - iw * 0.4) * 0.5);
-    g.rect(ix + i, ry, 1, iy + ih - ry, "#8fa88a");
-  }
-  for (const tx of [ix + 2, ix + iw - 4]) {
-    for (let k = 0; k < 4; k++) g.rect(tx - Math.floor(k / 2), iy + ih - 5 + k, 1 + Math.floor(k / 2) * 2, 1, C.fernDk);
-  }
-  g.outline(OUTLINE);
-  paintGrid(ctx, g, p.x, p.y);
 }
 
 function cuckooClock(ctx: Ctx, k: { x: number; y: number; r: number }): void {
@@ -830,16 +611,8 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
     paintBridges(ctx, L);
   },
   wall(ctx, L) {
-    L.segments.forEach((sg, i) => canvasWall(ctx, sg.x0, sg.x1, sg.depth, i));
-    // The wall TV hangs on ropes.
-    const seg = L.segments.find((s) => L.tv.x >= s.x0 && L.tv.x < s.x1);
-    if (seg && L.tv.y < seg.depth && !campData(L)?.screenTrees) {
-      for (const rx of [L.tv.x + 10, L.tv.x + L.tv.w - 10]) {
-        rect(ctx, rx, 0, 1, L.tv.y + 2, "#8f7b58");
-        rect(ctx, rx + 1, 0, 1, L.tv.y + 2, "rgba(40,25,10,0.25)");
-      }
-    }
-    for (const [i, t] of trunkSpans(L).entries()) if (!treeCovers(L, t.x, t.w)) trunk(ctx, t.x, t.w, t.depth, 101 + i * 17);
+    // No wall out here: the treeline.
+    paintTreeline(ctx, L);
   },
   pods(ctx, L) {
     const pals = [STAINED, GREYED, SMOKED];
@@ -873,8 +646,7 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
               ctx.fillRect(dx > 0 ? cx : cx - len + 1, cy + dy * j, len, 1);
             }
           }
-          const seg = L.segments.find((sg) => r.x >= sg.x0 && r.x < sg.x1);
-          if (!seg || r.y > seg.depth + 10) paintBellPeak(ctx, r);
+          paintBellPeak(ctx, r);
         }
         break;
       case "boss": {
@@ -929,20 +701,19 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
   },
   roomWalls(ctx, room, L) {
     if (!room.walls) return;
-    const r = room.rect;
-    const seg = L.segments.find((sg) => r.x >= sg.x0 && r.x < sg.x1);
-    const atWall = seg !== undefined && r.y <= seg.depth + 1;
+    // Out in the woods every room is freestanding, its back to the treeline at most.
+    const atWall = false;
+    void L;
     if (room.walls === "wood") cabinWalls(ctx, room, atWall);
     else if (room.kind === "server") hutWalls(ctx, room, atWall);
     else tentWalls(ctx, room, atWall);
   },
-  window: (ctx, win) => windowFrame(ctx, win),
-  pinboard: (ctx, r) => pinboard(ctx, r),
+  window: (ctx, win) => paintGap(ctx, win),
+  pinboard: (ctx, r) => noticeBoard(ctx, r, pinboard),
   calendar: (ctx, c) => calendar(ctx, c),
   status: (ctx, s) => statusBoard(ctx, s),
-  door: (ctx, d) => door(ctx, d),
+  door: (ctx, d) => trailhead(ctx, d),
   legend: (ctx, n) => legend(ctx, n),
-  painting: (ctx, p) => painting(ctx, p),
   clock: (ctx, k) => cuckooClock(ctx, k),
 };
 

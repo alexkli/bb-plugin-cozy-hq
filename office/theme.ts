@@ -181,6 +181,12 @@ export interface Theme {
    * you drew it (false: the classic dark doorway and swung-open leaf).
    */
   doorOpen?(ctx: CanvasRenderingContext2D, door: Rect, info: PaintInfo): boolean;
+  /**
+   * A window someone clicked open, for a few seconds (`k` fades 0 → 1 → 0).
+   * Return true when you drew it (false: the classic slid-up pane and a
+   * breeze). Its hover text "Open the window" goes through `labels.words`.
+   */
+  openWindow?(ctx: CanvasRenderingContext2D, win: Rect, k: number, info: PaintInfo): boolean;
   /** Marker colors for planners' whiteboard strokes (chalk on a chalkboard, say). */
   boardInk?: string[];
   /** Busy screens: the background and the code colors. */

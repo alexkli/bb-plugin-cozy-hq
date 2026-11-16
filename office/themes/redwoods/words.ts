@@ -55,6 +55,7 @@ export const LABELS: ThemeLabels = {
     "Your office": "Your cabin",
     "your office": "your cabin",
     "String lights": "Lanterns",
+    "Open the window": "Listen to the woods",
     "string lights": "lanterns",
     "in the lounge": "at the campfire",
     "at the office": "at camp",

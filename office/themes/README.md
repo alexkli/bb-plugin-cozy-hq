@@ -64,6 +64,8 @@ Think of what each place *is* in your scenery, then dress it:
     papers on top; `library-shelf` `boss-shelf`: a globe on top.
 - **Windows**: the glass is cleared before `background.window` runs; paint
   the frame and at most thin mullions over the glass. The view is `outside`.
+  Outdoors they needn't be windows at all (Redwood Camp's are gaps in the
+  treeline); `openWindow` draws what happens when one is clicked.
 - **Wall fixtures** keep their places: the pinboard (HTML usage notes drawn
   3 px inside it), calendar and status board (contents are live), the door
   (with its "+" sign: a new thread), the "?" sticky note (the legend), the

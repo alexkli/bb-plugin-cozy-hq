@@ -28,6 +28,7 @@ import {
 } from "../../themekit.ts";
 import type { Layout, PlantPlacement, Rect } from "../../layout.ts";
 import { campBold } from "./camp.ts";
+import { outdoors } from "./outdoors.ts";
 
 /** A giant redwood standing on the floor: its base (roots) at y = base, rising h px. */
 export interface Tree {
@@ -55,6 +56,25 @@ export interface CampData {
   tents?: Rect[];
   /** Trails are packed dirt (true) or boardwalks. */
   trails?: boolean;
+  /** The treeline along the top: trunks between the sky gaps, posts under the fixtures. */
+  line?: Treeline;
+}
+
+/** A trunk (or a log post) standing in the treeline, roots at y = d. */
+export interface LineTrunk {
+  x: number;
+  w: number;
+  d: number;
+  seed: number;
+  kind: "trunk" | "post";
+  /** Where a post starts (trunks run up out of the picture). */
+  top?: number;
+  /** A birdhouse nailed on, at this y. */
+  house?: number;
+}
+
+export interface Treeline {
+  trunks: LineTrunk[];
 }
 
 /** A pod row split into desk tents of up to `max` columns with forest between them. */
@@ -557,5 +577,7 @@ export function campPortrait(W: number, H: number, threads: number): Layout {
 }
 
 export function campLayout(W: number, H: number, opts: { threads: number; portrait: boolean }): Layout | null {
-  return opts.portrait ? campPortrait(W, H, opts.threads) : (campBold(W, H, opts.threads) ?? campWide(W, H, opts.threads));
+  const L = opts.portrait ? campPortrait(W, H, opts.threads) : (campBold(W, H, opts.threads) ?? campWide(W, H, opts.threads));
+  outdoors(L);
+  return L;
 }

@@ -2972,7 +2972,7 @@ export class World {
     const info = this.paintInfo(env);
     this.theme.underlay?.(ctx, L, info);
     this.drawSunbeam(ctx, env);
-    this.drawOpenWindows(ctx);
+    this.drawOpenWindows(ctx, info);
     this.drawStringLights(ctx, env, false);
     this.drawClock(ctx, env.date);
     this.drawCalendar(ctx, env.date);
@@ -3963,12 +3963,13 @@ export class World {
   }
 
   /** A breeze through a window you opened. */
-  private drawOpenWindows(ctx: CanvasRenderingContext2D): void {
+  private drawOpenWindows(ctx: CanvasRenderingContext2D, info: PaintInfo): void {
     const t = this.time;
     for (const [i, win] of this.L!.wall.windows.entries()) {
       const left = (this.anim.get(`window-${i}`) ?? 0) - t;
       if (left <= 0) continue;
       const k = Math.min(1, left / 1.5, (5 - left) * 3);
+      if (this.theme.openWindow?.(ctx, win, k, info)) continue;
       // The lower pane slid up.
       ctx.fillStyle = `rgba(250,246,236,${0.85 * k})`;
       ctx.fillRect(win.x + 1, win.y + Math.floor(win.h / 2) - 1, win.w - 2, 2);

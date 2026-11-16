@@ -947,18 +947,30 @@ function planter(w: number): HTMLCanvasElement {
   });
 }
 
-/** A wooden speaker box with woven grilles (the classic 12×28). */
+/** A hollow redwood stump with the speakers carved into its knot holes (the classic 12×28). */
 export function speaker(): HTMLCanvasElement {
-  return sprite("speaker", 12, 28, (g) => {
-    g.rrect(1, 1, 10, 26, C.walnut, 1);
-    g.rect(2, 1, 8, 1, C.walnutHi);
-    g.rect(2, 3, 8, 22, "#c9b48a");
-    for (let y = 4; y < 24; y += 2) for (let x = 2 + ((y / 2) % 2); x < 10; x += 2) g.set(x, y, "#b09a70");
-    g.ellipse(5.5, 7, 2.6, 2.6, C.walnutLo);
-    g.ellipse(5.5, 7, 1.2, 1.2, "#8a6a4a");
-    g.ellipse(5.5, 17, 3, 3, C.walnutLo);
-    g.ellipse(5.5, 17, 1.4, 1.4, "#8a6a4a");
-    g.rect(2, 25, 8, 1, C.walnutDk);
+  return sprite("speaker-stump", 12, 28, (g) => {
+    barkFill(g, 2, 3, 8, 24, 917);
+    // Roots flaring into the ground
+    g.rect(1, 22, 1, 5, C.barkHi).rect(0, 25, 1, 2, C.barkMid).rect(10, 22, 1, 5, C.bark).rect(11, 25, 1, 2, C.barkDk);
+    // The sawn top, its rings and a fern sprouting from it
+    g.ellipse(5.5, 3, 4, 1.6, C.log);
+    g.ellipse(5.5, 3, 2.6, 1, C.ring);
+    g.set(5, 3, C.logLo).set(6, 3, C.logHi);
+    g.set(8, 1, C.fern).set(9, 0, C.fernHi).set(7, 0, C.fernHi).set(8, 2, C.fernDk);
+    // Two knot holes, hollowed into speakers
+    // (the lower one sits where the office pulses the woofer, s.y + 14..17)
+    for (const [cy, rr] of [
+      [8.5, 2],
+      [16.5, 3],
+    ] as const) {
+      g.ellipse(5.5, cy, rr + 0.6, rr + 0.6, C.barkDk);
+      g.ellipse(5.5, cy, rr, rr, "#2a160e");
+      g.ellipse(5.5, cy, rr * 0.45, rr * 0.45, "#5a3422");
+      g.set(4, cy - 1, "#4a2a1a");
+    }
+    // Moss at the foot
+    g.rect(2, 25, 3, 1, C.moss).rect(6, 26, 4, 1, C.mossHi).set(3, 24, C.mossHi);
   });
 }
 

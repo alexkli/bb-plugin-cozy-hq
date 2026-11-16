@@ -348,10 +348,3 @@ export function forestItems(ctx: Ctx, L: Layout, night = 0, t = 0): Drawable[] {
   ropeItem.L = L;
   return list;
 }
-
-/** Whether a stretch of the back wall is covered by a floor tree (no wall trunk needed there). */
-export function treeCovers(L: Layout, x: number, w: number): boolean {
-  const d = campData(L);
-  if (!d) return false;
-  return d.trees.some((t) => t.base - t.h < 30 && x < t.x + t.w + 4 && x + w > t.x - 4);
-}

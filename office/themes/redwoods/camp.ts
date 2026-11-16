@@ -118,8 +118,6 @@ export function campBold(W: number, H: number, threads: number): Layout | null {
   const nx = clk.x + clk.r + 8;
   L.wall.calendar = { ...L.wall.calendar, x: nx };
   L.wall.status = { ...L.wall.status, x: nx };
-  L.wall.windows = L.wall.windows.filter((w) => w.x > nx + 26 || w.x + w.w < nx - 4);
-  L.plants = L.plants.filter((p) => !(p.sprite === "HANGING_PLANT" && p.x < nx + 24 && p.x + 16 > nx - 4));
   // ---- the treehouse: a giant grows up through the cabin's deck at the right edge.
   const tw = edgeR - 8;
   const trunk: Tree = { x: W - edgeR + 2, w: tw, base: bossRoom.y + 46, h: bossRoom.y + 46, seed: 211, role: "treehouse" };
@@ -129,7 +127,6 @@ export function campBold(W: number, H: number, threads: number): Layout | null {
   for (const k of L.pokeables) if (k.kind === "globe") k.rect = { ...k.rect, x: k.rect.x - tw - 10 };
   dropPlant(L, (p) => p.sprite === "PLANT" && p.y < bossRoom.y && p.x > bossRoom.x + bossRoom.w - 70);
   dropPlant(L, (p) => p.sprite === "LARGE_PLANT" && p.y < lounge.y + 10 && p.x > lounge.x && p.x < lounge.x + lounge.w);
-  L.wall.windows = L.wall.windows.filter((w) => w.x + w.w < trunk.x - 6);
 
   // ---- the forest
   const block = blockers(L);
@@ -154,8 +151,6 @@ export function campBold(W: number, H: number, threads: number): Layout | null {
   const creek = creekPath(creekStrip, spring.base - 2, H);
   const keep = trees.filter((t) => t === spring || !(t.x + t.w > creekStrip.x - 2 && t.x < creekStrip.x + creekStrip.w + 2));
   clearPlants(L, keep);
-  // Hanging plants and windows don't hang behind the giants at the wall.
-  L.wall.windows = L.wall.windows.filter((w) => !keep.some((t) => t.base - t.h < w.y + w.h && w.x < t.x + t.w + 6 && w.x + w.w > t.x - 6));
   const hut = L.server!;
   const bridges: Rect[] = [{ x: creekStrip.x - 2, y: hut.y + hut.h - 9, w: creekStrip.w + 4, h: 10 }];
   const data: CampData = { trees: keep, strips: [grove, creekStrip], creek, bridges, screenTrees: [left, spring], tents, trails: true };
