@@ -172,7 +172,13 @@ export function aquarium(ctx: CanvasRenderingContext2D, tank: Rect, info: PaintI
   let tx: number;
   let ty: number;
   let dir = 1;
-  if (cycle < 0.55) {
+  if (info.feeding) {
+    // Feeding time: Shelly paddles up to the surface and snaps at the flakes.
+    const sw = Math.sin(t * 2.4);
+    tx = x + w / 2 - 3 + sw * 6;
+    ty = y + 3 + (Math.floor(t * 6) % 2);
+    dir = Math.cos(t * 2.4) >= 0 ? 1 : -1;
+  } else if (cycle < 0.55) {
     tx = rx + 2;
     ty = ry - 3;
   } else {

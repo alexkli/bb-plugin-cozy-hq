@@ -116,8 +116,8 @@ function rainbowRug(ctx: CanvasRenderingContext2D, cx: number, cy: number, rw: n
 
 // ------------------------------------------------------------------ the back wall
 
-interface WallItem {
-  kind: "lockers" | "cubbies" | "poster";
+export interface WallItem {
+  kind: "lockers" | "cubbies" | "poster" | "bell";
   x: number;
   y: number;
   w: number;
@@ -178,6 +178,18 @@ export function wallItems(L: Layout): WallItem[] {
         items.push({ kind: "cubbies", x: a + Math.floor((b - a - w) / 2), y: d - 15, w, h: 14, n, seed: seed++ });
       }
     }
+    // The school bell, high on the wall (the middle wing first).
+    const bellAt = (): Rect | null => {
+      for (const sg of [L.segments[1], L.segments[0], L.segments[2]]) {
+        if (!sg) continue;
+        for (const y of [12, 18, 24]) {
+          for (let x = sg.x0 + 10; x + 10 < sg.x1 - 6; x += 2) if (y + 12 < sg.depth - 20 && free({ x: x - 2, y: y - 2, w: 13, h: 13 })) return { x, y, w: 9, h: 9 };
+        }
+      }
+      return null;
+    };
+    const bell = bellAt();
+    if (bell) items.push({ kind: "bell", ...bell, n: 0, seed: seed++ });
     // Posters and drawings on the upper wall, a few per free stretch.
     const order: PosterKind[] = ["abc", "read", "hundred", "drawing", "map", "rules", "drawing", "planets", "drawing", "abc", "hundred", "drawing"];
     let k = 0;
@@ -207,6 +219,18 @@ export function wallItems(L: Layout): WallItem[] {
     }
     return items;
   });
+}
+
+/** The school bell: a red dome on a little box (9×9 at x, y). */
+export function drawBell(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  const g = new Grid(11, 11);
+  g.rect(3, 8, 5, 2, "#6b7280");
+  g.ellipse(5, 4.5, 4, 4, C.red);
+  g.ellipse(5, 4.5, 2, 2, C.redLo);
+  g.set(5, 4, "#3a3046").set(5, 5, "#3a3046");
+  g.set(3, 2, C.redHi).set(4, 1, C.redHi);
+  g.outline(OUTLINE);
+  stamp(ctx, g, x - 1, y - 1);
 }
 
 function drawLockers(ctx: CanvasRenderingContext2D, it: WallItem): void {
@@ -613,7 +637,8 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
       }
     });
     for (const it of wallItems(L)) {
-      if (it.kind === "lockers") drawLockers(ctx, it);
+      if (it.kind === "bell") drawBell(ctx, it.x, it.y);
+      else if (it.kind === "lockers") drawLockers(ctx, it);
       else if (it.kind === "cubbies") drawCubbies(ctx, it);
       else drawPoster(ctx, it);
     }

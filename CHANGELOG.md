@@ -45,6 +45,15 @@
   - On the back alley: the dumpster (the stray cat, a rat or a clang), the hover-bike (it lifts off and races away on a neon trail, or its alarm goes off) and the AC units, which drip, sometimes right on someone's head.
   - The street itself: a delivery drone drops off a parcel, or a puddle splashes.
   - Each with its own synth sound, and people nearby comment.
+- In the School you can click things too: idle people come over and play along, with their own lines and sounds.
+  - The school bell on the wall: recess out on the field (tag, a red ball), or a line in the hall when there's no yard. Otherwise, and after dark, the PA chimes and its message types out under the smartboard, and someone answers back.
+  - The field: a game of kickball, a ball booted over the fence, or stargazing with fireflies at night.
+  - The swings (higher!), the slide (a ball rolls down), the sandbox (a castle with a moat and a flag that stays a while), hopscotch and four square.
+  - The apple trees: someone picks one, or an apple drops on a head.
+  - The bus stop: the yellow bus pulls up with kids at the windows, folds its doors open, honks and drives off (headlights at night).
+  - The lockers: one jams, another pops open and a basketball and books tumble out.
+  - The cafeteria's serving line: a lunch line with trays. The reading rug: story time, where there's room.
+  - Feeding the class aquarium brings Shelly the turtle up for the flakes.
 - For scenery authors: an `openWindow` hook, and the "Open the window" hover text goes through `labels.words`.
 - Tech news on the TV from more sources: pick Hacker News, Lobsters, Techmeme, The Verge, Ars Technica, DEV Community, Slashdot, the GitHub Blog, a mix of the first five, or any RSS or Atom feed (`newsSource`, `newsFeed`). The TECH channel names its source, and in a mix each headline's.
 - A soft glow picks out what's new:

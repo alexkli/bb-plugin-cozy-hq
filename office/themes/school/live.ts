@@ -6,6 +6,7 @@ import type { Drawable, Light, PaintInfo, WallLightsInfo } from "../../theme.ts"
 import type { Layout, Rect } from "../../layout.ts";
 import { wallItems } from "./background.ts";
 import { BOOKS, C, CRAYONS, OUTLINE, sprite } from "./kit.ts";
+import { clickItems, clickLights, clickOverlay, storyArea } from "./clicks.ts";
 import { planOf } from "./plan.ts";
 import { busStop, climberSprite, lampPost, shadeTree, slideSprite, swingBack, swingFront } from "./yard.ts";
 import { cubbyStand, teacherDesk } from "./props.ts";
@@ -132,12 +133,13 @@ function staticLights(L: Layout): Light[] {
 }
 
 export function lights(L: Layout, info: PaintInfo): Light[] {
-  void info;
-  return staticLights(L);
+  const extra = clickLights(L, info);
+  return extra.length > 0 ? staticLights(L).concat(extra) : staticLights(L);
 }
 
 /** After the darkness: the exit sign glows red at night. */
 export function overlay(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): void {
+  clickOverlay(ctx, L, info);
   if (info.night < 0.25) return;
   const exit = wallItems(L).find((it) => it.poster === "exit");
   if (!exit) return;
@@ -194,7 +196,10 @@ function extras(L: Layout): Extra[] {
         { x: L.meeting.x + 30, y: L.meeting.y + L.meeting.h - 18 },
         { x: L.boss.room.x + 28, y: L.boss.room.y + L.boss.room.h - 14 },
       ];
+      // And the floor for story time.
+      const story = storyArea(L);
       const clear = (r: Rect) =>
+        !(story && r.x < story.x + story.w && story.x < r.x + r.w && r.y < story.y + story.h && story.y < r.y + r.h) &&
         !pets.some((p) => p.x > r.x - 14 && p.x < r.x + r.w + 14 && p.y > r.y - 6 && p.y < r.y + r.h + 14) &&
         !(r.x < ev.x + ev.w && ev.x < r.x + r.w && r.y < ev.y + ev.h && ev.y < r.y + r.h) &&
         !out.some((o) => Math.abs(o.x - r.x) < 30 && Math.abs(o.y - r.y) < 30) &&
@@ -307,7 +312,7 @@ function lostFound(): HTMLCanvasElement {
   });
 }
 
-interface YardThing {
+export interface YardThing {
   sprite: () => HTMLCanvasElement;
   x: number;
   y: number;
@@ -315,7 +320,7 @@ interface YardThing {
 }
 
 /** The play equipment, trees, lamps and the bus stop in the yard. */
-function yardThings(L: Layout): YardThing[] {
+export function yardThings(L: Layout): YardThing[] {
   return cached(`school|yardthings|${L.W}x${L.H}|${L.props.length}`, () => {
     const P = planOf(L);
     const out: YardThing[] = [];
@@ -396,5 +401,5 @@ export function decor(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo)
         break;
     }
   }
-  return out;
+  return out.concat(clickItems(ctx, L, info));
 }

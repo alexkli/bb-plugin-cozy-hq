@@ -7,9 +7,11 @@
 //   outside.ts     the playground view, recess by day, a quiet yard at night
 //   live.ts        paper bunting with fairy lights, night lights, floor extras
 //   people.ts      teachers' lanyards and backpacks, the principal and visitors
-//   words.ts       names and window sounds
+//   clicks.ts      things to click: the bell, the field, the playground, the bus, lockers
+//   words.ts       names, lines and sounds
 import type { Theme } from "../theme.ts";
 import { BACKGROUND } from "./school/background.ts";
+import { click, clickables } from "./school/clicks.ts";
 import { schoolChair, schoolDesk, schoolScreen } from "./school/desks.ts";
 import { decor, lights, overlay, wallLights } from "./school/live.ts";
 import { paintOutside } from "./school/outside.ts";
@@ -54,4 +56,7 @@ export const SCHOOL: Theme = {
   labels: LABELS,
   sounds: SOUNDS,
   outdoor,
+  // The bell, the yard's games, the apple trees, the bus and the lockers do things when you click them.
+  clickables,
+  click,
 };

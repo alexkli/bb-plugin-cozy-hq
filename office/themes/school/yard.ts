@@ -132,6 +132,18 @@ function fourSquare(ctx: CanvasRenderingContext2D, x: number, y: number, s: numb
   rect(ctx, x, y + s, s * 2, 1, "#f4f1ea");
 }
 
+/** Where the sandbox, the hopscotch and the four-square court are in the playground corner. */
+export function playParts(P: SchoolPlan): { sandbox: Rect | null; hop: { x: number; y: number } | null; four: { x: number; y: number; s: number } | null } {
+  const p = P.playground;
+  if (!p) return { sandbox: null, hop: null, four: null };
+  const hx = P.portable ? p.x + 8 : p.x + 48;
+  return {
+    sandbox: { x: p.x + p.w - 62, y: p.y + p.h - 34, w: 40, h: 26 },
+    hop: { x: hx, y: p.y + 14 },
+    four: p.w >= 150 && p.h >= 30 ? { x: hx + 50, y: p.y + 4, s: Math.min(13, Math.floor((p.h - 6) / 2)) } : null,
+  };
+}
+
 export function paintYard(ctx: CanvasRenderingContext2D, L: Layout, P: SchoolPlan): void {
   if (!P.yard || P.walk === null) return;
   const W = L.W;
@@ -186,9 +198,9 @@ export function paintYard(ctx: CanvasRenderingContext2D, L: Layout, P: SchoolPla
   if (P.swings) chips(ctx, { x: P.swings.x - 2, y: P.swings.y + 14, w: P.swings.w + 4, h: P.swings.h - 12 });
   if (P.slide) chips(ctx, { x: P.slide.x - 2, y: P.slide.y + 14, w: P.slide.w + 4, h: P.slide.h - 12 });
   // The playground corner: a sandbox, hopscotch and four square.
-  if (P.playground) {
-    const p = P.playground;
-    const sb = { x: p.x + p.w - 62, y: p.y + p.h - 34, w: 40, h: 26 };
+  const play = playParts(P);
+  if (play.sandbox) {
+    const sb = play.sandbox;
     rect(ctx, sb.x, sb.y, sb.w, sb.h, OUTLINE);
     rect(ctx, sb.x + 1, sb.y + 1, sb.w - 2, sb.h - 2, C.maple);
     rect(ctx, sb.x + 1, sb.y + 1, sb.w - 2, 1, C.mapleHi);
@@ -204,10 +216,9 @@ export function paintYard(ctx: CanvasRenderingContext2D, L: Layout, P: SchoolPla
     rect(ctx, sb.x + 17, sb.y + 7, 5, 4, "#d9b874");
     rect(ctx, sb.x + 17, sb.y + 6, 1, 1, "#d9b874");
     rect(ctx, sb.x + 21, sb.y + 6, 1, 1, "#d9b874");
-    const hx = P.portable ? p.x + 8 : p.x + 48;
-    hopscotch(ctx, hx, p.y + 14);
-    if (p.w >= 150 && p.h >= 30) fourSquare(ctx, hx + 50, p.y + 4, Math.min(13, Math.floor((p.h - 6) / 2)));
   }
+  if (play.hop) hopscotch(ctx, play.hop.x, play.hop.y);
+  if (play.four) fourSquare(ctx, play.four.x, play.four.y, play.four.s);
   // The school garden: grass, raised beds, a gravel path.
   if (P.garden) {
     const r = P.garden;
