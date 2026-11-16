@@ -35,6 +35,16 @@
   - The storerooms: an avalanche of boxes, a drawer spitting paper, a cloud of dust, a mouse; a dead photocopier there jams in a fountain of paper.
   - The old hall: the tea urn draws a queue of mugs and complaints, and the stage puts on a one-person show in a spotlight for an audience of two or three (or the PA squeals, or the curtain comes off its rail).
   - The radiators clank, hiss or sit stone cold, and a stair gives way and gets taped over.
+- In Neon City you can click the street and what's on it.
+  - The food carts: the cook flips the wok into a tall flame, it steams, or idle people line up and order.
+  - The holo billboard: a giant holo koi swims down the street, or the ad glitches into static and comes back as a new one.
+  - The crosswalk button: the signal goes WALK and a little crowd hurries across.
+  - The ramen shop's noren: people stand outside slurping from bowls, or the chef brings an order out.
+  - The manholes: a burst of steam, or a maintenance bot pops up and looks around.
+  - The ticket booth prints a ticket (sometimes a line forms), and the sandwich boards spin or fall over until someone stands them up.
+  - On the back alley: the dumpster (the stray cat, a rat or a clang), the hover-bike (it lifts off and races away on a neon trail, or its alarm goes off) and the AC units, which drip, sometimes right on someone's head.
+  - The street itself: a delivery drone drops off a parcel, or a puddle splashes.
+  - Each with its own synth sound, and people nearby comment.
 - For scenery authors: an `openWindow` hook, and the "Open the window" hover text goes through `labels.words`.
 - Tech news on the TV from more sources: pick Hacker News, Lobsters, Techmeme, The Verge, Ars Technica, DEV Community, Slashdot, the GitHub Blog, a mix of the first five, or any RSS or Atom feed (`newsSource`, `newsFeed`). The TECH channel names its source, and in a mix each headline's.
 - A soft glow picks out what's new:

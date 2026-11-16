@@ -624,7 +624,7 @@ function dress(L: Layout, portrait: boolean): Layout {
   // Crosswalk signals at the main street's crossings.
   for (const st of plan.streets) {
     if (!st.main || st.half < 12) continue;
-    for (const ax of L.net.aisles) plan.bits.push({ kind: "signal", x: ax + 13, y: st.y - st.half - 2 });
+    for (const ax of L.net.aisles) plan.bits.push({ kind: "signal", x: ax + 13 + 6 < L.W - 2 ? ax + 13 : ax - 13, y: st.y - st.half - 2 });
     // A holo billboard floating over the street, between the lantern strings.
     const mid = L.W / 2;
     let bx = Math.round(mid - 22);

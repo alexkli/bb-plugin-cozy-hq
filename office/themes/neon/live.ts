@@ -7,6 +7,7 @@ import { cached, classicProp, drawPixelText, floorPlan, Grid, hash, makeCanvas, 
 import { floorDashes, paintingSign, roomSign, wallSigns } from "./background.ts";
 import { glowBar, glowDot, glyph, P, perLayout } from "./kit.ts";
 import { planOf } from "./plan.ts";
+import { bikeFx, billboardFx, clickItems, clickLights, clickOverlay, drawAframe, drawBikeTrail, signalWalk, strayBusy } from "./clicks.ts";
 
 // ------------------------------------------------------------------ sky
 
@@ -417,6 +418,7 @@ export function neonLights(L: Layout, info: PaintInfo): Light[] {
   });
   // The hallway chasers.
   for (const c of chasers(L, t)) out.push([c.x, c.y, 10, 0.5, P.cyan, 0.2]);
+  out.push(...clickLights(L, info));
   return out;
 }
 
@@ -601,6 +603,7 @@ export function neonOverlay(ctx: CanvasRenderingContext2D, L: Layout, info: Pain
     ctx.restore();
   }
   ctx.drawImage(scanlines(L), 0, 0);
+  clickOverlay(ctx, L, info);
 }
 
 // ------------------------------------------------------------------ decor
@@ -638,6 +641,28 @@ function lanternSprite(c: string): HTMLCanvasElement {
   );
 }
 
+/** The steaming manholes (or floor vents) people can click. Floor vents need the
+ *  furniture map, which needs a canvas, so without one only manholes count. */
+export function streetVents(L: Layout): Rect[] {
+  return manholes(L) ?? (typeof document === "undefined" ? [] : floorBits(L).vents);
+}
+
+/** Manholes on the main street, if it's wide enough for them. */
+function manholes(L: Layout): Rect[] | null {
+  const plan = planOf(L);
+  const main = plan?.streets.find((q) => q.main) ?? plan?.streets[0];
+  if (!main || main.half < 12) return null;
+  const out: Rect[] = [];
+  const board = plan!.bits?.find((b) => b.kind === "billboard");
+  for (const k of [0.17, 0.5, 0.82]) {
+    let x = Math.round(L.W * k);
+    // Off the crossings, and out from under the billboard where it can still be seen.
+    while (L.net.aisles.some((ax) => Math.abs(ax - x - 6) < 22) || (board && x + 12 > board.x - 6 && x < board.x + 50)) x += 8;
+    out.push({ x, y: main.y + 6, w: 12, h: 6 });
+  }
+  return out;
+}
+
 /** Free floor for steam vents and a holo emitter. */
 function floorBits(L: Layout): { vents: Rect[]; holo: Rect[] } {
   return perLayout("bits", L, () => {
@@ -660,16 +685,9 @@ function floorBits(L: Layout): { vents: Rect[]; holo: Rect[] } {
         into.push(r);
       }
     };
-    const plan = planOf(L);
-    const main = plan?.streets.find((q) => q.main) ?? plan?.streets[0];
-    if (main && main.half >= 12) {
-      // Manholes on the street, steaming.
-      for (const k of [0.17, 0.5, 0.82]) {
-        let x = Math.round(L.W * k);
-        while (L.net.aisles.some((ax) => Math.abs(ax - x - 6) < 22)) x += 8;
-        vents.push({ x, y: main.y + 6, w: 12, h: 6 });
-      }
-    } else pick(L.W * L.H > 400000 ? 4 : 3, vents, 0.5);
+    const street = manholes(L);
+    if (street) vents.push(...street); // manholes on the street, steaming
+    else pick(L.W * L.H > 400000 ? 4 : 3, vents, 0.5);
     const big = fp.find(16, 22, 40).filter((r) => !inside(r) && !nearSeat(r) && !vents.some((v) => Math.abs(v.x - r.x) < 30 && Math.abs(v.y - r.y) < 30));
     if (big.length > 0) holo.push(big[Math.floor(big.length * 0.6)]!);
     return { vents, holo };
@@ -752,8 +770,9 @@ function boothSprite(): HTMLCanvasElement {
 
 /** A crosswalk signal: walking figure, then a red hand, in turns. */
 function drawSignal(ctx: CanvasRenderingContext2D, x: number, base: number, t: number): void {
-  const walk = Math.floor(t / 6) % 2 === 0;
-  const blink = !walk || Math.floor(t * 2) % 2 === 0 || (t % 6) < 4;
+  const pressed = signalWalk(x, t);
+  const walk = pressed || Math.floor(t / 6) % 2 === 0;
+  const blink = pressed || !walk || Math.floor(t * 2) % 2 === 0 || (t % 6) < 4;
   ctx.fillStyle = OUTLINE;
   ctx.fillRect(x - 1, base - 22, 3, 22);
   ctx.fillStyle = "#4c4670";
@@ -790,20 +809,31 @@ function drawBillboard(ctx: CanvasRenderingContext2D, x: number, y: number, t: n
   ctx.fillStyle = P.cyan;
   ctx.fillRect(x, y, w, 1);
   ctx.fillRect(x, y + h - 1, w, 1);
-  const phase = Math.floor(t / 5) % 3;
+  const fx = billboardFx(t);
+  if (fx.glitch > 0) {
+    // Static and torn colour bands, then the next ad.
+    for (let i = 0; i < 9; i++) {
+      const k = (Math.imul(i + 1, 0x9e3779b1) ^ Math.imul(Math.floor(t * 20), 0x85ebca6b)) >>> 0;
+      ctx.fillStyle = [P.mag, P.cyan, "#ffffff", P.yel][k % 4]!;
+      ctx.fillRect(x + (k % (w - 8)), y + 1 + ((k >>> 5) % (h - 2)), 4 + ((k >>> 9) % 10), 1);
+    }
+    ctx.restore();
+    return;
+  }
+  const phase = (Math.floor(t / 5) + fx.ad) % 3;
   if (phase === 0) {
     drawPixelText(ctx, "NEON", x + 3, y + 5, P.mag);
     const g = glyph(Math.floor(t / 5) % 40);
     ctx.fillStyle = P.yel;
     for (let yy = 0; yy < 5; yy++) for (let xx = 0; xx < 5; xx++) if (g[yy]![xx] === "#") ctx.fillRect(x + 22 + xx * 2, y + 3 + yy * 2, 2, 2);
   } else if (phase === 1) {
-    const fx = x + 6 + Math.floor((t * 8) % (w - 14));
+    const kx = x + 6 + Math.floor((t * 8) % (w - 14));
     ctx.fillStyle = P.orange;
-    ctx.fillRect(fx, y + 6, 6, 3);
-    ctx.fillRect(fx + 1, y + 5, 3, 1);
-    ctx.fillRect(fx - 2, y + 5 + (Math.floor(t * 5) % 2), 2, 3);
+    ctx.fillRect(kx, y + 6, 6, 3);
+    ctx.fillRect(kx + 1, y + 5, 3, 1);
+    ctx.fillRect(kx - 2, y + 5 + (Math.floor(t * 5) % 2), 2, 3);
     ctx.fillStyle = P.white;
-    ctx.fillRect(fx + 2, y + 6, 1, 1);
+    ctx.fillRect(kx + 2, y + 6, 1, 1);
     drawPixelText(ctx, "KOI", x + w - 14, y + 2, P.cyanHi);
   } else {
     for (let i = 0; i < w - 4; i += 3) {
@@ -846,7 +876,7 @@ function acSprite(): HTMLCanvasElement {
 function drawDumpster(ctx: CanvasRenderingContext2D, x: number, base: number, t: number): void {
   ctx.drawImage(dumpsterSprite(), x, base - 16);
   const blink = Math.floor(t * 0.7) % 6 === 0;
-  ctx.drawImage(strayCat(blink), x + 6, base - 22);
+  if (!strayBusy(t)) ctx.drawImage(strayCat(blink), x + 6, base - 22);
   // A flyer of steam from the grate beside it.
   const ph = (t * 0.4) % 1;
   ctx.globalAlpha = 0.3 * (1 - ph);
@@ -883,11 +913,16 @@ function strayCat(blink: boolean): HTMLCanvasElement {
   });
 }
 
+/** How wide a sandwich board is (sprite and click area). */
+export function aframeWidth(text: string): number {
+  return Math.max(14, text.replace(" ", "").length * 4 + 5) + 2;
+}
+
 /** A sandwich board on the sidewalk with the shop's name in neon (glyphs if it's long). */
 function aframeSprite(text: string, color: string): HTMLCanvasElement {
   return cached(`neon|aframe|${text}|${color}`, () => {
     const word = text.replace(" ", "");
-    const w = Math.max(14, word.length * 4 + 5);
+    const w = aframeWidth(text) - 2;
     const c = makeCanvas(w + 2, 14, (ctx) => {
       const g = new Grid(w + 2, 14);
       g.rect(1, 1, w, 9, "#14101f");
@@ -1056,10 +1091,30 @@ export function neonDecor(ctx: CanvasRenderingContext2D, L: Layout, info: PaintI
         out.push({ z: bit.y, draw: () => drawDumpster(ctx, bit.x, bit.y, t) });
         break;
       case "bike":
-        out.push({ z: bit.y, draw: () => ctx.drawImage(bikeSprite(), bit.x, bit.y - 12) });
+        out.push({
+          z: bit.y,
+          draw: () => {
+            const b = bikeFx(t);
+            if (b?.gone) return;
+            drawBikeTrail(ctx, bit.x, bit.y, t);
+            ctx.drawImage(bikeSprite(), bit.x + (b?.dx ?? 0), bit.y - 12 - (b?.lift ?? 0));
+            if (b?.flash) {
+              ctx.fillStyle = P.red;
+              ctx.fillRect(bit.x + b.dx + 1, bit.y - 6, 2, 2);
+              ctx.fillStyle = P.cyanHi;
+              ctx.fillRect(bit.x + b.dx + 21, bit.y - 7, 2, 2);
+            }
+          },
+        });
         break;
       case "aframe":
-        out.push({ z: bit.y, draw: () => ctx.drawImage(aframeSprite(bit.text ?? "OPEN", bit.color ?? P.cyan), bit.x, bit.y - 13) });
+        out.push({
+          z: bit.y,
+          draw: () => {
+            const s = aframeSprite(bit.text ?? "OPEN", bit.color ?? P.cyan);
+            if (!drawAframe(ctx, s, bit.x, bit.y, t)) ctx.drawImage(s, bit.x, bit.y - 13);
+          },
+        });
         break;
     }
   }
@@ -1113,6 +1168,7 @@ export function neonDecor(ctx: CanvasRenderingContext2D, L: Layout, info: PaintI
       },
     });
   }
+  out.push(...clickItems(ctx, L, info));
   return out;
 }
 

@@ -11,6 +11,7 @@ import { neonDress, neonLook, neonNpc } from "./neon/people.ts";
 import { NEON_SOUNDS, neonOutdoor } from "./neon/sound.ts";
 import { neonLayout } from "./neon/plan.ts";
 import { neonDressVisitor, neonFishTank, neonPet, neonRoomba } from "./neon/critters.ts";
+import { click, clickables } from "./neon/clicks.ts";
 
 export const NEON: Theme = {
   id: "neon",
@@ -50,6 +51,9 @@ export const NEON: Theme = {
   pet: (kind, pose, facing, blink) => neonPet(kind, pose, facing, blink),
   roomba: () => neonRoomba(),
   fishTank: neonFishTank,
+
+  clickables,
+  click,
 
   labels: {
     pets: { dog: "Byte", cat: "Pixel" },
