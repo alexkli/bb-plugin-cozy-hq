@@ -7,8 +7,9 @@ import { NEON } from "./neon.ts";
 import { REDWOODS } from "./redwoods.ts";
 import { SCHOOL } from "./school.ts";
 import { SKYLINE } from "./skyline.ts";
+import { SPACESHIP } from "./spaceship.ts";
 
-export const THEMES: Theme[] = [CLASSIC, NEON, REDWOODS, BEACH, SKYLINE, ANNEX, SCHOOL];
+export const THEMES: Theme[] = [CLASSIC, NEON, REDWOODS, BEACH, SKYLINE, ANNEX, SCHOOL, SPACESHIP];
 
 export function themeById(id: string | null | undefined): Theme {
   return THEMES.find((t) => t.id === (id as SceneryId)) ?? CLASSIC;
