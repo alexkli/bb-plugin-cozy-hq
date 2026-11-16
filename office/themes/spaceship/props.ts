@@ -7,7 +7,7 @@
 
 import type { Theme } from "../../theme.ts";
 import type { Layout, PlantPlacement, PropPlacement } from "../../layout.ts";
-import { Grid, OUTLINE, adjust, cached, hash, mix, shade, tint } from "../../themekit.ts";
+import { Grid, OUTLINE, adjust, cached, hash, makeCanvas, mix, shade, tint } from "../../themekit.ts";
 import { P, done, panel } from "./pal.ts";
 
 /** Classic sprites for the pieces the deck rarely shows: cooled down into the ship's palette. */
@@ -442,11 +442,12 @@ function chartTable(): HTMLCanvasElement {
 }
 
 function seatBack(): HTMLCanvasElement {
+  // (Bridge stations: burgundy like the command chairs.)
   // A bridge seat from behind (the classic chair's rows 15..31): a padded back on a pedestal.
   const g = new Grid(16, 32);
   g.rrect(3, 15, 10, 10, P.panel, 2);
-  g.rrect(4, 16, 8, 7, P.navy, 1);
-  g.hline(5, 16, 6, P.navyHi);
+  g.rrect(4, 16, 8, 7, BR.wine, 1);
+  g.hline(5, 16, 6, BR.wineHi);
   g.rect(2, 22, 12, 3, P.panelMid);
   g.hline(2, 22, 12, P.panelHi);
   g.set(12, 23, P.amber);
@@ -474,23 +475,6 @@ function seatFront(): HTMLCanvasElement {
   return done(g);
 }
 
-function starChart(w: number): HTMLCanvasElement {
-  // The bridge's chart display: a pale glass board in a slate frame (the strokes land on 3..w−1 × 3..33).
-  const g = new Grid(w + 2, 46);
-  g.rrect(1, 1, w, 34, P.steelDk, 1);
-  g.hline(2, 1, w - 2, P.steel);
-  g.rect(3, 3, w - 4, 30, "#eaf4f8");
-  // A faint grid and a few chart marks under the strokes.
-  for (let x = 8; x < w - 2; x += 10) g.vline(x, 4, 28, "#dbe9f0");
-  for (let y = 8; y < 32; y += 8) g.hline(4, y, w - 6, "#dbe9f0");
-  g.set(w - 12, 7, "#b8cfdc").set(w - 20, 26, "#b8cfdc").set(w - 9, 22, "#b8cfdc");
-  g.rect(1, 35, w, 2, P.steel);
-  g.hline(1, 36, w, P.orange);
-  g.rect(8, 34, 5, 1, P.red).rect(15, 34, 5, 1, P.cyan).rect(22, 34, 5, 1, P.mint);
-  g.rect(4, 37, 2, 8, P.steel).rect(w - 5, 37, 2, 8, P.steel);
-  g.set(4, 44, P.steelDk).set(w - 5, 44, P.steelDk);
-  return done(g);
-}
 
 function slateRack(): HTMLCanvasElement {
   // A rack of data slates and rolled star charts for the bridge's corner.
@@ -532,16 +516,18 @@ function roomFront(w: number, gapX: number, kind: string | undefined): HTMLCanva
     g.set(x, 8, P.panelMid).set(x, 9, kind === "server" ? (Math.floor(x / 2) % 2 ? P.steelDeep : P.hazard) : P.steel).set(x, 10, P.steelDeep);
   }
   if (kind === "boss") {
-    // The cabin's front: an opaque lower bulkhead with the livery stripe, a strip of viewport above.
+    // The bridge's rear bulkhead: warm beige panels with a burgundy band and a soft light strip.
     for (let x = 0; x < w; x++) {
-      g.set(x, 5, P.panel).set(x, 6, P.orange).set(x, 7, P.panelMid);
-      g.set(x, 2, "#b9d6e8b0").set(x, 3, "#cfe6f5a0").set(x, 4, "#e2f2fa90");
+      if (inGap(x)) continue;
+      g.set(x, 1, BR.beigeHi).set(x, 2, BR.beige).set(x, 3, x % 6 ? BR.beige : BR.beigeLo).set(x, 4, BR.beige);
+      g.set(x, 5, BR.wineHi).set(x, 6, BR.wine).set(x, 7, BR.beigeLo);
+      if (x % 8 === 3) g.set(x, 3, "#ffe8b8");
     }
   }
   // Posts, glints and running lights.
   for (let x = 6; x < w; x += 24) {
     if (!inGap(x) && !inGap(x + 2) && kind !== "boss") g.set(x, 3, "#ffffffcc").set(x + 1, 4, "#ffffffcc").set(x + 2, 5, "#ffffffaa");
-    if (!inGap(x + 12)) {
+    if (!inGap(x + 12) && kind !== "boss") {
       g.vline(x + 12, 1, 8, P.panelMid);
       g.set(x + 12, 9, kind === "server" ? P.red : P.cyan);
     }
@@ -573,55 +559,90 @@ function lightColumn(): HTMLCanvasElement {
   return done(g);
 }
 
-function captainsDesk(w: number): HTMLCanvasElement {
-  // The captain's desk: a slate top with a console inset, a white shell front with the livery.
-  const g = new Grid(w + 2, 30);
-  g.rect(1, 1, w, 12, P.steelDk);
-  g.hline(1, 1, w, P.steel);
-  g.rect(3, 3, w - 4, 8, P.steelDeep);
-  g.hline(3, 3, w - 4, "#2a3040");
-  // The captain's screen (from behind), a slate, a mug, a little ringed planet model.
-  g.rect(8, 1, 14, 9, P.panelLo).rect(9, 2, 12, 7, P.panel);
-  g.rect(13, 9, 4, 2, P.steel);
-  g.rect(w - 24, 6, 9, 5, P.screen).rect(w - 23, 7, 6, 1, P.cyan).rect(w - 23, 9, 4, 1, P.cyanDk);
-  g.rect(w - 9, 4, 4, 5, P.white).set(w - 7, 5, P.orange);
-  g.ellipse(26, 7, 2, 2, P.amber);
-  g.set(25, 6, P.orangeHi).hline(22, 8, 9, P.panelHi).set(22, 7, P.panelHi).set(30, 9, P.panelHi);
-  // Front panel.
-  g.rect(1, 13, w, 12, P.panel);
-  g.hline(1, 13, w, P.panelHi);
-  g.rect(4, 16, w - 8, 7, P.panelMid);
-  g.hline(4, 18, w - 8, P.orange);
-  g.rect(w / 2 - 6, 20, 12, 2, P.navy);
-  g.set(w / 2 - 4, 20, P.cyan).set(w / 2, 20, P.amber).set(w / 2 + 4, 20, P.mint);
-  g.rect(1, 25, w, 2, P.steelDk);
-  g.rect(3, 27, 3, 2, P.steelDeep).rect(w - 4, 27, 3, 2, P.steelDeep);
+
+// The bridge: warm beige panels, burgundy upholstery, a wood-capped rail.
+const BR = {
+  beige: "#d8c4a2",
+  beigeHi: "#ead9bb",
+  beigeLo: "#b49c78",
+  wine: "#6e2f3e",
+  wineHi: "#8a3c4e",
+  wineLo: "#4e1f2b",
+  wood: "#a8774e",
+  woodHi: "#c8955f",
+  woodLo: "#7a5236",
+};
+
+/** The captain's chair from behind (22×26; the back starts at row 10, under the captain's head): high burgundy back, arm consoles. */
+function captainsBack(): HTMLCanvasElement {
+  const g = new Grid(22, 26);
+  g.rrect(3, 10, 16, 11, BR.beigeLo, 3);
+  g.rrect(4, 10, 14, 10, BR.wine, 3);
+  g.hline(6, 10, 10, BR.wineHi);
+  g.vline(4, 12, 6, BR.wineHi);
+  for (let y = 13; y < 19; y += 2) g.hline(6, y, 10, BR.wineLo);
+  // Arm consoles either side, with readouts.
+  for (const x of [0, 17]) {
+    g.rrect(x, 14, 5, 7, BR.beige, 1);
+    g.hline(x + 1, 14, 3, BR.beigeHi);
+    g.rect(x + 1, 16, 3, 2, P.screen);
+  }
+  g.set(1, 16, P.amber).set(3, 17, P.cyan).set(18, 16, P.mint).set(20, 17, P.amber);
+  g.rect(9, 21, 4, 2, P.steelDk);
+  g.rrect(5, 23, 12, 2, BR.beigeLo, 1);
   return done(g);
 }
 
-function captainsChair(): HTMLCanvasElement {
-  // The captain's chair: a tall padded back with wings, armrests with little control panels.
-  const g = new Grid(22, 26);
-  g.rrect(3, 0, 16, 19, P.panel, 4);
-  g.rrect(5, 2, 12, 15, P.navy, 3);
-  g.hline(7, 2, 8, P.navyHi);
-  g.vline(5, 5, 9, P.navyHi);
-  // Headrest wings and the stripe.
-  g.rect(3, 4, 2, 5, P.panelHi).rect(17, 4, 2, 5, P.panelMid);
-  g.hline(6, 8, 10, P.orange);
-  for (let y = 11; y < 16; y += 3) g.hline(7, y, 8, P.navyLo);
-  // Armrests with tiny lights.
-  for (const x of [0, 17]) {
-    g.rrect(x, 11, 5, 9, P.panelMid, 1);
-    g.hline(x + 1, 11, 3, P.panelHi);
-    g.rect(x + 1, 13, 3, 3, P.screen);
-  }
-  g.set(1, 14, P.cyan).set(3, 13, P.red).set(18, 14, P.amber).set(20, 15, P.mint).set(2, 15, P.mint).set(19, 13, P.cyan);
-  g.rect(10, 19, 2, 4, P.steel);
-  g.rect(5, 23, 12, 1, P.steelDk);
-  g.set(5, 24, P.steelDk).set(16, 24, P.steelDk);
+/** A first officer's chair from behind (16×32, the back at rows 7..18 over the sitter's lower body). */
+function officerBack(): HTMLCanvasElement {
+  const g = new Grid(16, 32);
+  g.rrect(2, 7, 12, 10, BR.beigeLo, 2);
+  g.rrect(3, 7, 10, 9, BR.wine, 2);
+  g.hline(5, 7, 6, BR.wineHi);
+  g.hline(4, 11, 8, BR.wineLo);
+  g.rect(0, 12, 3, 5, BR.beige).rect(13, 12, 3, 5, BR.beige);
+  g.set(1, 13, P.cyan).set(14, 13, P.amber);
+  g.rect(7, 17, 2, 3, P.steelDk);
+  g.rect(4, 20, 8, 1, BR.beigeLo);
   return done(g);
 }
+
+/**
+ * The curved rail behind the command area (the captain's "desk", w+2 wide):
+ * a wooden cap bowing toward the rear deck, beige panels with glowing
+ * segmented strips, posts at the ends and the tactical console at the
+ * middle facing the rear deck. Drawn in the top 20 rows (the rest is clear).
+ */
+function bridgeRail(w: number): HTMLCanvasElement {
+  const W = w + 2;
+  const g = new Grid(W, 30);
+  const mid = (W - 1) / 2;
+  const capAt = (x: number) => Math.round(5 * (1 - ((x - mid) / mid) ** 2));
+  for (let x = 1; x < W - 1; x++) {
+    const y = capAt(x);
+    g.set(x, y, BR.woodHi).set(x, y + 1, BR.wood).set(x, y + 2, BR.woodLo);
+    for (let j = y + 3; j < y + 10; j++) g.set(x, j, j === y + 3 ? BR.beigeHi : BR.beige);
+    g.set(x, y + 10, BR.beigeLo);
+    // A segmented light strip along the panel.
+    const seg = Math.floor(x / 4);
+    if (x % 4 !== 0) g.set(x, y + 6, seg % 5 === 2 ? P.amber : seg % 7 === 3 ? P.mint : "#5fb7d6");
+  }
+  // Posts at the ends.
+  for (const x of [0, W - 3]) {
+    g.rect(x, 0, 3, 12, BR.beigeLo);
+    g.vline(x + 1, 0, 11, BR.beige);
+    g.set(x + 1, 2, P.cyan);
+  }
+  // The tactical console in the middle, its top facing the rear deck.
+  const cx = Math.round(mid);
+  g.rrect(cx - 15, 9, 30, 9, P.steelDk, 2);
+  g.rect(cx - 13, 10, 26, 5, P.screen);
+  for (let i = 0; i < 6; i++) g.rect(cx - 12 + i * 4, 11, 3, 1, i % 3 === 0 ? P.red : i % 3 === 1 ? P.amber : P.cyan);
+  g.rect(cx - 12, 13, 10, 1, P.cyanDk).rect(cx + 2, 13, 6, 1, P.mint);
+  g.hline(cx - 14, 16, 28, BR.beigeLo);
+  return done(g);
+}
+
 
 function chargePad(): HTMLCanvasElement {
   // The robot dog's charging pad: a round dock with a glowing ring.
@@ -1084,8 +1105,9 @@ function propSprite(p: PropPlacement, L: Layout, classic: () => HTMLCanvasElemen
     case "meeting-table":
       return k("meeting-table", chartTable);
     case "meeting-chair-back":
-    case "guest-chair":
       return k("seat-back", seatBack);
+    case "guest-chair":
+      return k("officer-back", officerBack);
     case "meeting-chair-front":
       return k("seat-front", seatFront);
     case "plan-rolls":
@@ -1112,7 +1134,8 @@ function propSprite(p: PropPlacement, L: Layout, classic: () => HTMLCanvasElemen
     case "fishtank-stand":
       return k("fishtank-stand", waterSphereBase);
     case "whiteboard":
-      return k(`whiteboard-${p.w}`, () => starChart(p.w ?? 80));
+      // Plans go up on the viewscreen: the board is only where the office draws them.
+      return k(`whiteboard-${p.w}`, () => makeCanvas((p.w ?? 80) + 2, 46, () => {}));
     case "tv":
       return k(`tv-${p.w}-${L.tv.h}-${p.z > 0}`, () => newsScreen(p.w ?? 120, L.tv.h, p.z > 0));
     case "piano":
@@ -1132,9 +1155,9 @@ function propSprite(p: PropPlacement, L: Layout, classic: () => HTMLCanvasElemen
     case "ai-rack":
       return k("ai-rack", aiCore);
     case "boss-desk":
-      return k(`boss-desk-${p.w}`, () => captainsDesk(p.w ?? 60));
+      return k(`boss-desk-${p.w}`, () => bridgeRail(p.w ?? 60));
     case "boss-chair":
-      return k("boss-chair", captainsChair);
+      return k("boss-chair", captainsBack);
     case "dog-bed":
       return k("dog-bed", chargePad);
     case "library-shelf":

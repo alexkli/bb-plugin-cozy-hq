@@ -294,35 +294,9 @@ function roomFloor(ctx: CanvasRenderingContext2D, room: Room, L: Layout, plan: S
       rect(ctx, r.x, r.y, r.w, 2, "#3aa6cc");
       break;
     }
-    case "boss": {
-      // The captain's cabin: warm teak planks and a navy rug with an orange border.
-      for (let y = r.y; y < r.y + r.h; y += 5) {
-        for (let x = r.x - ((y / 5) % 3) * 9; x < r.x + r.w; x += 28) {
-          const tone = hash(`teak${x}|${y}`) % 3 === 0 ? "#9a6a44" : hash(`teak${x}|${y}`) % 3 === 1 ? "#a8774e" : "#8f6040";
-          clipTo(ctx, r, () => {
-            rect(ctx, x, y, 28, 5, tone);
-            rect(ctx, x, y + 4, 28, 1, "#6e4630");
-            rect(ctx, x, y, 1, 4, "#7a5038");
-          });
-        }
-      }
-      const rw = Math.min(r.w - 30, 110);
-      const rh = Math.min(r.h - 40, 64);
-      if (rw > 20 && rh > 16) {
-        const g = new Grid(rw, rh);
-        g.rrect(0, 0, rw, rh, P.orangeLo, 3);
-        g.rrect(2, 2, rw - 4, rh - 4, P.navy, 2);
-        g.rrect(5, 5, rw - 10, rh - 10, P.navyHi, 1);
-        g.rrect(6, 6, rw - 12, rh - 12, P.navy, 1);
-        // A compass star in the middle.
-        const mx = Math.floor(rw / 2);
-        const my = Math.floor(rh / 2);
-        for (let i = -5; i <= 5; i++) g.set(mx + i, my, P.amber).set(mx, my + Math.round(i * 0.7), P.amber);
-        g.set(mx - 1, my - 1, P.orange).set(mx + 1, my + 1, P.orange).set(mx + 1, my - 1, P.orange).set(mx - 1, my + 1, P.orange);
-        blit(ctx, g, r.x + Math.round((r.w - rw) / 2) + 6, r.y + 22);
-      }
+    case "boss":
+      if (plan) bridgeFloor(ctx, r, plan);
       break;
-    }
     case "games": {
       // The rec deck: a court with painted lines.
       rect(ctx, r.x, r.y, r.w, r.h, "#4d6a86");
@@ -375,6 +349,82 @@ function roomFloor(ctx: CanvasRenderingContext2D, room: Room, L: Layout, plan: S
     }
     default:
       break;
+  }
+}
+
+// ------------------------------------------------------------------ the bridge
+
+const BR = { beige: "#d8c4a2", beigeHi: "#ead9bb", beigeLo: "#b49c78", wine: "#6e2f3e", wineHi: "#8a3c4e", carpet: "#4b3a46", carpetLo: "#3f303b", deck: "#5d4a54" };
+
+/** The bridge floor: soft plum carpet, the command well, the raised rear deck, ramps up both sides, console banks on the side walls. */
+function bridgeFloor(ctx: CanvasRenderingContext2D, r: Rect, plan: ShipPlan): void {
+  rect(ctx, r.x, r.y, r.w, r.h, BR.carpet);
+  for (let y = r.y + 2; y < r.y + r.h; y += 4) for (let x = r.x + 1 + ((y - r.y) % 8 ? 2 : 0); x < r.x + r.w; x += 5) rect(ctx, x, y, 1, 1, "#56434f");
+  const rail = plan.rail;
+  const cap = plan.captain;
+  if (cap && rail) {
+    // A darker ellipse of carpet under the command area, a pale inlay ring around it.
+    const cx = cap.x + cap.w / 2;
+    const cy = cap.y + 4;
+    clipTo(ctx, r, () => {
+      for (let y = -24; y <= 24; y++) {
+        const half = Math.round(Math.sqrt(Math.max(0, 1 - (y / 24) ** 2)) * 62);
+        rect(ctx, cx - half, cy + y, half * 2, 1, BR.carpetLo);
+      }
+      for (let i = 0; i < 180; i++) {
+        const a = (i / 180) * Math.PI * 2;
+        rect(ctx, Math.round(cx + Math.cos(a) * 64), Math.round(cy + Math.sin(a) * 25), 1, 1, "#7a6070");
+      }
+    });
+  }
+  const deck = plan.rearDeck;
+  if (deck) {
+    // The raised rear deck: a lighter carpet with a lit step along its front.
+    rect(ctx, deck.x, deck.y, deck.w, deck.h, BR.deck);
+    for (let y = deck.y + 3; y < deck.y + deck.h; y += 4) for (let x = deck.x + 2 + ((y - deck.y) % 8 ? 2 : 0); x < deck.x + deck.w; x += 6) rect(ctx, x, y, 1, 1, "#6a5660");
+    rect(ctx, deck.x, deck.y + deck.h, deck.w, 2, "rgba(20,14,20,0.35)");
+  }
+  for (const [i, q] of plan.ramps.entries()) {
+    // A ramp: ribbed treads rising toward the rear deck, a lit edge.
+    rect(ctx, q.x, q.y, q.w, q.h, "#a89070");
+    for (let y = q.y + 2; y < q.y + q.h; y += 3) rect(ctx, q.x + 1, y, q.w - 2, 1, "#8f7658");
+    rect(ctx, q.x, q.y, q.w, 1, "#c8b08a");
+    rect(ctx, i ? q.x : q.x + q.w - 1, q.y, 1, q.h, "#ffd9a0");
+  }
+  // Console banks along the side walls, curving in toward the screen.
+  const bank = (x: number, dir: 1 | -1) => {
+    const y0 = r.y + 6;
+    const len = Math.min(r.h - 30, (rail?.y ?? r.y + r.h) - r.y - 10);
+    for (let j = 0; j < len; j++) {
+      const k = Math.max(0, 1 - j / 18);
+      const w = 5 + Math.round(k * 10);
+      const xx = dir > 0 ? x : x - w;
+      rect(ctx, xx, y0 + j, w, 1, j === 0 ? BR.beigeHi : BR.beige);
+      rect(ctx, dir > 0 ? xx + w - 1 : xx, y0 + j, 1, 1, BR.beigeLo);
+      if (j % 7 === 3) rect(ctx, dir > 0 ? xx + 1 : xx + w - 3, y0 + j, 2, 1, j % 14 === 3 ? "#ffc857" : "#7fe3ff");
+    }
+  };
+  bank(r.x + 1, 1);
+  bank(r.x + r.w - 1, -1);
+}
+
+/** The bridge's side walls: warm beige bulkheads with a burgundy band, the ready room's door to port and the lift's to starboard. */
+function bridgeWalls(ctx: CanvasRenderingContext2D, r: Rect, plan: ShipPlan | null): void {
+  for (const x of [r.x - 3, r.x + r.w - 1]) {
+    rect(ctx, x, r.y - 2, 4, r.h + 2, OUTLINE);
+    rect(ctx, x + 1, r.y - 2, 2, r.h + 2, BR.beige);
+    rect(ctx, x + 1, r.y - 2, 1, r.h + 2, BR.beigeHi);
+    for (let y = r.y + 10; y < r.y + r.h - 6; y += 28) rect(ctx, x + 1, y, 2, 6, BR.wine);
+  }
+  for (const d of [plan?.readyRoom, plan?.lift]) {
+    if (!d) continue;
+    const g = new Grid(d.w + 2, d.h + 2);
+    g.rrect(1, 1, d.w, d.h, BR.beigeLo, 1);
+    g.rect(2, 3, d.w - 2, d.h - 3, "#8f7658");
+    g.vline(Math.floor(d.w / 2) + 1, 3, d.h - 3, "#6e5a44");
+    g.rect(2, 2, d.w - 2, 1, d === plan?.readyRoom ? "#ffc857" : "#7fe3ff");
+    g.outline(OUTLINE);
+    blit(ctx, g, d.x - 1, d.y - 1);
   }
 }
 
@@ -545,6 +595,10 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
   roomWalls(ctx, room, L) {
     const r = room.rect;
     if (!room.walls) return;
+    if (room.kind === "boss") {
+      bridgeWalls(ctx, r, planOf(L));
+      return;
+    }
     const seg = L.segments.find((sg) => r.x >= sg.x0 && r.x < sg.x1);
     const atWall = seg !== undefined && r.y <= seg.depth + 1;
     const cabin = room.walls === "wood";

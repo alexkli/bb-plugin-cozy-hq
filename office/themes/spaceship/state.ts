@@ -31,6 +31,16 @@ export const SHIP = {
   crateAt: NEVER,
   crate: 0,
   crateKind: "foam" as CrateKind,
+  /** The captain gave the order: the engines open up for a moment. */
+  engageAt: NEVER,
+  /** Someone's hailing us: their face on the viewscreen (which one, and what they say). */
+  hailAt: NEVER,
+  hailWho: 0,
+  hailLine: "",
+  /** Red alert: the lights pulse red and the crew scramble to stations. */
+  alertAt: NEVER,
+  /** The ready room's door, open for a moment. */
+  readyAt: NEVER,
   /** Porthole visitors: the next one picked when a porthole is clicked, and those on show per window. */
   nextVisitor: "satellite" as Visitor,
   portholes: new Map<number, { visitor: Visitor; at: number; seen: number }>(),

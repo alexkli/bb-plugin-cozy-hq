@@ -9,13 +9,13 @@
 // space beyond. Pure geometry (no canvas): the layout tests run it in Node.
 import type { Layout, PropPlacement, Rect } from "../../layout.ts";
 import {
+  arcadeFromAbove,
+  bossToys,
   Builder,
-  buildBoss,
   buildGames,
   buildKitchen,
   buildLibrary,
   buildLounge,
-  buildMeeting,
   buildPods,
   clamp,
   finish,
@@ -52,8 +52,24 @@ export interface ShipPlan {
   troughs: Rect[];
   /** Where the hydroponics click shows (the bay, or the tower). */
   hydro: Rect | null;
-  /** The bridge (the meeting room) and the captain's cabin. */
+  /** The bridge: your office and where plans are made and presented. */
   bridge: Rect;
+  /** How much bridge the panel has room for. */
+  bridgeSize: "grand" | "compact" | "mini";
+  /** The consoles on the bridge floor (helm, ops, the side station, the rear tactical station). */
+  consoles: { kind: "helm" | "ops" | "side" | "rear"; rect: Rect }[];
+  /** The captain's chair (your seat; its back faces us), the rail behind the command area, the raised rear deck. */
+  captain: Rect | null;
+  rail: Rect | null;
+  rearDeck: Rect | null;
+  /** Where to click: the jump (the helm), red alert (the tactical station). */
+  helm: Rect | null;
+  alert: Rect | null;
+  /** The ready room's door in the bridge's port wall, the lift's in the starboard wall. */
+  readyRoom: Rect | null;
+  lift: Rect | null;
+  /** The bridge's two ramps up to the rear deck. */
+  ramps: Rect[];
 }
 
 export function planOf(L: Layout): ShipPlan | null {
@@ -62,6 +78,122 @@ export function planOf(L: Layout): ShipPlan | null {
 }
 
 // ------------------------------------------------------------------ compartments
+
+/**
+ * The bridge, under the viewscreen, door at the back: the captain's chair
+ * (yours) in the middle with a first officer's chair either side (your
+ * guests), helm and ops ahead of it, a station on the starboard wall,
+ * plotting stations at the forward console where plans go up on the
+ * viewscreen, presenters beside the command area, the curved rail behind it
+ * and the raised rear deck with the tactical station. Ramps up both sides,
+ * the ready room off the port wall. Smaller panels get a compact bridge (no
+ * rear deck) or a mini one (no helm and ops). Returns your office.
+ */
+function buildBridge(b: Builder, r: Rect, hallY: number, plan: ShipPlan): Layout["boss"] {
+  const doorX = r.x + 14;
+  b.rooms.push({ kind: "boss", rect: r, walls: "wood", doorX, doorSide: "bottom" });
+  const size: ShipPlan["bridgeSize"] = r.h >= 150 ? "grand" : r.h >= 112 ? "compact" : "mini";
+  plan.bridgeSize = size;
+  const cx = Math.round(r.x + 8 + (r.w - 8) / 2);
+  const yb = r.y + 22;
+  const yf = r.y + (size === "grand" ? 54 : 48);
+  const ys = size === "grand" ? r.y + 90 : size === "compact" ? r.y + 82 : r.y + 56;
+  const laneB = yb + 6;
+  const laneM = size === "mini" ? ys - 18 : yf + 10;
+  const keep: Rect[] = [{ x: doorX - 9, y: r.y, w: 18, h: r.h }];
+  for (const y of [laneB, laneM]) keep.push({ x: r.x, y: y - 7, w: r.w, h: 14 });
+  const path = (x: number, y: number, lane: number) => [
+    { x: doorX, y: hallY, c: true },
+    { x: doorX, y: r.y + r.h + 3 },
+    { x: doorX, y: lane },
+    { x, y: lane },
+    { x, y },
+  ];
+  const add = (sp: Spot) => {
+    b.spot(sp);
+    keep.push({ x: sp.x - 10, y: sp.y - 26, w: 20, h: 30 });
+  };
+  // Plotting stations at the forward console: their plans go up on the viewscreen.
+  for (const [i, k] of [0.34, 0.74].entries()) {
+    const x = Math.round(r.x + r.w * k);
+    add({ id: `board-${i}`, kind: "whiteboard", group: "meeting", x, y: yb, facing: "back", pose: "draw", path: path(x, yb, laneB), activity: "plotting a plan on the viewscreen" });
+  }
+  // Helm and ops, facing the screen; a station on the starboard wall on a grand bridge.
+  if (size !== "mini") {
+    for (const [i, dx] of [-24, 24].entries()) {
+      const x = cx + dx;
+      add({ id: `meet-${i}`, kind: "meeting-seat", group: "meeting", x, y: yf, facing: "back", pose: "sit-back", path: path(x, yf, laneM), activity: i ? "at ops on the bridge" : "at the helm" });
+      b.prop(`meet-chair-${i}`, "meeting-chair-back", x - 8, yf - 14, yf + 2);
+      const rect = { x: x - 12, y: yf - 24, w: 24, h: 14 };
+      plan.consoles.push({ kind: i ? "ops" : "helm", rect });
+      keep.push(rect);
+    }
+    plan.helm = plan.consoles[0]!.rect;
+    if (size === "grand" && r.w >= 210) {
+      const x = r.x + r.w - 18;
+      add({ id: "meet-2", kind: "meeting-seat", group: "meeting", x, y: yf - 2, facing: "back", pose: "sit-back", path: path(x, yf - 2, laneM), activity: "at a bridge station" });
+      b.prop("meet-chair-2", "meeting-chair-back", x - 8, yf - 16, yf);
+      const rect = { x: x - 11, y: yf - 26, w: 22, h: 14 };
+      plan.consoles.push({ kind: "side", rect });
+      keep.push(rect);
+    }
+  }
+  // The command area: your chair, a first officer's chair either side.
+  const seat = { x: cx, y: ys };
+  b.prop("boss-chair", "boss-chair", cx - 11, ys - 24, ys + 1);
+  b.poke("boss", "boss", { x: cx - 8, y: ys - 30, w: 16, h: 18 });
+  plan.captain = { x: cx - 11, y: ys - 12, w: 22, h: 12 };
+  for (const [i, dx] of [-24, 24].entries()) {
+    const x = cx + dx;
+    add({ id: `boss-guest-${i}`, kind: "boss-guest", group: "boss", x, y: ys, facing: "back", pose: "sit-back", path: path(x, ys, laneM), activity: "going over a draft with you" });
+    b.prop(`guest-chair-${i}`, "guest-chair", x - 8, ys - 14, ys + 2);
+  }
+  // Presenters beside the command area, facing you.
+  for (const [i, dx] of [52, -52].entries()) {
+    const x = cx + dx;
+    if (x < doorX + 18 || x > r.x + r.w - 14) continue;
+    add({ id: `present-${i}`, kind: "present", group: "present", x, y: ys - 6, facing: "front", pose: "stand", path: path(x, ys - 6, laneM), activity: "presenting a plan for your review" });
+  }
+  // The curved rail behind the command area: your "desk".
+  const railX = Math.max(r.x + 30, cx - 56);
+  const desk: Rect = { x: railX, y: ys + 6, w: Math.min(r.x + r.w - 30, cx + 56) - railX, h: 26 };
+  b.prop("boss-desk", "boss-desk", desk.x, desk.y, desk.y + 22, desk.w);
+  plan.rail = desk;
+  keep.push({ x: desk.x, y: desk.y, w: desk.w, h: 20 });
+  // The raised rear deck with the tactical station (red alert), on a grand bridge.
+  if (size === "grand") {
+    const y = desk.y + 34;
+    add({ id: "board-2", kind: "whiteboard", group: "meeting", x: cx, y, facing: "back", pose: "draw", path: path(cx, y, y + 6), activity: "at the tactical station" });
+    plan.alert = { x: cx - 12, y: desk.y + 4, w: 24, h: 12 };
+    plan.consoles.push({ kind: "rear", rect: { x: cx - 16, y: desk.y + 10, w: 32, h: 12 } });
+    plan.rearDeck = { x: r.x + 26, y: desk.y + 10, w: r.w - 52, h: r.y + r.h - 10 - (desk.y + 10) };
+    plan.ramps = [
+      { x: r.x + 4, y: desk.y - 6, w: 22, h: r.y + r.h - 10 - (desk.y - 6) },
+      { x: r.x + r.w - 26, y: desk.y - 6, w: 22, h: r.y + r.h - 10 - (desk.y - 6) },
+    ];
+  } else plan.alert = { x: cx - 12, y: desk.y + 2, w: 24, h: 12 };
+  // The ready room off the port wall, the lift to starboard.
+  plan.readyRoom = { x: r.x - 5, y: r.y + 30, w: 10, h: 22 };
+  if (size !== "mini") plan.lift = { x: r.x + r.w - 5, y: Math.min(r.y + r.h - 40, desk.y + 4), w: 10, h: 22 };
+  // The light column, the dog's charging pad.
+  const lampX = size === "grand" ? r.x + r.w - 22 : r.x + r.w - 20;
+  const lampY = size === "grand" ? r.y + r.h - 64 : r.y + 4;
+  b.prop("lamp", "lamp", lampX, lampY, lampY + 50);
+  b.poke("lamp", "lamp", { x: lampX, y: lampY, w: 16, h: 52 });
+  keep.push({ x: lampX - 2, y: lampY, w: 20, h: 54 });
+  const dogBed = size === "mini" ? { x: r.x + r.w - 46, y: r.y + r.h - 12 } : { x: r.x + 44, y: r.y + r.h - 12 };
+  b.prop("dog-bed", "dog-bed", dogBed.x - 12, dogBed.y - 8, dogBed.y - 6);
+  keep.push({ x: dogBed.x - 14, y: dogBed.y - 10, w: 28, h: 16 });
+  b.prop("boss-glass", "glass-front", r.x, r.y + r.h - 10, r.y + r.h + 1, r.w);
+  return bossToys(b, { room: r, seat, desk, dogBed, lamp: { x: lampX + 8, y: lampY + 4 } }, keep);
+}
+
+/** The plans go up on the viewscreen: the office's whiteboard is a tactical overlay on it (an invisible prop that carries the strokes). */
+function boardOn(b: Builder, vs: Rect): Rect {
+  const board: Rect = { x: vs.x + 4, y: vs.y + 2, w: Math.max(56, Math.min(vs.w - 40, 110)), h: 34 };
+  b.prop("whiteboard", "whiteboard", board.x, board.y, 1, board.w);
+  return board;
+}
 
 /** The muster station: rows of jump seats facing you, the comms desk (the bell) in the far corner. */
 function buildMuster(b: Builder, r: Rect, acc: Access, maxRows: number): void {
@@ -229,6 +361,8 @@ function dressWall(L: Layout, plan: ShipPlan, bridgeSeg: WallSegment, wallTv?: R
   const band = bridgeSeg.depth - 24;
   plan.ai = { x: vs.x + 8, y: band, w: 16, h: 18 };
   plan.gravity = vs.w >= 90 ? { x: vs.x + vs.w - 24, y: band, w: 14, h: 18 } : null;
+  // A mini bridge has no helm console: the jump control sits in the console under the viewscreen.
+  plan.helm ??= { x: vs.x + Math.round(vs.w / 2) - 12, y: band, w: 24, h: 18 };
   const busy: [number, number][] = [
     [w.pinboard.x - 4, w.pinboard.x + w.pinboard.w + 4],
     [w.calendar.x - 4, w.calendar.x + w.calendar.w + 4],
@@ -381,7 +515,8 @@ function widePlan(W: number, H: number, threads: number): Layout {
   const podCols = clamp(Math.floor((inner * 0.36) / 48), 3, 6);
   const c1w = podCols * 48;
   const a12 = c1x + c1w + 8;
-  const c3w = clamp(Math.round(inner * 0.3), 150, 240);
+  // The bridge is the showpiece: as wide as the rec room beside it allows.
+  const c3w = clamp(Math.round(inner * 0.36), 176, Math.min(320, inner - c1w - 32 - 176));
   const c3x = X1 - c3w;
   const a23 = c3x - 8;
   const c2x = a12 + 8;
@@ -390,8 +525,8 @@ function widePlan(W: number, H: number, threads: number): Layout {
   const DT = 88;
   const wantPods = Math.ceil((threads + 3) / (2 * podCols));
   const hy = clamp(Math.max(Math.round(FB * 0.56), wantPods >= 2 ? D + 2 * POD_H + 10 : 0), D + POD_H + 10, FB - 110);
-  // The viewscreen's wall is deep, but not so deep that the bridge's chart table can't seat its crew.
-  const DV = hy - 8 - 92 < 120 ? clamp(hy - 8 - 120, 80, 92) : 92;
+  // The viewscreen's wall is deep, but not so deep that the bridge can't have its rear deck.
+  const DV = hy - 8 - 92 < 150 ? clamp(hy - 8 - 150, 80, 92) : 92;
   const segments: WallSegment[] = [
     { x0: 0, x1: a12 + 14, depth: D },
     { x0: a12 + 14, x1: a23 - 2, depth: DT },
@@ -415,6 +550,16 @@ function widePlan(W: number, H: number, threads: number): Layout {
     troughs: [],
     hydro: null,
     bridge: { x: c3x, y: DV, w: c3w, h: 0 },
+    bridgeSize: "grand",
+    consoles: [],
+    captain: null,
+    rail: null,
+    rearDeck: null,
+    helm: null,
+    alert: null,
+    readyRoom: null,
+    lift: null,
+    ramps: [],
   };
 
   // Aft: crew quarters over the engine room above the corridor, the cargo bay below it.
@@ -426,8 +571,9 @@ function widePlan(W: number, H: number, threads: number): Layout {
     plan.core = buildEngine(b, eng, true);
     const qH = eng.y - 10 - (D + 4);
     if (qH >= 40) buildQuarters(b, { x: X0, y: D + 4, w: sW, h: qH }, { hallY: hy, aisleX: aS });
-    eventArea = buildCargo({ x: X0, y: hy + 12, w: sW, h: FB - 6 - (hy + 12) }, plan);
   }
+  // The cargo bay aft (built last: the arcade may need its corner).
+  const sternSlot: Rect | null = stern ? { x: X0, y: hy + 12, w: sW, h: FB - 6 - (hy + 12) } : null;
 
   // Amidships, port side: crew stations above the corridor; the galley below, more
   // stations, the rec deck and crew quarters as the height allows.
@@ -476,29 +622,37 @@ function widePlan(W: number, H: number, threads: number): Layout {
   } else if (quarters) {
     buildQuarters(b, { x: c2x + 8, y: hy - 8 - Math.min(110, hy - 8 - deckY), w: c2w - 16, h: Math.min(110, hy - 8 - deckY) }, { hallY: hy, aisleX: a23 });
   }
+  // Below the corridor amidships: the cargo bay (hydroponics under it when tall; aft decks
+  // have their cargo bay at the stern, so hydroponics or crew quarters here).
   const fullBelow = FB - 6 - (hy + 12);
-  const hydro = fullBelow - 132 - 16 >= 96 && c2w >= 150;
-  const belowH = hydro ? 132 : fullBelow;
-  const musterW = stern ? c2w : clamp(Math.round(c2w * 0.56), 104, c2w - 76);
-  const waiting: Rect = { x: c2x, y: hy + 12, w: musterW, h: belowH };
-  buildMuster(b, waiting, leftAcc, 3);
-  // The cargo bay beside the muster station (short decks may need that slot for the engine room: see below).
-  const cargoSlot: Rect | null = stern ? null : { x: c2x + musterW + 8, y: hy + 12, w: c2w - musterW - 8, h: belowH };
-  if (hydro) buildHydroponics(b, { x: c2x, y: waiting.y + waiting.h + 16, w: c2w, h: fullBelow - 132 - 16 }, { hallY: hy, aisleX: a12 }, plan);
+  const hydro = (stern ? fullBelow >= 96 : fullBelow - 110 - 16 >= 96) && c2w >= 150;
+  const belowH = hydro && !stern ? 110 : fullBelow;
+  const cargoSlot: Rect | null = stern ? null : { x: c2x, y: hy + 12, w: c2w, h: belowH };
+  if (hydro) {
+    const y = stern ? hy + 12 : hy + 12 + belowH + 16;
+    buildHydroponics(b, { x: c2x, y, w: c2w, h: FB - 6 - y }, { hallY: hy, aisleX: a12 }, plan);
+  } else if (stern && fullBelow >= 50 && !b.rooms.some((r) => r.kind === "library")) buildQuarters(b, { x: c2x, y: hy + 14, w: c2w, h: fullBelow - 2 }, { hallY: hy, aisleX: a12 });
 
-  // The bow: the bridge under the viewscreen, the captain's cabin below.
+  // The bow: the bridge under the viewscreen (your office); the muster station below it,
+  // the engine room under the bridge when there's height to spare.
+  const vsSeg = segments[2]!;
+  plan.viewscreen = { x: vsSeg.x0 + 32, y: 6, w: W - Math.max(E, 4) - 6 - (vsSeg.x0 + 32), h: DV - 34 };
   const topH = hy - 8 - DV;
-  const serverTop = !stern && topH >= 204;
-  const meeting: Rect = { x: c3x, y: DV, w: c3w, h: serverTop ? Math.min(230, topH - 54) : topH };
-  plan.bridge = meeting;
-  const whiteboard = buildMeeting(b, meeting, hy);
+  const serverTop = !stern && topH >= 250;
+  const bridgeRect: Rect = { x: c3x, y: DV, w: c3w, h: serverTop ? Math.min(240, topH - 62) : topH };
+  plan.bridge = bridgeRect;
+  const meeting = bridgeRect;
+  const boss = buildBridge(b, bridgeRect, hy, plan);
+  const whiteboard = boardOn(b, plan.viewscreen);
   if (serverTop) {
-    const sy = meeting.y + meeting.h + 8;
-    plan.core = buildEngine(b, { x: c3x, y: sy, w: c3w - 28, h: Math.min(64, hy - 10 - sy) }, true);
+    const sy = bridgeRect.y + bridgeRect.h + 8;
+    // Clear of the bridge's door at its bottom left.
+    plan.core = buildEngine(b, { x: c3x + 28, y: sy, w: c3w - 28, h: Math.min(64, hy - 10 - sy) }, false);
   }
-  const bossRoom: Rect = { x: c3x, y: hy + 12, w: c3w, h: clamp(FB - 10 - (hy + 12), 96, 230) };
-  const boss = buildBoss(b, bossRoom, hy);
-  const underBoss = FB - 6 - (bossRoom.y + bossRoom.h + 8);
+  const waiting: Rect = { x: c3x, y: hy + 12, w: c3w, h: Math.min(fullBelow, 128) };
+  buildMuster(b, waiting, { hallY: hy, aisleX: a23 }, 3);
+  const underBoss = FB - 6 - (waiting.y + waiting.h + 8);
+  const bossRoom = waiting;
 
   // Utilities and (aft) the engine room along the bottom of the port side.
   if (below.h >= 40) {
@@ -518,16 +672,34 @@ function widePlan(W: number, H: number, threads: number): Layout {
   }
   if (underBoss >= 40) {
     const y = bossRoom.y + bossRoom.h + 8;
-    if (!b.server) plan.core = buildEngine(b, { x: c3x, y, w: c3w, h: Math.min(56, underBoss) }, false);
+    if (!b.server) plan.core = buildEngine(b, { x: c3x, y, w: c3w, h: Math.min(56, underBoss) }, true);
     else {
       b.plant("LARGE_PLANT", c3x + 4, FB - 52);
       b.plant("PLANT_2", c3x + c3w - 20, FB - 36);
     }
   }
+  if (sternSlot) {
+    let slot = sternSlot;
+    if (slot.h >= 64 && !b.spots.some((sp) => sp.kind === "arcade")) {
+      arcadeFromAbove(b, slot.x + slot.w - 28, slot.y, hy);
+      slot = { ...slot, w: slot.w - 36 };
+    }
+    eventArea = buildCargo(slot, plan);
+  }
   if (cargoSlot) {
-    // Short decks: no room for the engine room anywhere else, so it takes the cargo bay's place.
-    if (!b.server && cargoSlot.w >= 76 && cargoSlot.h >= 44) plan.core = buildEngine(b, { ...cargoSlot, y: cargoSlot.y + 4, h: Math.min(64, cargoSlot.h - 4) }, true);
-    else eventArea = buildCargo(cargoSlot, plan);
+    // Short decks: no room for the engine room anywhere else, so it shares the cargo bay's place.
+    let slot = cargoSlot;
+    if (!b.server && cargoSlot.w >= 76 && cargoSlot.h >= 44) {
+      const ew = cargoSlot.w >= 220 ? Math.round(cargoSlot.w * 0.45) : cargoSlot.w >= 140 ? cargoSlot.w - 46 : cargoSlot.w;
+      plan.core = buildEngine(b, { x: cargoSlot.x + cargoSlot.w - ew, y: cargoSlot.y + 4, w: ew, h: Math.min(64, cargoSlot.h - 4) }, false);
+      slot = { ...cargoSlot, w: cargoSlot.w - ew - 10 };
+    }
+    // The arcade cabinet in the cargo bay's corner when the rec room had no room for it.
+    if (slot.w >= 36 && slot.h >= 64 && !b.spots.some((sp) => sp.kind === "arcade")) {
+      arcadeFromAbove(b, slot.x + slot.w - 28, slot.y, hy);
+      slot = { ...slot, w: slot.w - 36 };
+    }
+    if (slot.w >= 72) eventArea = buildCargo(slot, plan);
   }
   const loungeFree = lounge.y + lounge.h - (tvParts.couch.y + tvParts.couch.h + 6);
   eventArea ??= loungeFree >= 70 || games === null ? { x: lounge.x + 16, y: tvParts.couch.y + tvParts.couch.h + 4, w: lounge.w - 32, h: Math.max(26, loungeFree) } : games;
@@ -551,7 +723,6 @@ function widePlan(W: number, H: number, threads: number): Layout {
   for (const r of [L.wall.pinboard, L.wall.calendar, L.wall.status]) r.x += shift;
   const bridgeSeg = segments[2]!;
   L.wall.clock = { x: bridgeSeg.x0 + 16, y: 20, r: 9 };
-  plan.viewscreen = { x: bridgeSeg.x0 + 32, y: 6, w: W - Math.max(E, 4) - 6 - (bridgeSeg.x0 + 32), h: DV - 34 };
   L.themeData = plan;
   dressWall(L, plan, bridgeSeg, wallTv);
   suitLocker(L, plan);
@@ -578,11 +749,12 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
   const gap = 16;
   const podCols = Math.max(2, Math.floor(innerW / 48));
   type Row = { kind: "galleyBridge" | "pods" | "lounge" | "pods2" | "cargo" | "quarters" | "musterBoss"; h: number; grow: number };
+  // The bridge gets the first row and most of the spare height.
   const rows: Row[] = [
-    { kind: "galleyBridge", h: 116, grow: 1 },
+    { kind: "galleyBridge", h: 128, grow: 1.6 },
     { kind: "pods", h: POD_H, grow: 0 },
-    { kind: "lounge", h: 136, grow: 1 },
-    { kind: "musterBoss", h: 140, grow: 1.5 },
+    { kind: "lounge", h: 136, grow: 0.8 },
+    { kind: "musterBoss", h: 120, grow: 0.8 },
   ];
   const needPods = Math.ceil((threads + 3) / (2 * podCols));
   const used = () => top + rows.reduce((s, r) => s + r.h + gap, 0);
@@ -622,6 +794,16 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
     troughs: [],
     hydro: null,
     bridge: { x: 0, y: 0, w: 0, h: 0 },
+    bridgeSize: "compact",
+    consoles: [],
+    captain: null,
+    rail: null,
+    rearDeck: null,
+    helm: null,
+    alert: null,
+    readyRoom: null,
+    lift: null,
+    ramps: [],
   };
   let kitchen: Rect | null = null;
   let lounge: Rect | null = null;
@@ -643,7 +825,11 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
         plan.synth = synthOn(b, k);
         meeting = { x: rect.x + kw + 4, y: rect.y, w: rect.w - kw - 4, h: rect.h - 4 };
         plan.bridge = meeting;
-        whiteboard = buildMeeting(b, meeting, below);
+        boss = buildBridge(b, meeting, below, plan);
+        // The viewscreen over the bridge, left of the airlock and its "?" tag (as dressed below).
+        const vx = x0 + kw - 2 + 28;
+        plan.viewscreen = { x: vx, y: 6, w: Math.min(aisleX, W - 14) - 26 - 6 - vx, h: DV - 34 };
+        whiteboard = boardOn(b, plan.viewscreen);
         break;
       }
       case "pods":
@@ -661,13 +847,11 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
         buildQuarters(b, { ...rect, y: rect.y + 4, h: rect.h - 4 }, { hallY: below, aisleX });
         break;
       case "musterBoss": {
-        const ww = Math.round(rect.w * 0.56);
-        waiting = { x: rect.x, y: rect.y + 4, w: ww - 4, h: rect.h - 54 };
-        buildMuster(b, waiting, { hallY: above, aisleX: rect.x + ww }, 2);
-        const bossRoom: Rect = { x: rect.x + ww + 4, y: rect.y + 4, w: rect.w - ww - 4, h: Math.min(rect.h - 8, H - 4 - (rect.y + 4)) };
-        boss = buildBoss(b, bossRoom, above);
+        // The muster station across the deck, utilities and the engine room under it.
+        waiting = { x: rect.x, y: rect.y + 4, w: rect.w - 10, h: rect.h - 54 };
+        buildMuster(b, waiting, { hallY: above, aisleX }, 2);
         const sTop = waiting.y + waiting.h + 6;
-        const sw = waiting.x + waiting.w - (x0 + 78);
+        const sw = Math.min(waiting.x + waiting.w - (x0 + 78), 180);
         utilitiesAt(b, x0 + 2, rect.y + rect.h - 4, above);
         if (sw >= 60 && rect.y + rect.h - sTop >= 34) plan.core = buildEngine(b, { x: x0 + 78, y: sTop, w: sw, h: Math.min(52, rect.y + rect.h - sTop) }, false);
         break;
@@ -704,7 +888,6 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
   L.entrance = { x: aisleX, y: DV + 2 };
   L.entrancePath = [{ x: aisleX, y: net.halls[0]!, c: true }, L.entrance];
   L.wall.clock = { x: bridgeSeg.x0 + 14, y: 20, r: 9 };
-  plan.viewscreen = { x: bridgeSeg.x0 + 28, y: 6, w: L.wall.legendNote.x - 6 - (bridgeSeg.x0 + 28), h: DV - 34 };
   L.themeData = plan;
   dressWall(L, plan, bridgeSeg);
   suitLocker(L, plan);

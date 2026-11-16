@@ -6,11 +6,13 @@
 // consoles glow. The shows the clicks start are drawn here (clicks.ts).
 import type { WeatherKind } from "../../../contract.ts";
 import type { Layout, Rect } from "../../layout.ts";
-import type { Drawable, Light, PaintInfo, Theme } from "../../theme.ts";
+import type { CharPose, Expression } from "../../characters.ts";
+import type { Facing } from "../../layout.ts";
+import type { Drawable, Light, PaintInfo, PoseOf, Theme } from "../../theme.ts";
 import { Grid, OUTLINE, cached, drawPixelText, hash, mix, pixelTextWidth, shade } from "../../themekit.ts";
 import { P, done, fill, hazard, panel } from "./pal.ts";
 import { planOf, type ShipPlan } from "./plan.ts";
-import { hullSpace, phenomenon, portholeView, systemOf, viewscreen } from "./space.ts";
+import { drawHail, hullSpace, phenomenon, portholeView, systemOf, viewscreen } from "./space.ts";
 import { SHIP, since, type Visitor } from "./state.ts";
 
 let deckW = 666;
@@ -366,6 +368,41 @@ function zeroG(L: Layout, t: number): void {
   }
 }
 
+// ------------------------------------------------------------------ the bridge
+
+/** A bridge console (w×h): a warm beige shell, its sloped top a dark panel of segmented light strips (the blinking is live). */
+function consoleSprite(w: number, h: number): HTMLCanvasElement {
+  return cached(`spaceship|console|${w}|${h}`, () => {
+    const g = new Grid(w, h);
+    g.rrect(0, 2, w, h - 2, "#b49c78", 2);
+    g.rrect(0, 1, w, h - 4, "#d8c4a2", 2);
+    g.hline(2, 1, w - 4, "#ead9bb");
+    g.rect(2, 3, w - 4, h - 8, "#141a28");
+    g.rect(2, h - 4, w - 4, 1, "#6e2f3e");
+    return done(g);
+  });
+}
+
+const STRIP = ["#ffc857", "#7fe3ff", "#ff8a6b", "#8ff0b5", "#b39cff"];
+
+/** The live face of a console: rows of segmented strips that shift, and a couple of blinking readouts. */
+function consoleLights(ctx: CanvasRenderingContext2D, q: Rect, seed: number, t: number, alert: boolean): void {
+  const x0 = q.x + 3;
+  const w = q.w - 6;
+  for (let row = 0; row < Math.max(1, Math.floor((q.h - 8) / 2)); row++) {
+    const y = q.y + 4 + row * 2;
+    for (let x = 0; x < w; x += 4) {
+      const on = (Math.floor(t * (1.5 + row)) + x + seed + row * 3) % 7 !== 0;
+      if (!on) continue;
+      fill(ctx, x0 + x, y, Math.min(3, w - x), 1, alert ? (row % 2 ? "#ff6b6b" : "#ffb0a0") : STRIP[(seed + row + Math.floor(x / 8)) % STRIP.length]!);
+    }
+  }
+  if (Math.floor(t * 2 + seed) % 3) fill(ctx, q.x + q.w - 5, q.y + q.h - 6, 2, 1, alert ? "#ff6b6b" : "#ffffff");
+}
+
+/** Red alert: seconds into it (7 s), or -1. */
+const alertK = (t: number) => since(SHIP.alertAt, t, 7);
+
 // ------------------------------------------------------------------ the hooks
 
 function underlay(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): void {
@@ -375,7 +412,32 @@ function underlay(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): vo
   corridorLights(ctx, L, info.t, info.night);
   if (!plan) return;
   viewscreen(ctx, plan.viewscreen, info.t, info.weather, L.W);
+  drawHail(ctx, plan.viewscreen, info.t - SHIP.hailAt, SHIP.hailWho, SHIP.hailLine, info.t);
   aiCaption(ctx, plan, info.t);
+  // The ready room's door sliding open on a warm room: a desk lamp, a little fish tank.
+  const rr = plan.readyRoom;
+  const rk = since(SHIP.readyAt, info.t, 4);
+  if (rr && rk >= 0) {
+    const open = Math.min(1, rk / 0.4, (4 - rk) / 0.4);
+    fill(ctx, rr.x, rr.y, rr.w, rr.h, "#f2c98a");
+    fill(ctx, rr.x + 1, rr.y + rr.h - 8, rr.w - 2, 3, "#8a5a3a");
+    fill(ctx, rr.x + 2, rr.y + 5, 3, 3, "#5fc8f0");
+    fill(ctx, rr.x + rr.w - 4, rr.y + 4, 2, 2, "#fff3c0");
+    const leaf = Math.round((rr.h / 2) * (1 - open));
+    if (leaf > 0) {
+      fill(ctx, rr.x, rr.y, rr.w, leaf, "#8f7658");
+      fill(ctx, rr.x, rr.y + rr.h - leaf, rr.w, leaf, "#8f7658");
+    }
+  }
+  // Red alert: the bridge's rails and the corridors' light strips pulse red.
+  const ak = alertK(info.t);
+  if (ak >= 0) {
+    const on = Math.sin(ak * 6) > 0;
+    for (const hy of L.net.halls) {
+      fill(ctx, 0, hy - 9, L.W, 1, on ? "#ff4a4a" : "#7a2020");
+      fill(ctx, 0, hy + 8, L.W, 1, on ? "#ff4a4a" : "#7a2020");
+    }
+  }
   bridgeConsole(ctx, plan, info.t);
   hullSpace(ctx, L.W, L.H, plan.edgeX, plan.edgeY, info.t, info.weather, info.night);
   // The airlock's status light over the hatch: amber while someone's out on a spacewalk.
@@ -389,6 +451,31 @@ function decor(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): Drawa
   if (!plan) return [];
   const t = info.t;
   const out: Drawable[] = [];
+  const alert = alertK(t) >= 0;
+  plan.consoles.forEach((c, i) => {
+    if (c.kind === "rear") {
+      out.push({ z: c.rect.y + 13, draw: () => consoleLights(ctx, { x: c.rect.x + 2, y: c.rect.y - 1, w: c.rect.w - 4, h: 8 }, i * 5, t, alert) });
+      return;
+    }
+    out.push({
+      z: c.rect.y + c.rect.h,
+      draw: () => {
+        ctx.drawImage(consoleSprite(c.rect.w, c.rect.h), c.rect.x, c.rect.y);
+        consoleLights(ctx, c.rect, i * 5, t, alert);
+      },
+    });
+  });
+  // The captain's arm consoles blink along.
+  const cap = plan.captain;
+  if (cap) {
+    out.push({
+      z: cap.y + cap.h + 2,
+      draw: () => {
+        if (Math.floor(t * 1.7) % 2) fill(ctx, cap.x + 2, cap.y + 6, 1, 1, alert ? "#ff6b6b" : P.cyan);
+        if (Math.floor(t * 2.3 + 1) % 3) fill(ctx, cap.x + cap.w - 3, cap.y + 6, 1, 1, alert ? "#ff6b6b" : P.amber);
+      },
+    });
+  }
   const syn = plan.synth;
   if (syn) {
     out.push({
@@ -625,6 +712,20 @@ function overlay(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): voi
       ctx.fillRect(Math.round(c.x + c.w / 2 + Math.cos(a) * r), Math.round(c.y + c.h / 2 + Math.sin(a) * r * 0.6), 1, 1);
     }
   }
+  // Red alert: everything pulses red.
+  const ak = alertK(t);
+  if (ak >= 0) {
+    const pulse = 0.5 + 0.5 * Math.sin(ak * 6);
+    const fade = Math.min(1, ak / 0.3, (7 - ak) / 0.6);
+    ctx.fillStyle = `rgba(255,40,50,${((0.08 + 0.16 * pulse) * fade).toFixed(3)})`;
+    ctx.fillRect(0, 0, L.W, L.H);
+    if (plan && pulse > 0.5) {
+      const v = plan.viewscreen;
+      fill(ctx, v.x, v.y, v.w, 1, "#ff4a4a");
+      fill(ctx, v.x, v.y + v.h - 1, v.w, 1, "#ff4a4a");
+      drawPixelText(ctx, "RED ALERT", v.x + v.w - 40, v.y + 3, "#ffb0a0");
+    }
+  }
   // An ion storm outside: the lights stutter with the arcs.
   if (phenomenon(info.weather) === "ion") {
     const beat = Math.floor(t * 1.3);
@@ -656,6 +757,15 @@ function lights(L: Layout, info: PaintInfo): Light[] {
     if (plan.airlock) out.push([plan.airlock.x + 8, plan.airlock.y + 14, 16, 0.6, P.mint, 0.08]);
     if (plan.cargo) out.push([plan.cargo.x + plan.cargo.w / 2, plan.cargo.y + 10, Math.max(40, plan.cargo.w * 0.5), 0.55, "#ffd9a0", 0.06]);
     if (plan.edgeX > 5) out.push([0, L.H - plan.edgeY - 40, 40, 0.6, "#6ebeff", 0.18]);
+    // The bridge: soft, warm light from the side walls, the consoles' glow; red when on alert.
+    const br = plan.bridge;
+    const ak = alertK(t);
+    const warm = ak >= 0 ? "#ff5050" : "#ffd9a0";
+    const k = ak >= 0 ? 0.25 + 0.25 * Math.sin(ak * 6) : 0.1;
+    for (let y = br.y + 30; y < br.y + br.h - 10; y += 50) out.push([br.x + 8, y, 40, 0.7, warm, k], [br.x + br.w - 8, y, 40, 0.7, warm, k]);
+    for (const c of plan.consoles) out.push([c.rect.x + c.rect.w / 2, c.rect.y + 6, 18, 0.7, ak >= 0 ? "#ff6b6b" : P.cyan, 0.14]);
+    if (plan.captain) out.push([plan.captain.x + 11, plan.captain.y, 26, 0.6, warm, 0.08]);
+    if (ak >= 0) for (const hy of L.net.halls) for (let x = 40; x < L.W; x += 120) out.push([x, hy, 36, 0.5, "#ff4040", 0.12 + 0.1 * Math.sin(ak * 6)]);
   }
   for (const w of L.wall.windows) out.push([w.x + 12, w.y + 12, 22, 0.55, "#a8b8ff", 0.06]);
   // The crew stations' consoles glow softly through the night shift.
@@ -753,7 +863,18 @@ function outdoor(weather: WeatherKind, _night: boolean): string {
   }
 }
 
-export const LIVE: Pick<Theme, "sky" | "outside" | "outdoor" | "wallLights" | "underlay" | "decor" | "overlay" | "lighting" | "doorOpen" | "openWindow" | "boardInk"> = {
+/**
+ * You sit in the captain's chair facing the viewscreen: we see the chair's
+ * back and your head over it, now and then a hand on the arm console. You
+ * still turn round to wave back when clicked.
+ */
+function pose(p: PoseOf, info: PaintInfo): { pose: CharPose; expr: Expression; facing?: Facing } | null {
+  if (p.kind !== "boss" || p.pose === "raise" || p.pose === "cheer") return null;
+  const k = Math.floor(info.t / 3.1) % 5;
+  return { pose: k === 3 ? "type0" : k === 4 ? "type1" : "sit-back", expr: p.expr, facing: "back" };
+}
+
+export const LIVE: Pick<Theme, "sky" | "outside" | "outdoor" | "wallLights" | "underlay" | "decor" | "overlay" | "lighting" | "doorOpen" | "openWindow" | "boardInk" | "pose"> = {
   // Space is dark whatever the hour; the hour only sets the ship's shift (night dims the lights).
   sky: (_hour, classic) => ({ top: "#05070f", bottom: "#0b1024", night: classic.night }),
   outside: (ctx, win, index, info) => portholeView(ctx, win, index, info.t, info.weather, deckW),
@@ -770,6 +891,7 @@ export const LIVE: Pick<Theme, "sky" | "outside" | "outdoor" | "wallLights" | "u
   },
   doorOpen,
   openWindow,
-  // Inks on the bridge's glass star chart.
-  boardInk: ["#2b5fa8", "#c2632a", "#23807f", "#6a4ad0"],
+  // Plans go up on the viewscreen in bright tactical colors.
+  boardInk: ["#7fe3ff", "#ffc857", "#8ff0b5", "#ff9ac8"],
+  pose,
 };

@@ -8,12 +8,16 @@
 import type { Layout, Point, Rect } from "../../layout.ts";
 import type { GatherCue, GatherSpot, SceneryActions, SceneryClickable, SoundRecipe, SynthKit, Theme } from "../../theme.ts";
 import { planOf } from "./plan.ts";
-import { SYSTEMS, systemOf } from "./space.ts";
+import { CALLER_COUNT, SYSTEMS, systemOf } from "./space.ts";
 import { SHIP, since, type CrateKind, type SynthItem } from "./state.ts";
 import { WORDS } from "./words.ts";
 
 const HOVER = {
-  viewscreen: "Viewscreen · jump to the next star system",
+  viewscreen: "Viewscreen · open a channel",
+  helm: "Helm · jump to the next star system",
+  captain: "The captain's chair · give the order",
+  alert: "Tactical · sound red alert",
+  ready: "The ready room · knock",
   synth: "Food synthesizer · order lunch (results vary)",
   core: "The drive core · give it a nudge",
   gravity: "Gravity switch · please don't",
@@ -36,6 +40,25 @@ const AI_LINES = [
   "The plants and I are on speaking terms again.",
   "Please do not tap the viewscreen. It tickles.",
   "Recycled coffee is ninety percent coffee. Don't ask about the rest.",
+];
+
+/** The order from the chair, and the crew's answer (the gesture, in the ship's own words). */
+const ORDERS: [string, string][] = [
+  ["You heard the captain. Let's go.", "Aye!"],
+  ["Nice and smooth. Engage.", "Engines answering."],
+  ["Course is set. Off we go.", "Aye, captain."],
+  ["On your word. And that was the word.", "Going!"],
+  ["Ahead, gently. Coffee's on the console.", "Aye aye."],
+];
+
+/** What friendly callers say when they hail us. */
+const HAILS = [
+  "Greetings, friends. We bring snacks.",
+  "Hello! Your ship is very shiny.",
+  "We come in peace. And in slippers.",
+  "Is this the way to the nebula? We took a left.",
+  "Our captain says hi. Hi!",
+  "Lovely day for it. Any day, really. It's space.",
 ];
 
 const SYNTH: { item: SynthItem; odd: boolean; lines: [string, string, string] }[] = [
@@ -67,6 +90,10 @@ function clickables(L: Layout): SceneryClickable[] {
     if (rect && rect.w > 0 && rect.h > 0) out.push({ id, rect, hover });
   };
   add("viewscreen", plan.viewscreen, HOVER.viewscreen);
+  add("helm", plan.helm, HOVER.helm);
+  add("captain", plan.captain, HOVER.captain);
+  add("alert", plan.alert, HOVER.alert);
+  add("ready", plan.readyRoom, HOVER.ready);
   add("synth", plan.synth, HOVER.synth);
   add("core", plan.core, HOVER.core);
   add("gravity", plan.gravity, HOVER.gravity);
@@ -103,6 +130,71 @@ function jump(act: SceneryActions): string | null {
   const name = systemOf(SHIP.system).name.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
   chatter(act, { x: v.x + v.w / 2, y: v.y + v.h + 40 }, 220, [pick(["Hold on to your coffee!", "Here we go!", "Jumping!"]), `${name}. Lovely.`], 0.2, 2.6);
   return "ship-warp";
+}
+
+/** The bridge's crew: whoever's on the bridge, else whoever's nearest it. */
+function bridgeCrew(act: SceneryActions): { id: string }[] {
+  const r = planOf(act.L)!.bridge;
+  return act.near(r.x + r.w / 2, r.y + r.h / 2, Math.max(r.w, r.h) * 0.6 + 80);
+}
+
+function order(act: SceneryActions): string | null {
+  if (since(SHIP.engageAt, act.t, 3) >= 0) return null;
+  SHIP.engageAt = act.t;
+  const [first, answer] = pick(ORDERS);
+  const crew = bridgeCrew(act);
+  if (crew[0]) act.say(crew[0].id, first, 2.6, 0.3);
+  if (crew[1]) act.say(crew[1].id, answer, 2, 2.2);
+  return "ship-warp";
+}
+
+function hail(act: SceneryActions): string | null {
+  if (since(SHIP.hailAt, act.t, 8) >= 0) return null;
+  SHIP.hailAt = act.t;
+  SHIP.hailWho = (SHIP.hailWho + 1 + Math.floor(Math.random() * (CALLER_COUNT - 1))) % CALLER_COUNT;
+  SHIP.hailLine = pick(HAILS);
+  const crew = bridgeCrew(act);
+  if (crew[0]) act.say(crew[0].id, pick(["Incoming hail!", "Someone's calling.", "On screen."]), 2, 0.2);
+  if (crew[1]) act.say(crew[1].id, pick(["They seem nice.", "Wave, everyone!", "Snacks? We accept.", "Friendly ones. Phew."]), 2.4, 4.4);
+  return "ship-hail";
+}
+
+function redAlert(act: SceneryActions): string | null {
+  if (since(SHIP.alertAt, act.t, 8) >= 0) return null;
+  SHIP.alertAt = act.t;
+  // The crew scramble to the bridge's side stations for a few seconds.
+  const L = act.L;
+  const r = planOf(L)!.bridge;
+  const room = L.rooms.find((q) => q.kind === "boss");
+  const doorX = room?.doorX ?? r.x + 14;
+  const hall = L.net.halls.filter((h) => h > r.y + r.h).reduce((a, h) => Math.min(a, h), Infinity);
+  if (Number.isFinite(hall)) {
+    const spots: GatherSpot[] = [];
+    for (const [x, y] of [
+      [r.x + 26, r.y + 44],
+      [r.x + r.w - 26, r.y + 44],
+      [r.x + 26, r.y + 64],
+      [r.x + r.w - 26, r.y + 64],
+    ] as const) {
+      if (y > r.y + r.h - 20) continue;
+      spots.push({ x, y, facing: x < r.x + r.w / 2 ? "left" : "right", pose: "stand", activity: "at a station for red alert", path: [{ x: doorX, y: hall, c: true }, { x: doorX, y: r.y + r.h + 3 }, { x: doorX, y }, { x, y }] });
+    }
+    const g = act.gather(spots, 3, [
+      { at: 0.3, who: 0, say: "Stations, everyone!" },
+      { at: 1.6, who: 1, say: "All decks report ready." },
+      { at: 2.6, who: 2, say: "False alarm? False alarm." },
+    ]);
+    if (!g) chatter(act, { x: r.x + r.w / 2, y: r.y + r.h / 2 }, 240, ["Red alert!", "Was that a drill?"], 0.2, 2.4);
+  }
+  return "ship-red-alert";
+}
+
+function readyRoom(act: SceneryActions): string | null {
+  const d = planOf(act.L)!.readyRoom;
+  if (!d || since(SHIP.readyAt, act.t, 4) >= 0) return null;
+  SHIP.readyAt = act.t;
+  chatter(act, { x: d.x + 20, y: d.y + d.h }, 200, [pick(["Ready room's all yours, captain.", "Knock knock. Just the fish.", "Anyone seen my mug? Last seen in there."])], 0.5);
+  return "ship-door";
 }
 
 function synth(act: SceneryActions): string | null {
@@ -211,7 +303,15 @@ function click(id: string, act: SceneryActions): string | null {
   if (!planOf(act.L)) return null;
   switch (id) {
     case "viewscreen":
+      return hail(act);
+    case "helm":
       return jump(act);
+    case "captain":
+      return order(act);
+    case "alert":
+      return redAlert(act);
+    case "ready":
+      return readyRoom(act);
     case "synth":
       return synth(act);
     case "core":
@@ -240,6 +340,25 @@ const later = (k: SynthKit, dt: number): SynthKit => ({
 
 /** Gravity off, and back on again seven seconds later (one recipe: a click can only start one sound). */
 export const CLICK_SOUNDS: Record<string, SoundRecipe> = {
+  // A channel opening: a crackle and a friendly three-note chirp.
+  "ship-hail": (k) => {
+    k.noise(0, 0.25, 0.05, 2400);
+    k.tone(660, 0.3, 0.12, "sine", 0.05);
+    k.tone(880, 0.45, 0.12, "sine", 0.05);
+    k.tone(1100, 0.6, 0.22, "sine", 0.05, 990);
+  },
+  // Red alert: a rising two-tone whoop, three times.
+  "ship-red-alert": (k) => {
+    for (let i = 0; i < 3; i++) {
+      k.tone(420, i * 0.9, 0.35, "square", 0.025, 640);
+      k.tone(640, i * 0.9 + 0.38, 0.3, "triangle", 0.03, 480);
+    }
+  },
+  // A sliding door: a soft hiss up and down.
+  "ship-door": (k) => {
+    k.swell(0, 0.5, 0.06, 1800, 900, 1);
+    k.tone(220, 0.42, 0.06, "sine", 0.03);
+  },
   "ship-zero-g": (k) => {
     WORDS.sounds?.["ship-gravity-off"]?.(k);
     WORDS.sounds?.["ship-gravity-on"]?.(later(k, 6.8));

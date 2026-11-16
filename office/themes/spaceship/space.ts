@@ -7,7 +7,7 @@
 // an ion storm for a thunderstorm, a nebula for fog, dust for clouds.
 import type { WeatherKind } from "../../../contract.ts";
 import type { Rect } from "../../layout.ts";
-import { OUTLINE, cached, drawPixelText, makeCanvas, mix, shade } from "../../themekit.ts";
+import { Grid, OUTLINE, cached, drawPixelText, makeCanvas, mix, shade } from "../../themekit.ts";
 import { fill, P } from "./pal.ts";
 import { NEVER, SHIP, since } from "./state.ts";
 
@@ -296,6 +296,9 @@ export function starfield(ctx: CanvasRenderingContext2D, r: Rect, t: number, war
 export function warpNow(t: number): number {
   const j = t - SHIP.jumpAt;
   if (j >= 0 && j < 1.8) return j < 1 ? Math.min(1, j * 1.6) : Math.max(0, 1 - (j - 1) * 2.5);
+  // The captain's order: a short burn.
+  const e = t - SHIP.engageAt;
+  if (e >= 0 && e < 3) return Math.sin((e / 3) * Math.PI) * 0.7;
   // A burn every few minutes: the streaks swell and fade.
   const p = t % 260;
   if (p > 200 && p < 208) return Math.sin(((p - 200) / 8) * Math.PI) * 0.45;
@@ -610,3 +613,106 @@ export function hullSpace(ctx: CanvasRenderingContext2D, W: number, H: number, E
 }
 
 export { NEVER };
+
+// ------------------------------------------------------------------ hails
+
+/** Friendly faces that hail the ship (original designs, 24×24, drawn at 2×): skin, accent, their bridge's tint. */
+const CALLERS = [
+  { skin: "#7fd17a", hi: "#b8f0a8", lo: "#4f9a50", accent: "#ffd84a", bg: "#1d3a2e" },
+  { skin: "#7aa8e8", hi: "#b8d4ff", lo: "#4a6fb0", accent: "#ff9ac8", bg: "#1d2440" },
+  { skin: "#c8a0e8", hi: "#e8d0ff", lo: "#8a64b0", accent: "#8ff0b5", bg: "#2e1d3a" },
+  { skin: "#f0a060", hi: "#ffd0a0", lo: "#b86a3a", accent: "#7fe3ff", bg: "#3a241d" },
+];
+export const CALLER_COUNT = CALLERS.length;
+
+function callerSprite(i: number): HTMLCanvasElement {
+  return cached(`spaceship|caller|${i}`, () => {
+    const c = CALLERS[i % CALLERS.length]!;
+    const g = new Grid(24, 24);
+    // Shoulders in a high collar.
+    g.rrect(3, 18, 18, 6, c.lo, 2);
+    g.rect(9, 17, 6, 2, c.accent);
+    if (i === 0) {
+      // A round head, three eyes, two antennae with bobbles.
+      g.ellipse(11.5, 10, 8, 7.5, c.skin);
+      g.vline(7, 0, 4, c.lo).vline(16, 0, 4, c.lo);
+      g.rect(6, 0, 2, 2, c.accent).rect(16, 0, 2, 2, c.accent);
+    } else if (i === 1) {
+      // A furry face with big round ears.
+      g.ellipse(4, 6, 3.5, 3.5, c.skin).ellipse(19, 6, 3.5, 3.5, c.skin);
+      g.ellipse(4, 6, 2, 2, c.accent).ellipse(19, 6, 2, 2, c.accent);
+      g.ellipse(11.5, 11, 8, 7, c.skin);
+      for (const [x, y] of [[5, 13], [18, 13], [6, 15], [17, 15]] as const) g.set(x, y, c.hi);
+    } else if (i === 2) {
+      // A crest of petals and a narrow chin.
+      for (let k = 0; k < 5; k++) g.ellipse(5 + k * 3.4, 3, 1.8, 3, k % 2 ? c.accent : c.hi);
+      g.ellipse(11.5, 10.5, 7.5, 7.5, c.skin);
+      g.rect(9, 16, 6, 2, c.skin);
+    } else {
+      // A wide face, freckles and little horns.
+      g.rect(4, 1, 2, 3, c.hi).rect(18, 1, 2, 3, c.hi);
+      g.rrect(3, 3, 18, 14, c.skin, 4);
+      for (const [x, y] of [[6, 11], [8, 12], [16, 11], [18, 12]] as const) g.set(x, y, c.lo);
+    }
+    g.ellipse(9, 6.5, 3, 2, c.hi);
+    g.outline(OUTLINE);
+    return g.toCanvas();
+  });
+}
+
+/**
+ * A hail on the viewscreen: a burst of static, then a friendly face that
+ * blinks and talks, their words typed along the bottom. `who` picks the
+ * caller, `k` is the seconds since the hail started (8 s in all).
+ */
+export function drawHail(ctx: CanvasRenderingContext2D, v: Rect, k: number, who: number, line: string, t: number): void {
+  if (k < 0 || k >= 8 || v.w <= 0) return;
+  const c = CALLERS[who % CALLERS.length]!;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(v.x, v.y, v.w, v.h);
+  ctx.clip();
+  const fade = Math.min(1, k / 0.5, (8 - k) / 0.5);
+  if (k < 0.5 || k > 7.6) {
+    // Static as the channel opens and closes.
+    for (let i = 0; i < 160; i++) fill(ctx, v.x + ((i * 37 + Math.floor(t * 97)) % v.w), v.y + ((i * 53 + Math.floor(t * 61)) % v.h), 2, 1, i % 3 ? "#9aa6c0" : "#f4f6ff");
+  }
+  ctx.globalAlpha = fade;
+  fill(ctx, v.x, v.y, v.w, v.h, c.bg);
+  for (let y = v.y; y < v.y + v.h; y += 3) fill(ctx, v.x, y, v.w, 1, mix(c.bg, "#000000", 0.25));
+  const s = v.h >= 52 ? 2 : 1;
+  const sp = callerSprite(who);
+  // Right of the middle: plans on screen stay readable at the top left.
+  const fx = Math.round(Math.min(v.x + v.w - 26 * s, v.x + v.w * 0.64 - 12 * s));
+  const fy = Math.round(v.y + v.h - 24 * s - (s === 2 ? 2 : 6));
+  ctx.drawImage(sp, fx, fy, 24 * s, 24 * s);
+  // Eyes that blink, a mouth that talks.
+  const blink = Math.floor(t * 3 + who) % 11 === 0;
+  const eyes = who === 0 ? [7, 11.5, 16] : [8, 15];
+  for (const ex of eyes) {
+    if (blink) fill(ctx, fx + Math.round(ex * s) - s, fy + 9 * s, 2 * s, s, OUTLINE);
+    else {
+      fill(ctx, fx + Math.round(ex * s) - s, fy + 8 * s, 2 * s, 2 * s, OUTLINE);
+      fill(ctx, fx + Math.round(ex * s) - s, fy + 8 * s, s, s, "#ffffff");
+    }
+  }
+  const talk = k > 0.8 && k < 6.5 && Math.floor(t * 8) % 2 === 0;
+  fill(ctx, fx + 9 * s, fy + 13 * s, 6 * s, (talk ? 2 : 1) * s, "#3a1e2e");
+  // The header, and their words typed along the bottom.
+  fill(ctx, v.x, v.y, v.w, 8, "rgba(0,0,0,0.45)");
+  drawPixelText(ctx, "INCOMING HAIL", Math.round(v.x + v.w * 0.4), v.y + 2, Math.floor(t * 3) % 2 ? c.accent : "#ffffff");
+  const shown = line.toUpperCase().slice(0, Math.max(0, Math.floor((k - 0.8) * 22)));
+  const words = shown.split(" ");
+  const lines: string[] = [];
+  for (const w of words) {
+    const last = lines[lines.length - 1];
+    if (last !== undefined && (last.length + 1 + w.length) * 4 <= v.w - 8) lines[lines.length - 1] = `${last} ${w}`;
+    else lines.push(w);
+  }
+  if (shown) {
+    const h = lines.length * 7 + 3;
+    fill(ctx, v.x, v.y + v.h - h, v.w, h, "rgba(0,0,0,0.55)");
+    lines.forEach((l, i) => drawPixelText(ctx, l, v.x + 4, v.y + v.h - h + 2 + i * 7, "#ffffff"));
+  }
+  ctx.restore();
+}
