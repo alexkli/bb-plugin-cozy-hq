@@ -11,7 +11,7 @@
 //   backdrop.ts  deck plating, bulkheads, the hull wall, portholes, the airlock
 //   live.ts      space outside, the viewscreen, running lights, night shift
 //   props.ts     furniture; desks.ts the crew stations
-//   people.ts    jumpsuits and visitors; critters.ts the pets, drone and sphere
+//   people.ts    space suits (station suits, helmets off, helmets on) and visitors; critters.ts the pets, drone and sphere
 //   clicks.ts    things to click; words.ts names and sounds
 import type { Theme } from "../theme.ts";
 import { BACKGROUND } from "./spaceship/backdrop.ts";
