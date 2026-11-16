@@ -7,7 +7,7 @@
 import type { WeatherKind } from "../contract.ts";
 import type { CatPose, CharPose, DogPose, Look } from "./characters.ts";
 import type { ChairTone, Screen } from "./desks.ts";
-import type { Facing, Layout, LayoutOptions, PlantPlacement, PokeKind, PropPlacement, Rect, Room } from "./layout.ts";
+import type { Facing, Layout, LayoutOptions, PlantPlacement, Point, PokeKind, Pose, PropPlacement, Rect, Room } from "./layout.ts";
 import type { Drawable, Season } from "./life.ts";
 import type { DeskStyle } from "./model.ts";
 
@@ -45,6 +45,70 @@ export interface WallLightsInfo extends PaintInfo {
   party: boolean;
   /** The x of a dead bulb the technician is coming to fix (or null). */
   brokenBulbX: number | null;
+}
+
+/** Something in the scenery to click (a campfire, a tree); `hover` is its tooltip. */
+export interface SceneryClickable {
+  id: string;
+  rect: Rect;
+  hover: string;
+}
+
+/** Where someone stands (or sits) when a scenery asks people over. */
+export interface GatherSpot {
+  /** Feet position. */
+  x: number;
+  y: number;
+  facing: Facing;
+  pose: Pose;
+  /** Their activity in tooltips ("toasting marshmallows"). */
+  activity: string;
+  /** Waypoints from a hallway point ({ c: true }) to the spot; default: straight over from the nearest hallway. */
+  path?: Point[];
+  /** Drawn this many pixels higher (sitting up on something). */
+  lift?: number;
+}
+
+/** Something that happens `at` seconds after everyone has arrived: a bubble over the one at spot `who`, a sound. */
+export interface GatherCue {
+  at: number;
+  who?: number;
+  say?: string;
+  /** How long the bubble stays (default 3 s). */
+  seconds?: number;
+  sound?: string;
+}
+
+/** A gathering in progress; it updates as it goes, so read it while drawing. */
+export interface Gathering {
+  /** How many came: spots 0 … size − 1 are taken. */
+  readonly size: number;
+  /** When they had all arrived (PaintInfo.t), or null while they're still walking over. */
+  readonly arrivedAt: number | null;
+  /** They've gone back (time's up, or someone got called back to work). */
+  readonly done: boolean;
+  /** Whether someone's at spot i right now. */
+  readonly present: readonly boolean[];
+}
+
+/** What a scenery's click can do with the people in the office. */
+export interface SceneryActions extends PaintInfo {
+  L: Layout;
+  /** Where it was clicked (native px). */
+  at: Point;
+  /**
+   * Ask idle people over: up to `spots.length` of them (the nearest first)
+   * walk to the spots, stay `seconds` after they've all arrived, play the cues
+   * and go back. Null when fewer than `min` (default 1) are free, or during an
+   * office event.
+   */
+  gather(spots: GatherSpot[], seconds: number, cues?: GatherCue[], min?: number): Gathering | null;
+  /** People within `r` px of a point, nearest first. */
+  near(x: number, y: number, r: number): { id: string; x: number; y: number }[];
+  /** A speech bubble over someone (an id from `near`), `delay` seconds from now. */
+  say(id: string, text: string, seconds: number, delay?: number): void;
+  /** A sound now: a name from the theme's `sounds` or a built-in. */
+  play(sound: string): void;
 }
 
 /** A light at night: [x, y, radius, strength 0..1, color "#rrggbb", glow 0..1]. */
@@ -220,6 +284,20 @@ export interface Theme {
   fishTank?(ctx: CanvasRenderingContext2D, tank: Rect, info: PaintInfo & { fish: { x: number; y: number; dir: 1 | -1; color: string; phase: number }[]; feeding: boolean }): boolean;
   /** Like `dress`, for you and the visitors (the guard's visor, the courier's bag). */
   dressVisitor?(ctx: CanvasRenderingContext2D, v: { x: number; y: number; facing: Facing; pose: CharPose; kind: VisitorKind }, t: number): void;
+
+  // ------------------------------------------------------------ things to click
+  /**
+   * Things in the scenery to click, checked after the office's own
+   * clickables (people, furniture, fixtures, free desks): rects with an id
+   * and a hover text. Asked once per floor plan.
+   */
+  clickables?(L: Layout): SceneryClickable[];
+  /**
+   * One of them was clicked: start something and draw it from `decor` or
+   * `overlay` (by PaintInfo.t); `act` can ask idle people over and give them
+   * lines. Return a sound to play now, or null.
+   */
+  click?(id: string, act: SceneryActions): string | null;
 
   // ------------------------------------------------------------ words and sounds
   labels?: ThemeLabels;

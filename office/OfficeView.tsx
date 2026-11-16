@@ -767,6 +767,11 @@ export function OfficeView(input: OfficeProps) {
       case "lights":
         world.twinkle();
         break;
+      case "scenery": {
+        const at = toNative(e);
+        world.clickScenery(hit.id, at.x, at.y);
+        break;
+      }
       case "status":
         play("beep");
         break;
@@ -947,6 +952,8 @@ export function OfficeView(input: OfficeProps) {
         return <div className="chq-tip-hint">{named.labels?.npc?.roomba ?? relabel(named, "The roomba · send it off (or home)")}</div>;
       case "lights":
         return <div className="chq-tip-hint">{relabel(named, "String lights · make them twinkle")}</div>;
+      case "scenery":
+        return <div className="chq-tip-hint">{hover.hover}</div>;
     }
   }, [hover, byId, world, prefs, overflow, waiting, now, counts, officeEvent, weatherLine, theme]);
 

@@ -149,6 +149,171 @@ const snowHush: SoundRecipe = (k) => {
   k.tone(2600, 1.2, 0.08, "sine", 0.03, 2500);
 };
 
+// ------------------------------------------------------------------ things to click
+
+/** The campfire, the giants and the creek: hover texts and what people say there. */
+export const CAMP = {
+  hover: {
+    fire: "Campfire · gather round",
+    tree: "A giant redwood · who lives up there?",
+    creek: "The creek · what's in the water?",
+  },
+  activity: {
+    smores: "toasting marshmallows",
+    sing: "singing round the campfire",
+    ghost: "telling ghost stories",
+  },
+  /** [seconds after everyone's there, who (by spot), words, sound]. Spot 1 is the one whose marshmallow catches fire. */
+  smores: [
+    [0.4, 0, "Marshmallow time!"],
+    [3.4, 2, "Low and slow. Golden brown."],
+    [6, 1, "Uh-oh. Mine's on fire!", "rw-whoosh"],
+    [7.5, 0, "Blow on it, quick!"],
+    [8.6, 1, "Fwooo!", "rw-puff"],
+    [10.8, 1, "…crispy is a flavor, right?"],
+    [13.2, 2, "S'more, please!"],
+  ],
+  sing: [
+    [0.3, -1, "", "rw-strum"],
+    [0.5, 0, "♪ Under the redwoods, tall and wide… ♪"],
+    [5.4, 1, "♪ …a crackling fire, the stars outside ♪"],
+    [7.2, -1, "", "rw-strum"],
+    [10.2, 2, "♪ la la la, la-la laaa ♪"],
+    [13.4, -1, "", "rw-strum"],
+    [13.6, 0, "♪ …and nobody's checking their inbox! ♪"],
+    [16.6, 1, "Encore!"],
+  ],
+  ghost: [
+    [0.3, -1, "", "rw-spooky"],
+    [0.6, 0, "It was a night just like this one…"],
+    [4.8, 0, "…a twig snapped behind the tents…"],
+    [8.8, 1, "W-what was it?"],
+    [11.2, 0, "…THE RACCOON!", "rw-boo"],
+    [11.7, 1, "Eek!"],
+    [12, 2, "Eeek!"],
+    [14.2, 0, "Hehe. Gotcha."],
+  ],
+  bonfire: ["Whoa!", "Toasty!", "Who threw on the big log?"],
+  popcorn: ["Popcorn!", "Pop, pop, pop!", "Save me some!"],
+  ow: ["Ow!", "Hey! A pinecone.", "Bonk. Thanks, tree."],
+} as const;
+
+/** One strum per beat: down strokes, then a lighter up stroke, through G C D G. */
+const strum: SoundRecipe = (k) => {
+  const chords = [
+    [196, 247, 294, 392],
+    [262, 330, 392, 523],
+    [147, 220, 294, 370],
+    [196, 247, 294, 392],
+  ];
+  for (let beat = 0; beat < 16; beat++) {
+    const chord = chords[Math.floor(beat / 4)]!;
+    const up = beat % 2 === 1;
+    const notes = up ? [...chord].reverse() : chord;
+    notes.forEach((f, j) => k.tone(f, beat * 0.42 + j * 0.016, up ? 0.5 : 1, "triangle", up ? 0.022 : 0.034, f * 0.998));
+  }
+};
+
+const crackle = (k: Parameters<SoundRecipe>[0], from: number, dur: number, n: number, vol: number) => {
+  for (let i = 0; i < n; i++) k.noise(from + ((i * 0.6180339) % 1) * dur, 0.025, vol * (0.6 + ((i * 7) % 5) / 10), 2200 + ((i * 13) % 7) * 300);
+};
+
+const bonfire: SoundRecipe = (k) => {
+  k.swell(0, 1.2, 0.12, 200, 1500, 1.2);
+  k.swell(0.5, 2.6, 0.06, 500, 380, 0.6, "lowpass");
+  crackle(k, 0.3, 2.6, 22, 0.09);
+};
+
+const popcorn: SoundRecipe = (k) => {
+  // A few early pops, a flurry, a last stray one.
+  const at = [0.5, 0.95, 1.3, 1.5, 1.65, 1.8, 1.9, 2.05, 2.15, 2.3, 2.38, 2.5, 2.7, 2.85, 3.1, 3.4, 3.9, 4.6];
+  at.forEach((s, i) => {
+    k.noise(s, 0.03, 0.14, 1600 + (i % 5) * 400);
+    k.tone(700 + (i % 4) * 160, s, 0.03, "square", 0.018, 500);
+  });
+  crackle(k, 0, 4.8, 10, 0.04);
+};
+
+const SFX: Record<string, SoundRecipe> = {
+  "rw-strum": strum,
+  "rw-bonfire": bonfire,
+  "rw-popcorn": popcorn,
+  "rw-crackle": (k) => {
+    k.swell(0, 2, 0.04, 500, 420, 0.6, "lowpass");
+    crackle(k, 0, 2, 16, 0.07);
+  },
+  "rw-whoosh": (k) => k.swell(0, 0.5, 0.09, 300, 1700, 2),
+  "rw-puff": (k) => {
+    k.swell(0, 0.35, 0.08, 1000, 300, 1);
+    k.noise(0.02, 0.18, 0.05, 600);
+  },
+  "rw-spooky": (k) => {
+    k.tone(110, 0, 3, "sine", 0.06, 104);
+    k.tone(165, 0.6, 2.4, "sine", 0.03, 156);
+    k.swell(0, 3, 0.03, 300, 500, 2);
+  },
+  "rw-boo": (k) => {
+    for (const [f, v] of [
+      [233, 0.04],
+      [277, 0.035],
+      [330, 0.03],
+    ] as const) k.tone(f, 0, 0.55, "sawtooth", v, f * 0.94);
+    k.noise(0, 0.15, 0.08, 500);
+  },
+  "rw-owl": (k) => {
+    k.tone(392, 0, 0.35, "sine", 0.1, 372);
+    k.tone(370, 0.6, 0.18, "sine", 0.07, 360);
+    k.tone(392, 0.85, 0.5, "sine", 0.09, 360);
+  },
+  "rw-scurry": (k) => {
+    for (let i = 0; i < 12; i++) k.noise(i * 0.055, 0.02, 0.05, 3400);
+    k.tone(3200, 0.75, 0.05, "sine", 0.03, 3700);
+  },
+  "rw-knock": (k) => {
+    for (let b = 0; b < 2; b++) {
+      for (let i = 0; i < 8; i++) {
+        k.noise(b * 0.9 + i * 0.06, 0.02, 0.14, 1300);
+        k.tone(720, b * 0.9 + i * 0.06, 0.02, "square", 0.018);
+      }
+    }
+  },
+  "rw-pinecone": (k) => {
+    k.tone(1400, 0, 0.32, "sine", 0.02, 700);
+    k.tone(320, 0.34, 0.09, "square", 0.06, 180);
+    k.noise(0.34, 0.06, 0.08, 900);
+    k.tone(260, 0.52, 0.06, "square", 0.03, 200);
+  },
+  "rw-flutter": (k) => {
+    for (let i = 0; i < 8; i++) k.noise(i * 0.045, 0.03, 0.05, 700);
+    k.tone(2900, 0.1, 0.08, "sine", 0.05, 3400);
+    k.tone(3300, 0.26, 0.07, "sine", 0.04, 2800);
+  },
+  "rw-splash": (k) => {
+    k.swell(0, 0.5, 0.12, 2400, 900, 0.9);
+    for (let i = 0; i < 4; i++) k.tone(1300 + i * 170, 0.22 + i * 0.07, 0.04, "sine", 0.04, 800);
+  },
+  "rw-plop": (k) => {
+    k.tone(180, 0, 0.12, "square", 0.025, 150);
+    k.tone(170, 0.22, 0.12, "square", 0.022, 140);
+    k.tone(700, 1.25, 0.12, "sine", 0.08, 220);
+    k.noise(1.25, 0.1, 0.05, 1500);
+  },
+  "rw-quack": (k) => {
+    k.tone(500, 0, 0.13, "sawtooth", 0.035, 420);
+    k.tone(480, 0.22, 0.15, "sawtooth", 0.035, 400);
+    k.swell(0, 1.2, 0.03, 1400, 1700, 0.8);
+  },
+  "rw-trickle": (k) => {
+    k.swell(0, 1.6, 0.04, 1400, 1800, 0.8);
+    for (let i = 0; i < 4; i++) k.tone(1500 + i * 120, 0.2 + i * 0.3, 0.05, "sine", 0.03, 1100);
+  },
+  "rw-cub": (k) => {
+    k.swell(0, 0.5, 0.1, 2400, 900, 0.9);
+    k.tone(110, 0.55, 0.45, "sawtooth", 0.025, 88);
+    k.swell(1.3, 0.45, 0.08, 2200, 900, 0.9);
+  },
+};
+
 export const SOUNDS: Record<string, SoundRecipe> = {
   "rw-day": birdsong,
   "rw-night": nightForest,
@@ -157,6 +322,7 @@ export const SOUNDS: Record<string, SoundRecipe> = {
   "rw-storm": storm,
   "rw-fog": fogDrip,
   "rw-snow": snowHush,
+  ...SFX,
 };
 
 export function outdoor(weather: WeatherKind, night: boolean): string {

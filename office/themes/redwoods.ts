@@ -6,14 +6,15 @@
 // backdrop (forest floor, trails, decks, the treeline with sky gaps, the
 // notice board and the trailhead gate, tents and the cabin), the furniture,
 // the camp tables and chairs, the people, the live layers (the view out of the
-// woods, lanterns on a rope, the campfire, fireflies, the weather) and the
-// words and sounds.
+// woods, lanterns on a rope, the campfire, fireflies, the weather), the
+// things to click (clicks.ts) and the words and sounds.
 import type { Theme } from "../theme.ts";
 import { BACKGROUND } from "./redwoods/background.ts";
 import { chair, desk, SCREEN_COLORS, screen } from "./redwoods/desks.ts";
 import { darkness, decor, doorOpen, lights, outside, overlay, sky, underlay, wallLights } from "./redwoods/live.ts";
 import { dress, look, npc } from "./redwoods/people.ts";
 import { dressVisitor, mower, pet, pond } from "./redwoods/critters.ts";
+import { click, clickables } from "./redwoods/clicks.ts";
 import { campLayout } from "./redwoods/plan.ts";
 import { plant, prop, speaker } from "./redwoods/props.ts";
 import { LABELS, outdoor, SOUNDS } from "./redwoods/words.ts";
@@ -72,4 +73,7 @@ export const REDWOODS: Theme = {
   labels: LABELS,
   sounds: SOUNDS,
   outdoor,
+  // The campfire, the giants and the creek do things when you click them.
+  clickables,
+  click,
 };

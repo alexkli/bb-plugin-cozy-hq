@@ -7,12 +7,17 @@
   - The door is a trailhead gate.
   - The windows are gaps in the treeline that look out of the woods at the sky.
   - The weather falls on the whole camp: rain with puddles, snow that settles, fog between the trunks, storm gusts and cloud shadows.
+- In Redwood Camp you can click the campfire, the giant trees and the creek.
+  - The campfire: idle campers come over for s'mores (one marshmallow always catches fire), a singalong with a guitar, or ghost stories by flashlight after dark; or the fire roars up into a bonfire, or pops popcorn.
+  - The trees: an owl, a grey squirrel running up the trunk, a woodpecker, a bird flying off, or a pinecone on someone's head.
+  - The creek: a jumping trout, a frog plopping in, a duck or a paper boat floating by, and now and then a bear cub fishing.
 - For scenery authors: an `openWindow` hook, and the "Open the window" hover text goes through `labels.words`.
 - Tech news on the TV from more sources: pick Hacker News, Lobsters, Techmeme, The Verge, Ars Technica, DEV Community, Slashdot, the GitHub Blog, a mix of the first five, or any RSS or Atom feed (`newsSource`, `newsFeed`). The TECH channel names its source, and in a mix each headline's.
 - A soft glow picks out what's new:
   - Warm gold around a thread that finished, failed or asked you something and that you haven't opened since, walking to the waiting room and sitting there; its name tag gets a matching halo.
   - Opening the thread once ends it. Marking it unread again to keep as a reminder doesn't bring it back; only a new finish does.
   - Cool blue around a thread that just started new work, while it walks to its desk.
+- For scenery authors: `clickables` and `click` hooks for things to click in the scenery, which can ask idle people over with lines and sounds.
 
 ## 0.4.0 (2026-11-15)
 

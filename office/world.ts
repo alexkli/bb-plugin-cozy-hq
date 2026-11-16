@@ -31,7 +31,7 @@ import { hash, mix, rng } from "./pixel.ts";
 import { drawPixelText, pixelTextWidth } from "./pixelfont.ts";
 import type { SoundName } from "./sound.ts";
 import { CLASSIC } from "./themes/classic.ts";
-import type { Light, PaintInfo, Theme, VisitorKind } from "./theme.ts";
+import type { GatherCue, GatherSpot, Gathering, Light, PaintInfo, SceneryClickable, Theme, VisitorKind } from "./theme.ts";
 import {
   drawAccessory,
   drawCarriedLantern,
@@ -144,7 +144,8 @@ export type Hit =
   | { kind: "egg"; index: number }
   | { kind: "window"; index: number }
   | { kind: "roomba" }
-  | { kind: "lights" };
+  | { kind: "lights" }
+  | { kind: "scenery"; id: string; hover: string };
 
 interface Agent extends Walker {
   id: string;
@@ -168,10 +169,10 @@ interface Agent extends Walker {
 
 type HuddleKind = "coffee" | "cooler" | "chat" | "couch" | "pingpong" | "darts";
 
-/** A few idle agents together: a coffee, a chat, a game. */
+/** A few idle agents together: a coffee, a chat, a game, or a scenery's show. */
 interface Huddle {
   id: number;
-  kind: HuddleKind;
+  kind: HuddleKind | "scenery";
   members: string[];
   spots: Spot[];
   until: number;
@@ -180,6 +181,8 @@ interface Huddle {
   maxLines: number;
   topic: Topic | null;
   lastSpeaker: string | null;
+  /** A scenery's show: what it sees, how long they stay once there, and the cues left to play. */
+  show?: { gathering: { size: number; arrivedAt: number | null; done: boolean; present: boolean[] }; stay: number; cues: GatherCue[]; next: number };
 }
 
 /** The server-room gag: poke at the cables, get zapped, lie down, shuffle off. */
@@ -399,11 +402,15 @@ export class World {
   private lunchAt = -1;
   private huddles: Huddle[] = [];
   private huddleSeq = 0;
+  /** The scenery's own clickables, for the current plan and theme. */
+  private sceneryClicks: { L: Layout; theme: Theme; list: SceneryClickable[] } | null = null;
   private nextHuddleAt = -1;
   /** Neighbors chatting where they are, and replies on their way. */
   private nextChatAt = -1;
   private replies: { id: string; topic: Topic; at: number }[] = [];
   private speech = new Map<string, { text: string; until: number }>();
+  /** Bubbles a scenery asked for a moment from now (a pinecone still on its way down). */
+  private sayLater: { at: number; id: string; text: string; seconds: number }[] = [];
   private talk: Talk | null = null;
   private mishap: Mishap | null = null;
   private nextMishapAt = -1;
@@ -560,10 +567,12 @@ export class World {
     // Visitors, events and get-togethers don't survive a resize.
     this.npcs = [];
     this.kids = [];
+    for (const h of this.huddles) if (h.show) h.show.gathering.done = true;
     this.huddles = [];
     this.replies = [];
     this.mishap = null;
     this.speech.clear();
+    this.sayLater = [];
     this.brokenDesk = null;
     this.brokenBulbX = null;
     this.brokenMachine = null;
@@ -958,7 +967,45 @@ export class World {
       const area = d.side === "north" ? { x: d.x + 20, y: d.y - 10, w: 22, h: 30 } : { x: d.x + 20, y: d.y + 12, w: 24, h: 32 };
       if (inRect(x, y, area)) return { kind: "desk", index: d.index };
     }
+    for (const c of this.sceneryClickables()) if (inRect(x, y, c.rect)) return { kind: "scenery", id: c.id, hover: c.hover };
     return null;
+  }
+
+  /** The scenery's things to click (asked once per plan and theme). */
+  sceneryClickables(): SceneryClickable[] {
+    const L = this.L;
+    if (!L || !this.theme.clickables) return [];
+    const c = this.sceneryClicks;
+    if (c?.L !== L || c.theme !== this.theme) this.sceneryClicks = { L, theme: this.theme, list: this.theme.clickables(L) };
+    return this.sceneryClicks!.list;
+  }
+
+  /** Something in the scenery was clicked: the theme starts its show. */
+  clickScenery(id: string, x: number, y: number): void {
+    const L = this.L;
+    if (!L || !this.theme.click) return;
+    const sound = this.theme.click(id, {
+      t: this.time,
+      hour: this.hour,
+      night: this.skyColors(this.hour).night,
+      weather: this.weather,
+      date: new Date(),
+      season: this.season,
+      L,
+      at: { x, y },
+      gather: (spots, seconds, cues, min) => this.gather(spots, seconds, cues ?? [], min ?? 1),
+      near: (x, y, r) =>
+        [...this.agents.values()]
+          .filter((a) => !a.leaving && Math.hypot(a.x - x, a.y - y) <= r)
+          .sort((p, q) => Math.hypot(p.x - x, p.y - y) - Math.hypot(q.x - x, q.y - y))
+          .map((a) => ({ id: a.id, x: a.x, y: a.y })),
+      say: (who, text, seconds, delay = 0) => {
+        if (delay > 0) this.sayLater.push({ at: this.time + delay, id: who, text, seconds });
+        else this.say(who, text, seconds);
+      },
+      play: (name) => this.emit(name, false),
+    });
+    if (sound) this.emit(sound, false);
   }
 
   /** Native point above an agent's head, for tooltips. */
@@ -1255,6 +1302,11 @@ export class World {
     this.updateMachines(dt);
     this.updateHuddles(dt);
     this.updateNeighborChat();
+    if (this.sayLater.length > 0) {
+      const due = this.sayLater.filter((s) => this.time >= s.at);
+      this.sayLater = this.sayLater.filter((s) => this.time < s.at);
+      for (const s of due) this.say(s.id, s.text, s.seconds);
+    }
     this.updateMishap(dt);
     this.updateWeather();
     this.updateBroken(dt);
@@ -2296,6 +2348,74 @@ export class World {
     return true;
   }
 
+  /** A scenery's show: the nearest idle people walk over to its spots (see Theme.click). */
+  private gather(spots: GatherSpot[], seconds: number, cues: GatherCue[], min: number): Gathering | null {
+    const L = this.L;
+    if (!L || this.event || spots.length === 0) return null;
+    const at = spots[0]!;
+    const pool = this.freeIdle().sort((p, q) => Math.hypot(p.x - at.x, p.y - at.y) - Math.hypot(q.x - at.x, q.y - at.y));
+    const n = Math.min(spots.length, pool.length);
+    if (n === 0 || n < min) return null;
+    const id = ++this.huddleSeq;
+    const fromHall = (x: number, y: number): Point[] => {
+      const hy = L.net.halls.reduce((b, h) => (Math.abs(h - y) < Math.abs(b - y) ? h : b));
+      return [{ x, y: hy, c: true }, { x, y }];
+    };
+    const made: Spot[] = spots.slice(0, n).map((sp, i) => ({
+      id: `huddle-${id}-${i}`,
+      kind: "huddle",
+      group: "lounge",
+      x: sp.x,
+      y: sp.y,
+      facing: sp.facing,
+      pose: sp.pose,
+      activity: sp.activity,
+      lift: sp.lift,
+      path: sp.path ?? fromHall(sp.x, sp.y),
+    }));
+    const gathering = { size: n, arrivedAt: null, done: false, present: made.map(() => false) };
+    const members = pool.slice(0, n);
+    this.huddles.push({
+      id,
+      kind: "scenery",
+      members: members.map((a) => a.id),
+      spots: made,
+      // Time to walk over; the stay starts once they're all there.
+      until: this.time + 45 + seconds,
+      nextLine: Infinity,
+      lines: 0,
+      maxLines: 0,
+      topic: null,
+      lastSpeaker: null,
+      show: { gathering, stay: seconds, cues: [...cues].sort((p, q) => p.at - q.at), next: 0 },
+    });
+    members.forEach((a, i) => {
+      a.huddle = id;
+      this.walkTo(a, made[i]!);
+    });
+    return gathering;
+  }
+
+  /** A show's cues, once everyone's there. */
+  private playShow(h: Huddle, members: Agent[]): void {
+    const show = h.show!;
+    const g = show.gathering;
+    const t = this.time;
+    for (const [i, sp] of h.spots.entries()) g.present[i] = members.some((a) => this.settled(a) && a.spot!.id === sp.id);
+    if (g.arrivedAt === null) {
+      if (!members.every((a) => this.settled(a) && a.spot!.id.startsWith(`huddle-${h.id}-`))) return;
+      g.arrivedAt = t;
+      h.until = t + show.stay;
+    }
+    while (show.next < show.cues.length && t >= g.arrivedAt + show.cues[show.next]!.at) {
+      const c = show.cues[show.next++]!;
+      const spot = c.who !== undefined ? h.spots[c.who] : undefined;
+      const who = spot ? members.find((a) => a.spot?.id === spot.id) : undefined;
+      if (who && c.say) this.say(who.id, c.say, c.seconds ?? 3);
+      if (c.sound) this.emit(c.sound, false);
+    }
+  }
+
   /** Where the get-together happens: spots made up for the occasion. */
   private huddleSpots(kind: HuddleKind, id: number, n: number, couch: Spot[]): Spot[] | null {
     const L = this.L!;
@@ -2375,8 +2495,12 @@ export class World {
     }
     for (const h of [...this.huddles]) {
       const members = h.members.map((id) => this.agents.get(id)).filter((a): a is Agent => a !== undefined && a.huddle === h.id);
-      if (members.length < 2 || t > h.until) {
+      if (members.length < (h.show ? 1 : 2) || t > h.until) {
         this.endHuddle(h);
+        continue;
+      }
+      if (h.show) {
+        this.playShow(h, members);
         continue;
       }
       const prefix = `huddle-${h.id}-`;
@@ -2449,6 +2573,10 @@ export class World {
   /** Everyone heads back to their own spot. */
   private endHuddle(h: Huddle, walk = true): void {
     this.huddles = this.huddles.filter((x) => x !== h);
+    if (h.show) {
+      h.show.gathering.done = true;
+      h.show.gathering.present.fill(false);
+    }
     for (const id of h.members) {
       const a = this.agents.get(id);
       if (!a || a.huddle !== h.id) continue;
@@ -2467,7 +2595,7 @@ export class World {
     }
     if (!h) return;
     h.members = h.members.filter((id) => id !== a.id);
-    if (h.members.length < 2) this.endHuddle(h);
+    if (h.members.length < (h.show ? 1 : 2)) this.endHuddle(h);
   }
 
   // ------------------------------------------------------------------ the server-room gag

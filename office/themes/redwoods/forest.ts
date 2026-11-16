@@ -100,7 +100,7 @@ export function treeShadows(ctx: Ctx, L: Layout): void {
 
 // ------------------------------------------------------------------ the creek
 
-function creekX(pts: { x: number; y: number }[], y: number): number {
+export function creekX(pts: { x: number; y: number }[], y: number): number {
   for (let i = 1; i < pts.length; i++) {
     const a = pts[i - 1]!;
     const b = pts[i]!;

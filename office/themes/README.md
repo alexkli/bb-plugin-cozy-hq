@@ -154,6 +154,19 @@ chats, darts, ping-pong) quietly goes missing. The event area
   pond, a jellyfish tank, a tide pool); return true.
 - `dressVisitor(ctx, v, t)`: extras on you and the visitors (`v.kind`).
 
+## Things to click
+
+A scenery can add its own clickables: `clickables(L)` returns rects with an
+id and a hover text (checked after the office's own), and `click(id, act)`
+starts something and returns a sound. Draw the show yourself from `decor`,
+`overlay` and `lighting.lights`, timed by `PaintInfo.t`. `act.gather(spots,
+seconds, cues)` asks the nearest idle people over to your spots; the cues
+are bubbles and sounds after they've all arrived, and the returned
+`Gathering` tells you when they got there and when they've gone. Skip the
+gathering when it returns null (everyone's busy). `act.near` and `act.say`
+are for a quick word from whoever's close. Redwood Camp's campfire, trees
+and creek are an example (`redwoods/clicks.ts`).
+
 ## Preview
 
 Work in your copy of the repository. It shares `node_modules`.
@@ -200,4 +213,5 @@ Then look at the PNG with the Read tool. Query parameters:
   left and yours on the right, with sizes. Use it as your checklist.
 
 `window.__cozyHq` is the live world (e.g. `__cozyHq.startEvent("lunch")`,
-`__cozyHq.startMishap()`, `__cozyHq.callTechnician()`, `__cozyHq.openWindow(0)`).
+`__cozyHq.startMishap()`, `__cozyHq.callTechnician()`, `__cozyHq.openWindow(0)`,
+`__cozyHq.clickScenery("campfire")`).

@@ -10,6 +10,7 @@ import { creekShimmer, festoonGlow, festoonLights, forestItems, treeLanterns } f
 import { campData } from "./plan.ts";
 import { bindTentCtx, tentItems, tentLights } from "./tents.ts";
 import { gateOpen } from "./treeline.ts";
+import { clickItems, clickLights, clickOverlay, clickUnderlay, fireBoost } from "./clicks.ts";
 import { weatherOver, weatherUnder } from "./weather.ts";
 
 type Ctx = CanvasRenderingContext2D;
@@ -478,6 +479,7 @@ export function underlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
   const t = info.t;
   const wx = info.weather;
   creekShimmer(ctx, L, t, info.night);
+  clickUnderlay(ctx, L, info);
   // Wet trails and puddles, settled snow.
   weatherUnder(ctx, L, info);
   const sun = wx === "clear" ? 1 : wx === "partly" ? 0.55 : 0;
@@ -508,11 +510,13 @@ export function underlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
 let now: PaintInfo = { t: 0, hour: 12, night: 0, weather: "clear", date: new Date(0), season: null };
 let ctxNow: Ctx | null = null;
 
-function drawFire(ctx: Ctx, cx: number, by: number, t: number, big: boolean): void {
-  const n = big ? 5 : 4;
+function drawFire(ctx: Ctx, cx: number, by: number, t: number, big: boolean, boost = 0): void {
+  // A log on the fire (someone clicked it): wider and taller flames.
+  const n = (big ? 5 : 4) + 2 * Math.round(boost * 2);
   for (let i = 0; i < n; i++) {
     const x = cx - Math.floor(n) + i * 2;
-    const hgt = 3 + Math.round(3 * Math.abs(Math.sin(t * 7.3 + i * 1.9))) + (i === Math.floor(n / 2) ? 4 : i === 1 || i === n - 2 ? 2 : 0);
+    const base = 3 + Math.round(3 * Math.abs(Math.sin(t * 7.3 + i * 1.9))) + (i === Math.floor(n / 2) ? 4 : i === 1 || i === n - 2 ? 2 : 0);
+    const hgt = Math.round(base * (1 + boost * (1.4 - Math.abs(i - (n - 1) / 2) / n)));
     ctx.fillStyle = C.ember;
     ctx.fillRect(x, by - hgt + 1, 2, hgt);
     ctx.fillStyle = C.flame;
@@ -537,7 +541,7 @@ function drawFire(ctx: Ctx, cx: number, by: number, t: number, big: boolean): vo
 const fireItem: Drawable = { z: 0, draw: () => undefined };
 let fireAt: { x: number; y: number } = { x: 0, y: 0 };
 fireItem.draw = () => {
-  if (ctxNow) drawFire(ctxNow, fireAt.x, fireAt.y, now.t, true);
+  if (ctxNow) drawFire(ctxNow, fireAt.x, fireAt.y, now.t, true, fireBoost(now.t));
 };
 
 function squirrel(ctx: Ctx, x: number, y: number, dir: number, t: number): void {
@@ -564,7 +568,7 @@ export function decor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
     S.items.map((it) => ({ z: it.z, draw: () => ctxNow?.drawImage(decorSprite(it.kind, it.x + it.y), it.x, it.y) }) as Drawable),
   );
   bindTentCtx(ctx);
-  const out = list.concat(forestItems(ctx, L, info.night, info.t), tentItems(ctx, L, info.t, info.night));
+  const out = list.concat(forestItems(ctx, L, info.night, info.t), tentItems(ctx, L, info.t, info.night), clickItems(ctx, L, info));
   const lit = info.night > 0.35;
   const lamp = deskLamp(lit);
   for (const d of S.deskLamps) out.push({ z: d.z, draw: () => ctx.drawImage(lamp, d.x, d.y) });
@@ -722,6 +726,8 @@ export function overlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
     }
     ctx.globalAlpha = 1;
   }
+  // Sparks, songs and a flashlight, if someone clicked the campfire.
+  clickOverlay(ctx, L, info);
   // Rain, snow and gusts over the whole camp, cloud shadows.
   weatherOver(ctx, L, info);
 }
@@ -752,6 +758,7 @@ export function lights(L: Layout, info: PaintInfo): Light[] {
   // The lantern under the trailhead's lintel
   const door = L.wall.door;
   out.push([door.x + door.w - 3, door.y + 4, 22, 0.7, "#ffd27a", 0.16]);
+  out.push(...clickLights(L, info));
   const rec = propsOf(L, "reception")[0];
   if (rec) out.push([rec.x + 30, rec.y + 2, 26, 0.7, "#ffd27a", 0.16]);
   return out;
