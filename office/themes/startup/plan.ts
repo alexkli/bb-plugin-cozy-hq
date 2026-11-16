@@ -11,6 +11,7 @@
 import type { Layout, Point, Rect, Spot } from "../../layout.ts";
 import {
   Builder,
+  buildArcade,
   buildBoss,
   buildGames,
   buildKitchen,
@@ -236,15 +237,6 @@ function buildYard(b: Builder, Y: Rect, hallY: number, aisleX: number): { yard: 
   return { yard: { r: Y, pool, grill, hammock, palms, loungers, lemon, access: { hallY, aisleX } }, event };
 }
 
-/** The secondhand arcade cabinet (with its player's spot in front), where a games room didn't bring one. */
-function cabinet(b: Builder, x: number, y: number, acc: Access): Rect {
-  const arcade: Rect = { x, y, w: 24, h: 46 };
-  b.prop("arcade", "arcade", arcade.x - 1, arcade.y - 1, arcade.y + 46);
-  b.poke("arcade", "arcade", arcade);
-  b.spot({ id: "arcade", kind: "arcade", group: "lounge", x: arcade.x + 12, y: arcade.y + 58, facing: "back", pose: "stand", path: via(acc, arcade.y + 62, arcade.x + 12, arcade.y + 58), activity: "playing arcade games" });
-  return arcade;
-}
-
 /** A garage corner: the water jug, the printer and the bin by the wall, the server cage beside them (lower when the arcade stands over it). */
 function garageCorner(b: Builder, r: Rect, hallY: number, low = false): void {
   utilities(b, r.y + r.h, r.x + 2, hallY);
@@ -345,7 +337,6 @@ function wide(W: number, H: number, threads: number): Layout {
   let yard: Yard | null = null;
   let garage: Garage | null = null;
   let patio: StartupPlan["patio"] = null;
-  let arcade: Rect | null = null;
 
   if (two) {
     // ---- the kitchen in the front corner, the counter under the window
@@ -392,10 +383,12 @@ function wide(W: number, H: number, threads: number): Layout {
     const lowH = H - 4 - lowY;
     const gTop = gamesInGarage ? left.y : lowY;
     garage = { r: { x: 0, y: gTop, w: a12 - HALF + 2, h: H - gTop }, door: { x: c1x + 4, y: H - 5, w: c1w - 8, h: 5 }, access: { hallY: h2, x: c1x + 39 } };
-    // The arcade cabinet stands by the garage wall, over the server cage, in through the side door.
-    const withCabinet = !gamesParts?.arcade && lowH >= 118;
-    if (withCabinet) arcade = cabinet(b, c1x + c1w - 30, lowY + 2, { hallY: h2, aisleX: a12 });
-    garageCorner(b, { x: c1x, y: lowY, w: c1w, h: lowH }, h2, withCabinet);
+    // The office's arcade cabinet (unless the ping-pong end of the garage brought one) stands
+    // by the garage wall over the server cage, in through the side door; with no room there
+    // the living room gets it.
+    const cx = c1x + c1w - 30;
+    const cabinet = lowH >= 118 ? buildArcade(b, cx, lowY + 2, via({ hallY: h2, aisleX: a12 }, lowY + 64, cx + 12, lowY + 60)) : null;
+    garageCorner(b, { x: c1x, y: lowY, w: c1w, h: lowH }, h2, cabinet !== null);
     cells.push({ kind: "garage", r: garage.r, sides: { t: !gamesInGarage || left.y > midY, b: false, l: false, r: true } });
 
     const Y: Rect = { x: a12 - HALF, y: lowY - 2, w: a23 + HALF - (a12 - HALF), h: H - (lowY - 2) };
@@ -462,7 +455,6 @@ function wide(W: number, H: number, threads: number): Layout {
     lamp: boss.lamp,
     wallTv,
   });
-  if (arcade) L.arcade = arcade;
   return done(L, { cells, yard, garage, bunk, patio });
 }
 
@@ -530,7 +522,6 @@ function portrait(W: number, H: number, threads: number): Layout {
   let yardEvent: Rect | null = null;
   let garage: Garage | null = null;
   let patio: StartupPlan["patio"] = null;
-  let arcade: Rect | null = null;
   const hasRest = rows.some((r) => r.kind === "games");
   for (const { row, rect, hallY } of plan) {
     const acc: Access = { hallY, aisleX };
@@ -553,9 +544,13 @@ function portrait(W: number, H: number, threads: number): Layout {
       }
       case "lounge":
         lounge = rect;
-        tvParts = buildLounge(b, rect, acc, null, !hasRest);
-        // No room for a games room on a phone: the arcade cabinet stands in the TV corner.
-        if (!hasRest && rect.w >= 300) arcade = cabinet(b, rect.x + rect.w - 30, rect.y + 2, acc);
+        // The arcade cabinet: in the garage's games room when the house has one, else in the
+        // TV corner on the right (before the lounge, which would put it by the keyboard).
+        if (!hasRest && rect.w >= 300) {
+          const cx = rect.x + rect.w - 30;
+          buildArcade(b, cx, rect.y + 2, via(acc, rect.y + 64, cx + 12, rect.y + 60));
+        }
+        tvParts = buildLounge(b, rect, acc, null, !hasRest, !hasRest);
         cells.push({ kind: "living", r: band, sides: { t: true, b: true, l: false, r: true } });
         break;
       case "games":
@@ -606,7 +601,6 @@ function portrait(W: number, H: number, threads: number): Layout {
     doorX: aisleX,
     lamp: boss!.lamp,
   });
-  if (arcade && !L.arcade) L.arcade = arcade;
   return done(L, { cells, yard, garage, bunk, patio });
 }
 
