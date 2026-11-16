@@ -4,6 +4,7 @@ import type { WeatherKind } from "../../../contract.ts";
 import type { SoundRecipe, ThemeLabels } from "../../theme.ts";
 
 export const LABELS: ThemeLabels = {
+  pets: { dog: "Biscuit", cat: "Pixel" },
   tvNews: "MARKETS",
   tvWeather: "CITY WEATHER",
   poke: {

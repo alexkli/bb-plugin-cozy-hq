@@ -52,6 +52,7 @@ export const NEON: Theme = {
   fishTank: neonFishTank,
 
   labels: {
+    pets: { dog: "Byte", cat: "Pixel" },
     tvNews: "NET NEWS",
     tvWeather: "SKY FEED",
     poke: {

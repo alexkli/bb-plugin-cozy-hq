@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Every scenery calls its pets by their own names everywhere: Juniper in Redwood Camp gets the whistle from your desk, not Biscuit, and people's small talk names the scenery's dog and cat (`labels.pets` for scenery authors).
 - **You** in the settings: pick how the boss at the big desk (you) looks, with a live preview.
   - A figure (woman, man or nonbinary) and your pronouns (she, he or they); the office's small talk about the boss uses them.
   - Skin tone, hair color (grey and white too) and hair style (a buzz cut and bald are new), glasses on or off.

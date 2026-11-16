@@ -3,6 +3,7 @@ import type { SoundRecipe, ThemeLabels } from "../../theme.ts";
 import type { WeatherKind } from "../../../contract.ts";
 
 export const LABELS: ThemeLabels = {
+  pets: { dog: "Biscuit", cat: "Clover" },
   tvNews: "ANNOUNCEMENTS",
   tvWeather: "RECESS FORECAST",
   poke: {
@@ -24,7 +25,7 @@ export const LABELS: ThemeLabels = {
     fishtank: "Class aquarium · feed the fish and Shelly the turtle",
     whiteboard: "Chalkboard · threads in plan mode",
     bell: "Front office bell",
-    boss: "That's you, the principal · whistle for Biscuit",
+    boss: "That's you, the principal · whistle for {dog}",
     server: "Computer lab · the AI cluster · click to train a model",
     couch: "The reading couch · bounce on it",
     beanbag: "Reading cushion · squish",

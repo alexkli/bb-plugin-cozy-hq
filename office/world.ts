@@ -32,7 +32,7 @@ import { hash, mix, rng } from "./pixel.ts";
 import { drawPixelText, pixelTextWidth } from "./pixelfont.ts";
 import type { SoundName } from "./sound.ts";
 import { CLASSIC } from "./themes/classic.ts";
-import type { GatherCue, GatherSpot, Gathering, Light, PaintInfo, SceneryClickable, Theme, VisitorKind } from "./theme.ts";
+import { withPets, type GatherCue, type GatherSpot, type Gathering, type Light, type PaintInfo, type SceneryClickable, type Theme, type VisitorKind } from "./theme.ts";
 import { DEFAULT_YOU, withPronouns, youEmblem, youLook, type You } from "./you.ts";
 import {
   drawAccessory,
@@ -985,7 +985,7 @@ export class World {
   }
 
   private say(id: string, text: string, seconds: number): void {
-    this.speech.set(id, { text: withPronouns(text, this.you.pronouns), until: this.time + seconds });
+    this.speech.set(id, { text: withPets(withPronouns(text, this.you.pronouns), this.theme), until: this.time + seconds });
   }
 
   /** Threads whose title tag is showing: their in-scene bubble is skipped. */

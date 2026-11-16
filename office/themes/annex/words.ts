@@ -4,7 +4,6 @@ import type { Theme, SynthKit } from "../../theme.ts";
 import type { WeatherKind } from "../../../contract.ts";
 
 const words: Record<string, string> = {
-  Biscuit: "Crumpet",
   kitchen: "kitchenette",
   Kitchen: "Kitchenette",
   lounge: "break room",
@@ -135,6 +134,7 @@ function outdoor(weather: WeatherKind, night: boolean): string {
 
 export const WORDS: Pick<Theme, "labels" | "sounds" | "outdoor"> = {
   labels: {
+    pets: { dog: "Crumpet", cat: "Smudge" },
     tvNews: "THE BULLETIN",
     tvWeather: "WEATHER (GREY)",
     words,

@@ -138,6 +138,7 @@ export const beachDress: NonNullable<Theme["dress"]> = (ctx, a) => {
 };
 
 export const BEACH_LABELS: NonNullable<Theme["labels"]> = {
+  pets: { dog: "Biscuit", cat: "Mango" },
   tvNews: "SURF REPORT",
   tvWeather: "SWELL WATCH",
   poke: {

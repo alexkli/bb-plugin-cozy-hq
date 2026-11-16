@@ -34,7 +34,7 @@ import { Sound, type SoundName } from "./sound.ts";
 import { familiesOf, subagentsOf } from "./subagents.ts";
 import { World, type Hit, type LabelAnchor, type SeenState, type SpeechBubble, type Talk, type WorldThread } from "./world.ts";
 import { chairToneFor } from "./desks.ts";
-import { relabel, type Theme, type ThemeLabels } from "./theme.ts";
+import { relabel, withPets, type Theme, type ThemeLabels } from "./theme.ts";
 import { THEMES, themeById } from "./themes/index.ts";
 import { readYou, withPronouns, type You } from "./you.ts";
 import { YouSettings } from "./YouSettings.tsx";
@@ -935,7 +935,7 @@ export function OfficeView(input: OfficeProps) {
           </>
         );
       case "dog":
-        return <div className="chq-tip-hint">{named.labels?.npc?.dog ?? relabel(named, "Biscuit, the office dog · pet")}</div>;
+        return <div className="chq-tip-hint">{named.labels?.npc?.dog ?? withPets(relabel(named, "{dog}, the office dog · pet"), named)}</div>;
       case "egg": {
         const left = world.eggsLeft();
         return <div className="chq-tip-hint">An Easter egg! {left === 1 ? "The last one" : `${left} hidden around the office`}</div>;
@@ -957,7 +957,7 @@ export function OfficeView(input: OfficeProps) {
           </div>
         );
       case "poke":
-        return <div className="chq-tip-hint">{withPronouns(relabel(named, theme.labels?.poke?.[hover.poke] ?? pokeTip(hover.poke, waiting, counts)), you.pronouns)}</div>;
+        return <div className="chq-tip-hint">{withPets(withPronouns(relabel(named, theme.labels?.poke?.[hover.poke] ?? pokeTip(hover.poke, waiting, counts)), you.pronouns), named)}</div>;
       case "status":
         return (
           <div className="chq-tip-hint">
@@ -965,7 +965,7 @@ export function OfficeView(input: OfficeProps) {
           </div>
         );
       case "cat":
-        return <div className="chq-tip-hint">{named.labels?.npc?.cat ?? relabel(named, "Pixel, the office cat · pet")}</div>;
+        return <div className="chq-tip-hint">{named.labels?.npc?.cat ?? withPets(relabel(named, "{cat}, the office cat · pet"), named)}</div>;
       case "tv":
         return <div className="chq-tip-hint">Change the channel</div>;
       case "speaker":
@@ -1286,7 +1286,7 @@ const POKE_TIP: Record<PokeKind, string> = {
   fishtank: "Feed the fish",
   whiteboard: "Planning room whiteboard · threads in plan mode",
   bell: "Reception bell",
-  boss: "That's you · whistle for Biscuit",
+  boss: "That's you · whistle for {dog}",
   server: "Server room · the AI cluster · click to train a model",
   couch: "The couch · bounce on it",
   beanbag: "Beanbag · squish",

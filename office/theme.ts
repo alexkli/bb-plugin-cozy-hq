@@ -156,6 +156,12 @@ export type SoundRecipe = (k: SynthKit) => void;
 export type VisitorKind = "boss" | "guard" | "janitor" | "technician" | "delivery";
 
 export interface ThemeLabels {
+  /**
+   * The pets' names (classic Biscuit the dog and Pixel the cat), filled in
+   * wherever the office names them: `{dog}` and `{cat}` in hover texts and
+   * people's lines ("whistle for {dog}").
+   */
+  pets?: { dog?: string; cat?: string };
   /** TV channel titles (classic "HQ NEWS", "HQ WEATHER", "TECH", "INBOX"). */
   tvNews?: string;
   tvWeather?: string;
@@ -312,6 +318,12 @@ export interface Theme {
   sounds?: Record<string, SoundRecipe>;
   /** What you hear when you open a window: a name from `sounds`, or a built-in like "birds". */
   outdoor?(weather: WeatherKind, night: boolean): string;
+}
+
+/** Fill in the scenery's pet names for `{dog}` and `{cat}`. */
+export function withPets(text: string, theme: Theme): string {
+  if (!text.includes("{")) return text;
+  return text.replaceAll("{dog}", theme.labels?.pets?.dog ?? "Biscuit").replaceAll("{cat}", theme.labels?.pets?.cat ?? "Pixel");
 }
 
 /** Apply a theme's word swaps to a piece of UI text. */
