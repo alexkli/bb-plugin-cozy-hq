@@ -54,6 +54,13 @@
   - The lockers: one jams, another pops open and a basketball and books tumble out.
   - The cafeteria's serving line: a lunch line with trays. The reading rug: story time, where there's room.
   - Feeding the class aquarium brings Shelly the turtle up for the flakes.
+- In the Surf Villa you can click the pool, the surf, the lifeguard tower, the bonfire, the beach, the tiki bar and the palms.
+  - The pool: idle people wade in for a pool-noodle duel, a game of catch with a beach ball, or a nap on the flamingo float, or someone does a cannonball while two others come over to judge it. Otherwise the pool robot does its rounds or an inflatable drifts by.
+  - The surf: a surfer (who sometimes wipes out), dolphins, a whale that spouts and waves its tail, a sailboat, or a message in a bottle washing up.
+  - The lifeguard tower: a whistle, a look through the binoculars, or a run into the waves to save a rubber duck.
+  - The bonfire: a ukulele singalong or marshmallows on sticks, or the fire flares up.
+  - The beach: people build a sandcastle (the sea takes it if it's too close), dig for buried treasure or throw a frisbee; or a gull steals someone's fries, or crabs parade by.
+  - The tiki bar slides a coconut drink to whoever is closest, and a palm drops a coconut, now and then on someone's head.
 - For scenery authors: an `openWindow` hook, and the "Open the window" hover text goes through `labels.words`.
 - Tech news on the TV from more sources: pick Hacker News, Lobsters, Techmeme, The Verge, Ars Technica, DEV Community, Slashdot, the GitHub Blog, a mix of the first five, or any RSS or Atom feed (`newsSource`, `newsFeed`). The TECH channel names its source, and in a mix each headline's.
 - A soft glow picks out what's new:

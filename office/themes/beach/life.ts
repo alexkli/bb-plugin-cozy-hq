@@ -477,7 +477,7 @@ export function beachUnderlay(ctx: CanvasRenderingContext2D, L: Layout, info: Pa
     if (B.sea) drawSurf(ctx, B.sea, info);
   }
   // A crab pops out on the sand now and then.
-  const sandy = B ? L.eventArea : (L.games ?? null);
+  const sandy = B && L.eventArea.y >= B.sandY ? L.eventArea : (L.games ?? null);
   if (!sandy) return;
   const cycle = (t * 0.05) % 1;
   if (cycle > 0.55) return;

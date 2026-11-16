@@ -2,10 +2,11 @@
 // and sand, whitewashed shiplap and aqua shutters, the ocean outside with
 // surfers and palms, a curtained cabana for planning, a teak villa office, a
 // tiki bar, a sandy games pit, a board shed for the servers, shell lights on a
-// rope and tiki torches at night.
+// rope and tiki torches at night; things to click in ./beach/clicks.ts.
 // See office/themes/README.md for the hooks; the pieces live in ./beach/.
 import type { Theme } from "../theme.ts";
 import { BACKDROP } from "./beach/backdrop.ts";
+import { click, clickables, clickItems, clickLights, clickOverlay, clickUnderlay, CLICK_SOUNDS } from "./beach/clicks.ts";
 import { beachDressVisitor, beachPet, beachTidePool, hermitCrab } from "./beach/critters.ts";
 import { beachChair, beachDesk, beachPlant, beachScreen } from "./beach/furnish.ts";
 import { BEACH_LABELS, BEACH_SOUNDS, beachDress, beachLook, beachNpc, beachOutdoor } from "./beach/people.ts";
@@ -29,10 +30,16 @@ export const BEACH: Theme = {
   sky: beachSky,
   outside: beachOutside,
   wallLights: beachWallLights,
-  underlay: beachUnderlay,
-  decor: beachDecor,
-  overlay: beachOverlay,
-  lighting: beachLighting,
+  underlay: (ctx, L, info) => {
+    beachUnderlay(ctx, L, info);
+    clickUnderlay(ctx, L, info);
+  },
+  decor: (ctx, L, info) => beachDecor(ctx, L, info).concat(clickItems(ctx, L, info)),
+  overlay: (ctx, L, info) => {
+    beachOverlay(ctx, L, info);
+    clickOverlay(ctx, L, info);
+  },
+  lighting: { ...beachLighting, lights: (L, info) => beachLighting.lights!(L, info).concat(clickLights(L, info)) },
   screenColors: { bg: "#0e2a36", code: ["#7fe0d8", "#ffd166", "#ff9f86", "#9fdc5a", "#f4fbff"] },
   look: beachLook,
   npc: beachNpc,
@@ -42,6 +49,9 @@ export const BEACH: Theme = {
   roomba: () => hermitCrab(),
   fishTank: beachTidePool,
   labels: BEACH_LABELS,
-  sounds: BEACH_SOUNDS,
+  sounds: { ...BEACH_SOUNDS, ...CLICK_SOUNDS },
   outdoor: beachOutdoor,
+  // The pool, the surf, the lifeguard tower, the bonfire, the beach, the tiki bar and the palms do things when you click them.
+  clickables,
+  click,
 };
