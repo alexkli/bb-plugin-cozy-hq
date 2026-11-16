@@ -6,6 +6,7 @@
 import type { Layout, Point, Rect } from "../../layout.ts";
 import { hash, rect, rng, shade } from "../../themekit.ts";
 import { planOf, type AnnexPlan, type Cell } from "./plan.ts";
+import { stageOf } from "./fixtures.ts";
 
 type Gap = [number, number];
 
@@ -188,10 +189,11 @@ export function paintCells(ctx: CanvasRenderingContext2D, L: Layout): boolean {
   for (const c of plan.cells) {
     if (c.kind !== "hall") continue;
     const r = c.r;
-    if (r.w >= 160 && r.h >= 70) {
-      const sx = r.x + r.w - 34;
-      const sy = r.y + 12;
-      const sh = r.h - 24;
+    const stage = stageOf(c);
+    if (stage) {
+      const sx = stage.x;
+      const sy = stage.y;
+      const sh = stage.h;
       rect(ctx, sx - 3, sy, 31, sh + 3, "#3a2a1e");
       rect(ctx, sx, sy, 28, sh, "#8a6a44");
       for (let y = sy + 4; y < sy + sh; y += 5) rect(ctx, sx, y, 28, 1, "#6e5234");

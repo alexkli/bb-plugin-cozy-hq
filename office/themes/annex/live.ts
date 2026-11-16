@@ -7,6 +7,8 @@ import type { Layout, Rect } from "../../layout.ts";
 import { Grid, OUTLINE, cached, classicProp, floorPlan, hash, makeCanvas, mix, rng } from "../../themekit.ts";
 import { P, papers } from "./pal.ts";
 import { planOf } from "./plan.ts";
+import { leakTop, tubes, urnOf, type Tube } from "./fixtures.ts";
+import { clickDecor, clickLights, clickOverlay, clickUnderlay, tubeKick, type ClutterSpots } from "./clicks.ts";
 
 // ------------------------------------------------------------------ sky
 
@@ -202,31 +204,6 @@ function outside(ctx: CanvasRenderingContext2D, win: Rect, index: number, info: 
 
 // ------------------------------------------------------------------ fluorescent tubes
 
-interface Tube {
-  x: number;
-  w: number;
-}
-
-function tubes(L: Layout): Tube[] {
-  return cached(`annex|tubes|${L.W}x${L.H}|${L.segments.map((s) => `${s.x0}-${s.x1}`).join(",")}|${L.net.aisles.join(",")}`, () => {
-    const out: Tube[] = [];
-    for (const seg of L.segments) {
-      // One over every aisle (where the handyman puts his ladder), the rest spaced out between.
-      const centers = L.net.aisles.filter((x) => x - 12 >= seg.x0 + 2 && x + 12 <= seg.x1 - 2);
-      const span = seg.x1 - seg.x0;
-      const n = Math.max(1, Math.round(span / 64));
-      for (let i = 0; i < n; i++) {
-        const cx = Math.round(seg.x0 + (span / n) * (i + 0.5));
-        if (cx - 12 < seg.x0 + 2 || cx + 12 > seg.x1 - 2) continue;
-        if (centers.every((c) => Math.abs(c - cx) >= 30)) centers.push(cx);
-      }
-      if (centers.length === 0) centers.push(Math.round((seg.x0 + seg.x1) / 2));
-      for (const cx of centers.sort((a, b) => a - b)) out.push({ x: cx - 11, w: 22 });
-    }
-    return out;
-  });
-}
-
 /** The tube that buzzes and blinks no matter what. */
 function buzzer(L: Layout, list: Tube[]): number {
   return list.length > 2 ? (hash(`annex-buzz-${L.W}`) % (list.length - 1)) + 1 : 0;
@@ -240,6 +217,9 @@ function tubeLevel(i: number, L: Layout, list: Tube[], info: WallLightsInfo | Pa
     const beat = Math.floor(t * 7);
     return (i + beat) % 3 === 0 ? 1 : (hash(`p${i}-${beat}`) % 4 === 0 ? 0.9 : 0.15);
   }
+  // Someone clicked it (or thumped it).
+  const kick = tubeKick(L, i, t);
+  if (kick !== null) return kick;
   if (i === dead) {
     // Dead, apart from a feeble sputter now and then.
     return Math.floor(t * 9) % 23 === 0 ? 0.6 : 0;
@@ -599,7 +579,13 @@ function clutter(L: Layout): Item[] {
       items.push({ kind, x: r.x, y: r.y, canvas, z: r.y + r.h - 1 });
       return true;
     };
-    // The leak first: a bucket in the open, near the top half.
+    // The tea urn has its own spot in the old hall (you can click it).
+    const urn = urnOf(L);
+    if (urn) {
+      taken.push(urn);
+      items.push({ kind: "urn", x: urn.x, y: urn.y, canvas: urnTrolley(), z: urn.y + urn.h - 1 });
+    }
+    // The leak: a bucket in the open, near the top half.
     const leakSpots = plan.find(14, 12, 6, { x: 20, y: 40, w: L.W - 40, h: Math.max(60, L.H * 0.6) });
     for (const leak of [...leakSpots.slice(Math.floor(leakSpots.length / 2)), ...leakSpots]) {
       if (!add("bucket", bucket(), leak)) continue;
@@ -628,15 +614,10 @@ function clutter(L: Layout): Item[] {
         }
       }
     }
-    // The old hall: chairs stacked down the side, the tea urn on its trolley.
+    // The old hall: chairs stacked down the side under the tea urn on its trolley.
     for (const c of building?.cells ?? []) {
       if (c.kind !== "hall") continue;
-      let first = true;
-      for (let y = c.r.y + 6; y + 26 <= c.r.y + c.r.h - 4; y += 30) {
-        const canvas = first ? urnTrolley() : chairStack();
-        add(first ? "urn" : "chairs", canvas, { x: c.r.x + 5, y, w: canvas.width, h: canvas.height });
-        first = false;
-      }
+      for (let y = c.r.y + 36; y + 26 <= c.r.y + c.r.h - 4; y += 30) add("chairs", chairStack(), { x: c.r.x + 5, y, w: 16, h: 26 });
     }
     // And everywhere else: whatever fits.
     const n = Math.max(3, Math.min(9, Math.round((L.W * L.H) / 40000)));
@@ -674,6 +655,14 @@ function clutter(L: Layout): Item[] {
   });
 }
 
+/** Where the leak's bucket and the dead photocopiers ended up (things to click). */
+export function clutterSpots(L: Layout): ClutterSpots {
+  const items = clutter(L);
+  const box = (it: Item) => ({ x: it.x, y: it.y, w: it.canvas.width, h: it.canvas.height });
+  const b = items.find((it) => it.kind === "bucket");
+  return { leak: b ? box(b) : null, copiers: items.filter((it) => it.kind === "copier").map(box) };
+}
+
 function leakOf(L: Layout): Item | undefined {
   return clutter(L).find((i) => i.kind === "bucket");
 }
@@ -690,9 +679,9 @@ function decor(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): Drawa
           const period = info.weather === "rain" || info.weather === "storm" ? 1.1 : 2.4;
           const ph = (info.t % period) / period;
           const cx = it.x + 6;
-          const top = it.y - 46;
+          const top = leakTop(L, { x: it.x, y: it.y, w: 12, h: 11 });
           if (ph < 0.55) {
-            const y = top + (ph / 0.55) ** 2 * 46;
+            const y = top + (ph / 0.55) ** 2 * (it.y - top);
             ctx.fillStyle = "rgba(170,200,220,0.85)";
             ctx.fillRect(cx, Math.round(y), 1, 2);
           } else if (ph < 0.75) {
@@ -721,10 +710,12 @@ function decor(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): Drawa
       },
     });
   }
+  out.push(...clickDecor(ctx, L, info));
   return out;
 }
 
 function underlay(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): void {
+  clickUnderlay(ctx, L, info);
   // A puddle around the bucket (it never quite catches everything).
   const b = leakOf(L);
   if (!b) return;
@@ -752,6 +743,7 @@ function underlay(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): vo
 let vignette: HTMLCanvasElement | null = null;
 
 function overlay(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): void {
+  clickOverlay(ctx, L, info);
   const t = info.t;
   const day = 1 - info.night;
   // Pale grey shafts from the windows, dust turning in them.
@@ -812,7 +804,7 @@ function overlay(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): voi
 // ------------------------------------------------------------------ light
 
 function lights(L: Layout, info: PaintInfo): Light[] {
-  const out: Light[] = [];
+  const out: Light[] = clickLights(L, info);
   const list = tubes(L);
   list.forEach((tb, i) => {
     const lv = tubeLevel(i, L, list, info, lastDead);

@@ -29,6 +29,12 @@
   - The campfire: idle campers come over for s'mores (one marshmallow always catches fire), a singalong with a guitar, or ghost stories by flashlight after dark; or the fire roars up into a bonfire, or pops popcorn.
   - The trees: an owl, a grey squirrel running up the trunk, a woodpecker, a bird flying off, or a pinecone on someone's head.
   - The creek: a jumping trout, a frog plopping in, a duck or a paper boat floating by, and now and then a bear cub fishing.
+- In the Dusty Annex you can click the building, and nothing works properly:
+  - The leak: the bucket fills and overflows, the ceiling gushes, or the drips play a little tune.
+  - The fluorescent tubes: one sputters out or flares too bright, or someone comes over to thump the one by the door (it holds, or it doesn't).
+  - The storerooms: an avalanche of boxes, a drawer spitting paper, a cloud of dust, a mouse; a dead photocopier there jams in a fountain of paper.
+  - The old hall: the tea urn draws a queue of mugs and complaints, and the stage puts on a one-person show in a spotlight for an audience of two or three (or the PA squeals, or the curtain comes off its rail).
+  - The radiators clank, hiss or sit stone cold, and a stair gives way and gets taped over.
 - For scenery authors: an `openWindow` hook, and the "Open the window" hover text goes through `labels.words`.
 - Tech news on the TV from more sources: pick Hacker News, Lobsters, Techmeme, The Verge, Ars Technica, DEV Community, Slashdot, the GitHub Blog, a mix of the first five, or any RSS or Atom feed (`newsSource`, `newsFeed`). The TECH channel names its source, and in a mix each headline's.
 - A soft glow picks out what's new:

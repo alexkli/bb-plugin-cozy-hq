@@ -1,11 +1,13 @@
 // Dusty Annex: a shabby, forgotten back office in an old building, where the
 // people nobody wants end up. Worn carpet tiles, peeling wallpaper, a leak in
 // the ceiling, beige CRTs glowing amber and a fluorescent tube that never
-// quite works. Shabby and gloomy, but home.
+// quite works. Shabby and gloomy, but home. Click around: nothing works
+// properly when you do either (clicks.ts).
 // See office/themes/README.md for the hooks; the pieces live in ./annex/.
 import type { Theme } from "../theme.ts";
 import { BACKGROUND } from "./annex/backdrop.ts";
-import { LIVE } from "./annex/live.ts";
+import { clutterSpots, LIVE } from "./annex/live.ts";
+import { click, clickables } from "./annex/clicks.ts";
 import { PEOPLE } from "./annex/people.ts";
 import { PROPS } from "./annex/props.ts";
 import { WORDS } from "./annex/words.ts";
@@ -26,4 +28,9 @@ export const ANNEX: Theme = {
   ...PEOPLE,
   ...PETS,
   ...WORDS,
+  // The leak, the tubes, the storerooms, the stage, the urn, the radiators and the stairs.
+  // The leak's bucket and the photocopiers are placed among the clutter, which takes
+  // sprites: without a browser (the layout tests) there's just the rest to click.
+  clickables: (L) => clickables(L, typeof document === "undefined" ? null : clutterSpots(L)),
+  click,
 };

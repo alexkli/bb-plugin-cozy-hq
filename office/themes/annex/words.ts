@@ -80,6 +80,62 @@ const npc = {
   roomba: "The taped-up robot vacuum · send it off (or home)",
 };
 
+// ------------------------------------------------------------------ things to click
+
+/** A line in a get-together: seconds after everyone's arrived, who says it (−1: nobody), what, and a sound. */
+export type ClickLine = readonly [number, number, string, string?];
+
+export const CLICK_LINES = {
+  hover: {
+    leak: "The leak · there's a bucket, mostly under it",
+    tube: "Fluorescent tube · buzzing since before you started",
+    store: "Storeroom · nobody knows what's at the back",
+    copier: "The old photocopier · out of order, officially",
+    stage: "The stage · open mic, closed audience",
+    urn: "The tea urn · boiling since Tuesday",
+    radiator: "Radiator · clanks on the hour, warms nothing",
+    stairs: "The stairs · mind the fourth step",
+  },
+  leakFill: ["Someone should empty that.", "Not it.", "Nearly full again."],
+  leakGush: ["Facilities have been told.", "It's fine. It's fine.", "The ceiling's at it again."],
+  leakTune: ["Is it… playing something?", "I know this one.", "Hum along, why not."],
+  tubeDie: ["And we're in the dark.", "Well, that's that.", "Typical."],
+  tubeFlare: ["Too bright. Put it back.", "My eyes.", "Who turned the sun on?"],
+  thumpOk: ["There.", "Still got it.", "Percussive maintenance."],
+  thumpBad: ["Hm.", "Oh.", "Give it a minute."],
+  avalanche: ["Nobody touch anything.", "That's the old archive.", "Was looking for that box. Not now."],
+  drawer: ["Found the minutes, then.", "These are from another decade.", "Nobody saw that."],
+  dust: ["Atchoo!", "Has anyone ever cleaned in there?", "I'm not going in after it."],
+  mouse: ["Was that a—", "No it wasn't.", "That's Gerald. He's fine."],
+  copier: ["It's eaten my form.", "Paper jam. Everywhere.", "Stand back, it does this."],
+  pa: ["Testing… testing…", "Is this thing on?", "Sorry. Sorry."],
+  curtain: ["That'll be the rail.", "Encore, then.", "Nobody saw that either."],
+  urnBoil: ["Give it another forty minutes.", "It's thinking about it.", "Not hot. Just loud."],
+  clank: ["That's the heating on, then.", "Is someone trapped in there?", "It knows we're talking about it."],
+  hiss: ["It's hissing at me.", "Steam. Lovely. Still cold.", "Is that meant to happen?"],
+  cold: ["Stone cold. As ever.", "Bleed it? I wouldn't."],
+  step: ["Mind the fourth step.", "That's new.", "Somebody tape that."],
+  creak: ["Just the building settling.", "Ghosts, probably.", "It's been settling for years."],
+  /** A one-person show on the old stage: the performer (0) and an audience of up to three. */
+  show: [
+    [0.4, 0, "Act one. The memo."],
+    [3.4, 0, "Nobody knew who sent it."],
+    [6.6, 0, "Act two. Reply all."],
+    [9.4, 1, "Is there an interval?"],
+    [11.6, 2, "Is there a bar?"],
+    [13, -1, "", "annex-applause"],
+    [13.4, 0, "Thank you. Both of you."],
+  ] as ClickLine[],
+  /** A tea round at the urn: a queue, mugs, grievances. */
+  urn: [
+    [0.6, 0, "Who's on milk?"],
+    [2.6, 1, "It's stewed."],
+    [4.6, 2, "Biscuits are gone. Again."],
+    [6.6, 3, "There's a rota, you know."],
+    [8.8, 0, "Lovely. Lukewarm."],
+  ] as ClickLine[],
+};
+
 // ------------------------------------------------------------------ sounds
 
 const sounds: Record<string, (k: SynthKit) => void> = {
@@ -123,6 +179,97 @@ const sounds: Record<string, (k: SynthKit) => void> = {
   },
 };
 
+// The things to click: drips, gushes, tubes, thuds, the urn, the radiator, the stairs.
+const clickSounds: Record<string, (k: SynthKit) => void> = {
+  "annex-drips"(k) {
+    for (let i = 0; i < 9; i++) k.tone(1500 - i * 25, i * (0.26 - i * 0.015), 0.05, "sine", 0.08, 800);
+  },
+  "annex-gush"(k) {
+    k.noise(0, 0.12, 0.12, 900);
+    k.swell(0, 2.4, 0.16, 1100, 600, 0.6);
+    k.swell(0.1, 2.2, 0.06, 300, 200, 0.7, "lowpass");
+  },
+  "annex-tune"(k) {
+    // The drips find a little tune, then lose it.
+    [1568, 1319, 1175, 1047, 1175, 1319, 1245].forEach((f, i) => k.tone(f, i * 0.32, 0.14, "sine", 0.09, f * 0.72));
+  },
+  "annex-sputter"(k) {
+    k.tone(100, 0, 1.2, "sawtooth", 0.03);
+    for (let i = 0; i < 6; i++) k.noise(i * 0.19 + Math.random() * 0.05, 0.03, 0.08, 3200);
+    k.noise(1.2, 0.05, 0.14, 2600);
+  },
+  "annex-hum"(k) {
+    k.tone(120, 0, 2.2, "sawtooth", 0.022);
+    k.tone(240, 0, 2.2, "sine", 0.02);
+  },
+  "annex-thump"(k) {
+    k.noise(0, 0.08, 0.2, 320);
+    k.tone(82, 0, 0.16, "sine", 0.22, 48);
+  },
+  "annex-avalanche"(k) {
+    for (let i = 0; i < 6; i++) {
+      const t0 = i * 0.12 + Math.random() * 0.05;
+      k.noise(t0, 0.1, 0.18, 260);
+      k.tone(70 + Math.random() * 30, t0, 0.14, "sine", 0.16, 40);
+    }
+  },
+  "annex-drawer"(k) {
+    k.tone(300, 0, 0.32, "sawtooth", 0.035, 540);
+    k.noise(0.3, 0.12, 0.12, 400);
+    for (let i = 0; i < 6; i++) k.noise(0.45 + i * 0.12, 0.08, 0.05, 3600);
+  },
+  "annex-dust"(k) {
+    k.swell(0, 1.4, 0.08, 400, 1300, 0.8);
+  },
+  "annex-squeak"(k) {
+    for (let i = 0; i < 3; i++) k.tone(2600 + i * 200, i * 0.14, 0.06, "sine", 0.07, 3300);
+  },
+  "annex-jam"(k) {
+    k.tone(90, 0, 0.9, "square", 0.03, 55);
+    k.noise(0, 0.9, 0.05, 900);
+    for (let i = 0; i < 4; i++) k.tone(1760, 1 + i * 0.24, 0.1, "square", 0.04);
+  },
+  "annex-squeal"(k) {
+    // Feedback off an old PA.
+    k.tone(2100, 0, 1.3, "sine", 0.05, 3400);
+    k.tone(4200, 0.2, 0.9, "sine", 0.015, 5200);
+  },
+  "annex-applause"(k) {
+    // Two people clapping, politely.
+    for (let i = 0; i < 9; i++) k.noise(i * 0.21 + (i % 2) * 0.07, 0.04, 0.12, 2400);
+  },
+  "annex-thud"(k) {
+    k.noise(0, 0.16, 0.2, 220);
+    k.tone(60, 0, 0.3, "sine", 0.18, 40);
+    k.swell(0.1, 1, 0.05, 400, 1000, 0.8);
+  },
+  "annex-urn"(k) {
+    for (let i = 0; i < 10; i++) k.tone(180 + Math.random() * 220, i * 0.11, 0.08, "sine", 0.06, 120);
+    k.tone(2093, 1.3, 0.4, "triangle", 0.05);
+  },
+  "annex-clank"(k) {
+    for (let i = 0; i < 4; i++) {
+      k.tone(420 + ((i * 130) % 300), i * 0.24, 0.22, "square", 0.035, 300);
+      k.noise(i * 0.24, 0.04, 0.1, 1800);
+    }
+  },
+  "annex-hiss"(k) {
+    k.swell(0, 2.4, 0.08, 5000, 6200, 0.7, "highpass");
+  },
+  "annex-tick"(k) {
+    k.tone(1800, 0, 0.03, "square", 0.05);
+  },
+  "annex-crack"(k) {
+    k.noise(0, 0.12, 0.26, 1200);
+    k.tone(140, 0.02, 0.3, "sawtooth", 0.05, 70);
+    k.noise(0.18, 0.3, 0.06, 500);
+  },
+  "annex-creak"(k) {
+    k.tone(160, 0, 1.3, "sawtooth", 0.034, 250);
+    k.tone(230, 0.35, 0.9, "sawtooth", 0.02, 150);
+  },
+};
+
 function outdoor(weather: WeatherKind, night: boolean): string {
   if (weather === "storm") return "thunder";
   if (weather === "rain" || weather === "drizzle") return "annex-rain";
@@ -141,6 +288,6 @@ export const WORDS: Pick<Theme, "labels" | "sounds" | "outdoor"> = {
     poke,
     npc,
   },
-  sounds,
+  sounds: { ...sounds, ...clickSounds },
   outdoor,
 };

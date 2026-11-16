@@ -7,6 +7,7 @@ import type { Layout, Rect, Room } from "../../layout.ts";
 import { Grid, OUTLINE, hash, rect, rng, shade, mix } from "../../themekit.ts";
 import { P } from "./pal.ts";
 import { corridorsFor, paintCells, partitions } from "./building.ts";
+import { drawRadiator, radiators } from "./fixtures.ts";
 import { planOf } from "./plan.ts";
 
 /** The layout whose background is being baked (the fixture steps don't get it). */
@@ -280,21 +281,7 @@ function wall(ctx: CanvasRenderingContext2D, L: Layout): void {
     ctx.fillRect(x0, d, w, 3);
   });
   // Old cast-iron radiators under the windows, painted over a dozen times.
-  for (const win of L.wall.windows) {
-    const seg = L.segments.find((sg) => win.x >= sg.x0 && win.x < sg.x1);
-    if (!seg) continue;
-    const ry = seg.depth - 11;
-    if (ry < win.y + win.h + 3) continue;
-    const rx = win.x + 5;
-    const rw = win.w - 10;
-    rect(ctx, rx - 1, ry - 1, rw + 2, 10, OUTLINE);
-    rect(ctx, rx, ry, rw, 8, "#b4a988");
-    for (let x = rx + 1; x < rx + rw - 1; x += 3) rect(ctx, x + 1, ry + 1, 1, 6, "#8f8566");
-    rect(ctx, rx, ry, rw, 1, "#cbc0a0");
-    rect(ctx, rx + 2 + (win.x % 7), ry + 5, 3, 2, "#8a5a3a");
-    rect(ctx, rx + rw - 4, ry + 2, 2, 1, "#8a5a3a");
-    rect(ctx, rx - 3, ry + 6, 2, 2, P.metalLo);
-  }
+  for (const r of radiators(L)) drawRadiator(ctx, r, r.x - 5);
   // Pillars: painted concrete, chipped at knee height.
   for (const px of L.wall.pillars) {
     const left = L.segments.find((s) => s.x1 === px);
