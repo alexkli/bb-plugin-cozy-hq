@@ -1,7 +1,7 @@
 // Chibi office workers, built pixel by pixel. Every thread gets a stable look
 // (skin, hair, outfit, accessory) from its id; the shirt follows its project.
 
-import { Grid, hash, hsl, rng, shade, SpriteCache } from "./pixel.ts";
+import { Grid, hash, hsl, mix, rng, shade, SpriteCache } from "./pixel.ts";
 import type { Facing } from "./layout.ts";
 
 export const OUTLINE = "#2a1e2e";
@@ -23,8 +23,11 @@ const HAIRS = [
 ];
 const PANTS = ["#3d4a6b", "#4f5d7f", "#5b4a3c", "#3a3a44", "#6c7f5a", "#7a5f8f"];
 const HAIR_STYLES = ["crop", "bob", "long", "spiky", "bun", "ponytail", "curly", "cap"] as const;
-type HairStyle = (typeof HAIR_STYLES)[number];
+/** The styles threads get at random, plus a buzz cut and bald (only you pick those, in the settings). */
+export type HairStyle = (typeof HAIR_STYLES)[number] | "buzz" | "bald";
 type Accessory = "none" | "glasses" | "headphones" | "bow" | "beanie";
+/** Only you have one: lashes and a V-neck for "woman", a tie for "man" (the emblem), an open collar for "nonbinary". */
+export type Figure = "woman" | "man" | "nonbinary";
 
 export interface Look {
   key: string;
@@ -35,6 +38,7 @@ export interface Look {
   pants: string;
   accessory: Accessory;
   accent: string;
+  figure?: Figure;
 }
 
 export function lookFor(threadId: string, projectHue: number): Look {
@@ -261,7 +265,15 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair, short }:
   const tx = x0 + 4;
   g.rect(tx, bodyTop, tw, torsoH, shirt);
   g.rect(tx, bodyTop + torsoH - 1, tw, 1, shirtLo);
-  if (!back) {
+  if (!back && look.figure === "woman") {
+    // A V-neck and a small pendant.
+    g.rect(tx + 2, bodyTop, 4, 1, skin).set(tx + 3, bodyTop + 1, skinShade).set(tx + 4, bodyTop + 1, skinShade);
+    g.set(tx + 4, bodyTop + 2, "#f2c14e");
+  } else if (!back && look.figure === "nonbinary") {
+    // An open-necked shirt: white collar tips either side of the neck.
+    g.set(tx + 2, bodyTop, "#f4f1ea").set(tx + 5, bodyTop, "#f4f1ea");
+    g.rect(tx + 3, bodyTop, 2, 1, skinShade).rect(tx + 3, bodyTop + 1, 2, 1, skin);
+  } else if (!back) {
     // Collar / neckline
     g.set(tx + 3, bodyTop, skinShade).set(tx + 4, bodyTop, skinShade);
     g.set(tx + 3, bodyTop + 1, shade(shirt, 0.25));
@@ -417,7 +429,17 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair, short }:
   function drawHair(gr: Grid, l: Look, x: number, y: number, isBack: boolean, isSide: boolean): void {
     void isSide;
     const style = l.hairStyle;
+    // A buzz cut: hair so short the scalp shows through.
+    const buzz = mix(hair, skin, 0.3);
     if (isBack) {
+      if (style === "bald") {
+        gr.rect(x + 3, y + 1, 3, 1, shade(skin, 0.3));
+        return;
+      }
+      if (style === "buzz") {
+        gr.rrect(x, y, 12, 8, buzz, 2);
+        return;
+      }
       // Back of the head is all hair (cap keeps its color).
       gr.rrect(x, y, 12, 10, style === "cap" ? l.accent : hair, 2);
       if (style === "cap") gr.rect(x, y + 4, 12, 6, hair);
@@ -430,6 +452,15 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair, short }:
       return;
     }
     switch (style) {
+      case "bald":
+        // A shine on top.
+        gr.rect(x + 3, y + 1, 3, 1, shade(skin, 0.3)).set(x + 2, y + 2, shade(skin, 0.3));
+        break;
+      case "buzz":
+        gr.rrect(x, y, 12, 3, buzz, 2);
+        gr.rect(x, y + 2, 1, 3, buzz).rect(x + 11, y + 2, 1, 3, buzz);
+        gr.rect(x + 3, y + 1, 3, 1, shade(buzz, 0.2));
+        break;
       case "crop":
         gr.rrect(x, y, 12, 4, hair, 2);
         gr.rect(x, y + 3, 2, 3, hair).rect(x + 10, y + 3, 2, 3, hair);
@@ -474,6 +505,8 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair, short }:
         break;
       case "curly":
         gr.ellipse(x + 5.5, y + 2, 7.4, 4.2, hair);
+        // Keep the face clear under the curls (dark eyes vanish on dark hair).
+        gr.rect(x + 1, y + 5, 10, 2, skin);
         gr.rect(x - 2, y + 4, 3, 4, hair).rect(x + 11, y + 4, 3, 4, hair);
         gr.set(x + 2, y + 4, hair).set(x + 5, y + 4, hair).set(x + 8, y + 4, hair);
         gr.set(x + 1, y, hairHi).set(x + 4, y - 1, hairHi).set(x + 8, y, hairHi);
@@ -539,6 +572,8 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair, short }:
     } else {
       gr.rect(lx, ey, 1, 2, eye).rect(rx, ey, 1, 2, eye);
       if (e === "focus") gr.set(lx, ey, "#4a3a55").set(rx, ey, "#4a3a55");
+      // Lashes flick out at the outer corners.
+      if (l.figure === "woman") gr.set(lx - 1, ey, eye).set(rx + 1, ey, eye);
     }
     if (e === "worried") {
       gr.set(lx - 1, ey - 2, eye).set(lx, ey - 1, eye);

@@ -2,7 +2,7 @@
 // Pixel a sleek grey cat; a lidar robot vacuum does the floors, discus swim
 // in a dark planted aquarium; building security wears a peaked cap, the
 // courier an insulated bag, the facilities tech carries a tablet.
-import type { CatPose, CharPose, DogPose } from "../../characters.ts";
+import type { CatPose, CharPose, DogPose, Look } from "../../characters.ts";
 import type { Facing, Rect } from "../../layout.ts";
 import type { PaintInfo, VisitorKind } from "../../theme.ts";
 import { Grid, hash, OUTLINE } from "../../themekit.ts";
@@ -197,7 +197,7 @@ export function skylineFishTank(ctx: CanvasRenderingContext2D, tank: Rect, info:
 // ------------------------------------------------------------------ visitors
 
 /** Extras on you and the visitors (x, y: the 20×28 sprite's top-left). */
-export function skylineDressVisitor(ctx: CanvasRenderingContext2D, v: { x: number; y: number; facing: Facing; pose: CharPose; kind: VisitorKind }): void {
+export function skylineDressVisitor(ctx: CanvasRenderingContext2D, v: { x: number; y: number; facing: Facing; pose: CharPose; kind: VisitorKind; look?: Look }): void {
   const bob = v.pose === "walk1" || v.pose === "walk3" ? -1 : 0;
   const flip = v.facing === "left";
   const px = (col: number, row: number, w: number, h: number, color: string) => {
@@ -244,8 +244,8 @@ export function skylineDressVisitor(ctx: CanvasRenderingContext2D, v: { x: numbe
       break;
     }
     case "boss": {
-      // A crisp shirt and a tie under the suit.
-      if (v.facing !== "front") break;
+      // A crisp shirt and a tie under the suit (the other figures keep their own neckline).
+      if (v.facing !== "front" || (v.look?.figure && v.look.figure !== "man")) break;
       px(8, 14, 3, 1, "#f4f2ee");
       px(9, 15, 1, 3, "#b8434f");
       break;

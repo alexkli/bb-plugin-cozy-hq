@@ -163,8 +163,11 @@ Your pick is kept per browser; the buddy dresses to match.
 ## Settings
 
 The gear at the top right of the office (or either speaker next to the TV)
-opens the settings: sound on/off, volume and ambient sounds, the scenery and
-the office buddy. Next to it, **Names** puts a name tag over everyone.
+opens the settings: how you look, sound on/off, volume and ambient sounds,
+the scenery and the office buddy. **You** is the boss at the big desk: pick a
+figure (woman, man or nonbinary), your pronouns (she, he or they; what the
+office says about you uses them), skin tone, hair color and style, and
+glasses, with a live preview. Every scenery dresses you its own way. Next to it, **Names** puts a name tag over everyone.
 Everything else:
 
 ```sh

@@ -73,6 +73,10 @@ Think of what each place *is* in your scenery, then dress it:
 - **People** are the same sprites: `look` may change shirt, pants, accent,
   accessory, hair style and colors, but keep who they are recognizable (skin,
   usually hair). `dress` can draw small extras on top (a backpack, a visor).
+  You (the boss) are who the user picked in the settings: in `npc("boss")`
+  keep skin, hair, hair style and glasses (and the key, or derive yours from
+  it), and in `dressVisitor` mind `v.look.figure` ("woman", "man",
+  "nonbinary"), e.g. a tie only for "man".
 - **Original art only**: no brand logos, no characters or names from shows,
   films or games. "Inspired by the mood of" is fine; copying is not.
 - **Pixel art style**: crisp pixels at native size, 1 px dark outlines

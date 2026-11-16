@@ -19,8 +19,8 @@ export function schoolLook(look: Look, threadId: string): Look {
 export function schoolNpc(kind: VisitorKind, classic: Look): Look {
   switch (kind) {
     case "boss":
-      // You, the principal: a burgundy cardigan and glasses.
-      return { ...classic, key: "school-principal", shirt: "#8a3b4a", pants: "#3a3a44", accessory: "glasses", accent: "#f2c14e" };
+      // You, the principal: a burgundy cardigan (glasses if you wear them).
+      return { ...classic, key: `${classic.key}|school`, shirt: "#8a3b4a", pants: "#3a3a44", accent: "#f2c14e" };
     case "guard":
       // The hall monitor in a bright safety vest.
       return { ...classic, key: "school-monitor", shirt: "#c6e24a", pants: "#2f3a5a", hairStyle: "cap", accent: C.orange };

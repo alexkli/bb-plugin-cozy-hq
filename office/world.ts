@@ -33,6 +33,7 @@ import { drawPixelText, pixelTextWidth } from "./pixelfont.ts";
 import type { SoundName } from "./sound.ts";
 import { CLASSIC } from "./themes/classic.ts";
 import type { GatherCue, GatherSpot, Gathering, Light, PaintInfo, SceneryClickable, Theme, VisitorKind } from "./theme.ts";
+import { DEFAULT_YOU, withPronouns, youEmblem, youLook, type You } from "./you.ts";
 import {
   drawAccessory,
   drawCarriedLantern,
@@ -442,6 +443,9 @@ export class World {
     this.doorOpenUntil = this.time + 1.2;
   });
   private dressHelper = (look: Look, id: string): Look => this.lookOf(look, id);
+  /** You, the boss, as picked in the settings (before the scenery dresses you). */
+  private you: You = DEFAULT_YOU;
+  private youBase: Look = youLook(DEFAULT_YOU);
 
   constructor(emit: Emit) {
     this.emit = emit;
@@ -491,6 +495,12 @@ export class World {
     return this.theme;
   }
 
+  /** How you look and which pronouns the office uses for you. */
+  setYou(you: You): void {
+    this.you = you;
+    this.youBase = youLook(you);
+  }
+
   /** A sprite dressed by the theme, built once per theme. */
   private dressed<T>(key: string, build: () => T): T {
     let v = this.themed.get(key) as T | undefined;
@@ -512,10 +522,10 @@ export class World {
   }
 
   private npcLookOf(kind: VisitorKind): Look {
-    const base = npcLook(kind);
+    const base = kind === "boss" ? this.youBase : npcLook(kind);
     const fn = this.theme.npc;
     if (!fn) return base;
-    return this.dressed(`npc|${kind}`, () => {
+    return this.dressed(`npc|${kind}|${base.key}`, () => {
       const l = fn(kind, base);
       return l.key === base.key ? { ...l, key: `${base.key}|${this.theme.id}` } : l;
     });
@@ -939,7 +949,7 @@ export class World {
   }
 
   private say(id: string, text: string, seconds: number): void {
-    this.speech.set(id, { text, until: this.time + seconds });
+    this.speech.set(id, { text: withPronouns(text, this.you.pronouns), until: this.time + seconds });
   }
 
   /** Threads whose title tag is showing: their in-scene bubble is skipped. */
@@ -3914,9 +3924,10 @@ export class World {
       pose = Math.floor(t * 5) % 2 ? "type1" : "type0";
       expr = Math.floor(t / 4) % 4 === 0 ? "open" : "focus";
     }
-    const sprite = charSprite({ look: this.npcLookOf("boss"), facing: "front", pose, expr, emblem: "tie" });
+    const look = this.npcLookOf("boss");
+    const sprite = charSprite({ look, facing: "front", pose, expr, emblem: youEmblem(this.you) });
     ctx.drawImage(sprite, Math.round(x - ANCHOR_X), Math.round(y - ANCHOR_Y));
-    this.theme.dressVisitor?.(ctx, { x: Math.round(x - ANCHOR_X), y: Math.round(y - ANCHOR_Y), facing: "front", pose, kind: "boss" }, t);
+    this.theme.dressVisitor?.(ctx, { x: Math.round(x - ANCHOR_X), y: Math.round(y - ANCHOR_Y), facing: "front", pose, kind: "boss", look }, t);
   }
 
   private drawNpc(ctx: CanvasRenderingContext2D, n: Npc): void {

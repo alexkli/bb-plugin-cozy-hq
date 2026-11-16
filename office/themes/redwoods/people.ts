@@ -48,7 +48,7 @@ export function npc(kind: VisitorKind, classic: Look): Look {
   switch (kind) {
     case "boss":
       // A cozy forest-green fleece.
-      return { ...classic, shirt: "#3f6b4a", pants: "#4a4038", accent: "#c4552d", key: "rw-boss" };
+      return { ...classic, shirt: "#3f6b4a", pants: "#4a4038", accent: "#c4552d", key: `${classic.key}|rw` };
     case "guard":
       // Park ranger: khaki shirt, olive trousers, a ranger's hat.
       return { ...classic, hairStyle: "crop", shirt: "#b8a070", pants: "#4a5a3a", accent: "#7a6a40", key: "rw-ranger" };

@@ -259,7 +259,10 @@ export interface Theme {
   // ------------------------------------------------------------ people
   /** Dress an agent for the scenery (same person: keep skin and hair, say). */
   look?(look: Look, threadId: string): Look;
-  /** You (the boss) and the visitors. */
+  /**
+   * You (the boss) and the visitors. Your classic look already has what you
+   * picked in the settings (skin, hair, glasses, figure): keep those.
+   */
   npc?(kind: VisitorKind, classic: Look): Look;
   /**
    * Draw something on an agent after its sprite (a backpack, a visor, a lei).
@@ -282,8 +285,12 @@ export interface Theme {
    * it (false: the classic tank).
    */
   fishTank?(ctx: CanvasRenderingContext2D, tank: Rect, info: PaintInfo & { fish: { x: number; y: number; dir: 1 | -1; color: string; phase: number }[]; feeding: boolean }): boolean;
-  /** Like `dress`, for you and the visitors (the guard's visor, the courier's bag). */
-  dressVisitor?(ctx: CanvasRenderingContext2D, v: { x: number; y: number; facing: Facing; pose: CharPose; kind: VisitorKind }, t: number): void;
+  /**
+   * Like `dress`, for you and the visitors (the guard's visor, the courier's
+   * bag). For you, `look.figure` is the figure you picked in the settings
+   * ("woman", "man", "nonbinary"): keep your extras right for it.
+   */
+  dressVisitor?(ctx: CanvasRenderingContext2D, v: { x: number; y: number; facing: Facing; pose: CharPose; kind: VisitorKind; look?: Look }, t: number): void;
 
   // ------------------------------------------------------------ things to click
   /**

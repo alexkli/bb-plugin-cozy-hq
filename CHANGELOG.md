@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **You** in the settings: pick how the boss at the big desk (you) looks, with a live preview.
+  - A figure (woman, man or nonbinary) and your pronouns (she, he or they); the office's small talk about the boss uses them.
+  - Skin tone, hair color (grey and white too) and hair style (a buzz cut and bald are new), glasses on or off.
+  - Kept per browser, and every scenery keeps your pick while it dresses you (the Sky Loft tie is only for "man").
+  - The defaults are the classic boss, so nothing changes until you pick something.
+  - For scenery authors: `dressVisitor` gets `v.look` (with the `figure`); `npc("boss", …)` keeps skin, hair and glasses.
+- Curly hair no longer hides the eyes.
 - Redwood Camp has no back wall any more: the forest runs to the top edge.
   - The usage board stands on log posts, and the clock, calendar and status board hang on trunks.
   - The door is a trailhead gate.

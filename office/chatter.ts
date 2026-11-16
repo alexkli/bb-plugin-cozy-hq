@@ -93,6 +93,9 @@ const SMALL = [
   "I dreamt in YAML last night.",
   "One more coffee and I'll refactor everything.",
   "The boss is in a good mood today.",
+  // {they}, {them}, {their}: the boss's pronouns, from the settings (the office fills them in).
+  "Is the boss in? I need {their} sign-off.",
+  "The boss was humming at {their} desk. Good sign.",
 ];
 
 const WEATHER_TALK: Partial<Record<WeatherKind, string[]>> = {
@@ -113,7 +116,7 @@ const WORK_OPEN_RECAP = ["{r}", "{r}", "Just wrapped this up: {r}", "Guess what?
 const WORK_OPEN_DONE = ["Finally done with “{t}”.", "Shipped “{t}”!", "“{t}” is ready for the boss."];
 const WORK_OPEN_ERROR = ["“{t}” blew up on me.", "Hit a wall on “{t}”.", "Ugh. “{t}” keeps failing."];
 const WORK_OPEN_IDLE = ["Took a break from “{t}”.", "Still thinking about “{t}”.", "{p} is keeping me busy."];
-const WORK_REPLY = ["Nice!", "Ooh, how?", "Ship it!", "Ha, classic.", "Same here.", "Teach me later?", "Respect.", "The boss will love that."];
+const WORK_REPLY = ["Nice!", "Ooh, how?", "Ship it!", "Ha, classic.", "Same here.", "Teach me later?", "Respect.", "The boss will love that.", "Show the boss, {they}'ll love it."];
 const WORK_REPLY_ERROR = ["Want a second pair of eyes?", "Turn it off and on again?", "Coffee first, then debug.", "Been there."];
 const SMALL_REPLY = ["Ha, right?", "Totally.", "Not again…", "Don't get me started.", "Haha!", "Same.", "Tell me about it."];
 

@@ -36,6 +36,8 @@ import { World, type Hit, type LabelAnchor, type SeenState, type SpeechBubble, t
 import { chairToneFor } from "./desks.ts";
 import { relabel, type Theme, type ThemeLabels } from "./theme.ts";
 import { THEMES, themeById } from "./themes/index.ts";
+import { readYou, type You } from "./you.ts";
+import { YouSettings } from "./YouSettings.tsx";
 
 export const TOPIC_EMOJI: Record<Topic, string> = {
   game: "🎮",
@@ -343,6 +345,12 @@ export function OfficeView(input: OfficeProps) {
   const [sceneryId, setSceneryId] = useState(() => readJson(`${storageKey}:scenery`, { id: "classic" }).id);
   useEffect(() => writeJson(`${storageKey}:scenery`, { id: sceneryId }), [sceneryId, storageKey]);
   const theme = themeById(debug.scenery ?? sceneryId);
+  // You, the boss: your look and pronouns, kept per browser like the scenery.
+  const [you, setYou] = useState<You>(() => readYou(readJson<unknown>(`${storageKey}:you`, null)));
+  useEffect(() => {
+    writeJson(`${storageKey}:you`, you);
+    world.setYou(you);
+  }, [you, storageKey, world]);
   // The scenery's words plus the ones that hold for this floor plan only.
   const named = useMemo(
     () => (layout?.words ? { ...theme, labels: { ...theme.labels, words: { ...theme.labels?.words, ...layout.words } } } : theme),
@@ -1040,6 +1048,8 @@ export function OfficeView(input: OfficeProps) {
               {settingsOpen ? (
                 <SettingsPanel
                   prefs={prefs}
+                  you={you}
+                  onYou={(patch) => setYou((y) => ({ ...y, ...patch }))}
                   scenery={theme}
                   onScenery={(id) => {
                     setSceneryId(id);
@@ -1094,7 +1104,7 @@ export function OfficeView(input: OfficeProps) {
               className={`chq-gear-btn${settingsOpen ? " is-on" : ""}`}
               aria-expanded={settingsOpen}
               aria-label="Settings"
-              title="Settings: sound, scenery, buddy"
+              title="Settings: you, sound, scenery, buddy"
               onClick={() => {
                 sound.unlock();
                 play("click");
@@ -1671,9 +1681,11 @@ function Tv(props: {
 
 // -------------------------------------------------------------- sound
 
-/** Top right, behind the gear (and the speakers): sound, scenery and the buddy. */
+/** Top right, behind the gear (and the speakers): you, sound, scenery and the buddy. */
 function SettingsPanel(props: {
   prefs: SoundPrefs;
+  you: You;
+  onYou: (patch: Partial<You>) => void;
   scenery: Theme;
   onScenery: (id: string) => void;
   onChange: (p: SoundPrefs) => void;
@@ -1703,6 +1715,8 @@ function SettingsPanel(props: {
           ×
         </button>
       </div>
+      <div className="chq-settings-label">You</div>
+      <YouSettings you={props.you} theme={props.scenery} onChange={props.onYou} />
       <div className="chq-settings-label">Sound</div>
       <div className="chq-sound-row">
         <button

@@ -125,9 +125,12 @@ weather.
   headline to open it.
 - The TV announces a running office event on the HQ NEWS channel.
 - The gear at the top right (or either speaker next to the TV) opens the
-  settings: sound on/off, volume and ambient sounds (background life such as
-  agents brewing coffee), the scenery and the office buddy. These are kept
-  per browser. The **Names** button next to the gear toggles name tags.
+  settings: how you (the boss) look and your pronouns, sound on/off, volume
+  and ambient sounds (background life such as agents brewing coffee), the
+  scenery and the office buddy. These are kept per browser. **You** picks a
+  figure (woman, man, nonbinary), pronouns (she, he, they; the office's words
+  about the boss use them), skin tone, hair color and style, and glasses,
+  with a live preview; every scenery dresses you its own way. The **Names** button next to the gear toggles name tags.
 
 ## Settings
 

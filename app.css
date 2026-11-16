@@ -839,6 +839,44 @@
 .chq-scenery-item i { grid-row: span 2; font-style: normal; font-size: 18px; text-align: center; }
 .chq-scenery-item b { font: 700 11px/1.2 var(--chq-mono); }
 .chq-scenery-item span { font: 400 10px/1.25 var(--chq-mono); opacity: 0.75; }
+/* You: the boss's look and pronouns, with a live preview of the sprite. */
+.chq-you { display: grid; gap: 4px; }
+.chq-you-top { display: grid; grid-template-columns: 60px 1fr; gap: 10px; align-items: start; }
+.chq-you-preview {
+  width: 60px;
+  height: 84px;
+  image-rendering: pixelated;
+  border: 1px solid #c9bda9;
+  border-radius: 6px;
+  background: linear-gradient(#f3ead8 70%, #e6d8bd 70%);
+}
+.chq-you-who { display: grid; gap: 4px; }
+.chq-you-sub { font: 700 10px/1 var(--chq-mono); opacity: 0.6; margin-top: 2px; }
+.chq-you-chips { display: flex; flex-wrap: wrap; gap: 3px; }
+.chq-you-chip {
+  padding: 4px 6px;
+  border: 1px solid #c9bda9;
+  border-radius: 5px;
+  background: transparent;
+  color: #2a1e2e;
+  font: 700 10px/1 var(--chq-mono);
+  cursor: pointer;
+}
+.chq-you-chip:hover { background: #f3ead8; }
+.chq-you-chip.is-on { border-color: #2a1e2e; background: #fff3c4; }
+.chq-you-swatches { display: flex; flex-wrap: wrap; gap: 4px; }
+.chq-you-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid #fffaf0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #c9bda9;
+  cursor: pointer;
+}
+.chq-you-swatch.is-on { box-shadow: 0 0 0 2px #2a1e2e; }
+.chq-you-chip:focus-visible, .chq-you-swatch:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.chq-you-glasses { margin-top: 4px; }
 
 /* The name tag switch, top right of the office. */
 .chq-labels-btn {

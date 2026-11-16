@@ -23,7 +23,7 @@ export function skylineLook(look: Look, id: string): Look {
 export function skylineNpc(kind: VisitorKind, classic: Look): Look {
   switch (kind) {
     case "boss":
-      return { ...classic, shirt: "#2b3142", pants: "#2b3142", accessory: "glasses" };
+      return { ...classic, shirt: "#2b3142", pants: "#2b3142" };
     case "guard":
       return { ...classic, hairStyle: "crop", shirt: "#232b40", pants: "#3a3f4a", accent: "#232b40", accessory: "none" };
     case "janitor":
