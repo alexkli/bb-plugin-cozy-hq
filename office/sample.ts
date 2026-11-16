@@ -17,8 +17,8 @@ const PROJECTS = [
 const SEEDS: Seed[] = [
   { title: "Build a tiny snake game", project: 1, ago: 2, recap: "The snake now speeds up every five apples.", status: "active", indicator: "runtime", model: "claude-opus-5-5" },
   { title: "Fix the login redirect loop", project: 0, ago: 1, status: "active", indicator: "runtime", model: "claude-sonnet-5-5" },
-  { title: "Speed up image thumbnails", project: 0, ago: 3, status: "active", indicator: "runtime", model: "claude-haiku-4-5" },
-  { title: "Refactor the payment module", project: 0, ago: 4, status: "active", indicator: "runtime", model: "gpt-5-codex", providerId: "codex" },
+  { title: "Speed up image thumbnails", project: 0, ago: 3, status: "active", indicator: "background-agent", model: "claude-haiku-4-5", activity: { ...IDLE, backgroundAgents: 3 } },
+  { title: "Refactor the payment module", project: 0, ago: 4, status: "active", indicator: "background-agent", model: "gpt-5-codex", providerId: "codex", activity: { ...IDLE, backgroundAgents: 5 } },
   { title: "Plan the search revamp", project: 0, ago: 5, status: "active", indicator: "plan-mode", activity: { ...IDLE, planMode: 1 } },
   { title: "Plan offline sync", project: 1, ago: 6, status: "active", indicator: "plan-mode", activity: { ...IDLE, planMode: 1 } },
   { title: "Design the new onboarding", project: 1, ago: 7, indicator: "waiting-for-input", hasPendingInteraction: true, interaction: "plan" },
@@ -34,6 +34,8 @@ const SEEDS: Seed[] = [
   { title: "Deploy the staging pipeline", project: 0, ago: 200, recap: "Staging deploys now take four minutes instead of twenty." },
   { title: "Data export to CSV", project: 2, ago: 600, recap: "CSV export handles commas and line breaks in names now." },
   { title: "Old docs cleanup", project: 2, ago: 60 * 30 },
+  // Spawned by "Fix the login redirect loop": matching lanyards.
+  { title: "Add a regression test for the redirect", project: 0, ago: 4.5, status: "active", indicator: "runtime", parentThreadId: "sample-1" },
 ];
 
 export function sampleThreads(now: number): OfficeThread[] {

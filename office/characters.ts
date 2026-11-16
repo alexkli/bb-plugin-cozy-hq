@@ -95,6 +95,8 @@ export interface CharSpec {
   emblem?: string | null;
   /** Sitting on a chair facing out: knees and shoes show under the torso. */
   seated?: boolean;
+  /** A shorter body under the same head (subagents helping out at a desk). */
+  short?: boolean;
 }
 
 /** 5×5 shirt badges, one per topic. */
@@ -182,7 +184,7 @@ export const ANCHOR_Y = 27;
 const cache = new SpriteCache();
 
 export function charSprite(spec: CharSpec): HTMLCanvasElement {
-  const key = `${spec.look.key}|${spec.facing}|${spec.pose}|${spec.expr}|${spec.emblem ?? ""}|${spec.seated ? 1 : 0}`;
+  const key = `${spec.look.key}|${spec.facing}|${spec.pose}|${spec.expr}|${spec.emblem ?? ""}|${spec.seated ? 1 : 0}${spec.short ? "|s" : ""}`;
   return cache.get(key, () => buildChar(spec));
 }
 
@@ -190,7 +192,7 @@ export function charSprite(spec: CharSpec): HTMLCanvasElement {
 const OX = 1;
 const OY = 2;
 
-function buildChar({ look, facing, pose, expr, emblem, seated: onChair }: CharSpec): Grid {
+function buildChar({ look, facing, pose, expr, emblem, seated: onChair, short }: CharSpec): Grid {
   const g = new Grid(CHAR_W, CHAR_H);
   const back = facing === "back";
   const side = facing === "left" || facing === "right";
@@ -208,7 +210,11 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair }: CharSp
   const bob = pose === "walk1" || pose === "walk3" ? -1 : 0;
   const slump = pose === "slump" ? 2 : 0;
   const napDrop = pose === "nap" ? 1 : 0;
-  const y0 = OY + bob + slump + napDrop; // head top row
+  // Short: two rows less torso and two less leg, so everything above sits 4 rows lower.
+  const drop = short ? 4 : 0;
+  const torsoH = short ? 5 : 7;
+  const legH = short ? 1 : 3;
+  const y0 = OY + drop + bob + slump + napDrop; // head top row
   const x0 = OX;
 
   // Long hair falls behind the body.
@@ -222,9 +228,9 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair }: CharSp
   }
 
   // ---- legs & body
-  const bodyTop = OY + 12 + bob;
+  const bodyTop = OY + 12 + drop + bob;
   if (!seated) {
-    const legY = bodyTop + 7;
+    const legY = bodyTop + torsoH;
     let lUp = 0;
     let rUp = 0;
     if (pose === "walk1") lUp = 1;
@@ -233,15 +239,15 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair }: CharSp
     if (side) {
       // Legs scissor in profile.
       const a = pose === "walk1" ? -1 : pose === "walk3" ? 1 : 0;
-      g.rect(x0 + 6 + a, legY + 2, 3, 3, pants);
-      g.rect(x0 + 6 + a, legY + 5, 4, 1, shoe);
-      g.rect(x0 + 9 - a, legY + 2, 3, 3, shade(pants, -0.15));
-      g.rect(x0 + 9 - a, legY + 5, 4, 1, shoe);
+      g.rect(x0 + 6 + a, legY + 2, 3, legH, pants);
+      g.rect(x0 + 6 + a, legY + 2 + legH, 4, 1, shoe);
+      g.rect(x0 + 9 - a, legY + 2, 3, legH, shade(pants, -0.15));
+      g.rect(x0 + 9 - a, legY + 2 + legH, 4, 1, shoe);
     } else {
-      g.rect(x0 + 4, legY + 2, 3, 3 - lUp, pants);
-      g.rect(x0 + 4, legY + 5 - lUp, 3, 1, shoe);
-      g.rect(x0 + 9, legY + 2, 3, 3 - rUp, pants);
-      g.rect(x0 + 9, legY + 5 - rUp, 3, 1, shoe);
+      g.rect(x0 + 4, legY + 2, 3, legH - lUp, pants);
+      g.rect(x0 + 4, legY + 2 + legH - lUp, 3, 1, shoe);
+      g.rect(x0 + 9, legY + 2, 3, legH - rUp, pants);
+      g.rect(x0 + 9, legY + 2 + legH - rUp, 3, 1, shoe);
     }
   } else if (pose === "nap" || pose === "read" || (onChair && !back)) {
     // Sitting cross-legged on a beanbag / armchair, facing out.
@@ -253,8 +259,8 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair }: CharSp
   // Torso
   const tw = 8;
   const tx = x0 + 4;
-  g.rect(tx, bodyTop, tw, 7, shirt);
-  g.rect(tx, bodyTop + 6, tw, 1, shirtLo);
+  g.rect(tx, bodyTop, tw, torsoH, shirt);
+  g.rect(tx, bodyTop + torsoH - 1, tw, 1, shirtLo);
   if (!back) {
     // Collar / neckline
     g.set(tx + 3, bodyTop, skinShade).set(tx + 4, bodyTop, skinShade);

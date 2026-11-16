@@ -48,6 +48,16 @@ ultrawide; everyone else gets a flat screen, with the odd retro CRT), chairs
 by provider, and a shirt badge shows what the thread is about. One or two
 people work in a Vision Pro.
 
+When a thread runs subagents of its own (background agents, like Claude Code's
+background Agent tasks), they come in through the door as small helpers in
+caps of the thread's color and stand by its desk while it works: pointing at
+the screen, holding up a page or a laptop, nodding along, now and then a word.
+Up to three stand at a desk (two where the thread sits with its back to you),
+the rest show as "+n"; hover one to see whose helper it is, click it to open
+the thread. They walk back out when they're done. Threads a thread spawned
+(bb child threads) keep their own desks and wear lanyards in the same color as
+their parent; hovering one points at the rest of the family.
+
 The office keeps going while you're elsewhere in bb, and it remembers what
 everyone was doing when you last looked: coming back, only the threads whose
 state changed since then get up and walk.
@@ -258,6 +268,7 @@ Only the view changes. Remove the key to go back to normal.
 | `office/feeds.ts` | Tech news sources and a small RSS/Atom reader (pure) |
 | `office/chatter.ts` | Small talk, weather codes, recap lines (pure) |
 | `office/model.ts` | Pure logic: thread mood, spot assignment, office news |
+| `office/subagents.ts`, `office/crew.ts` | Subagents helping at desks and child-thread families: where helpers stand (pure), and their life in the office |
 | `office/layout.ts` | The classic floor plans (wide and portrait) and the room builders sceneries reuse |
 | `office/layoutcheck.ts` | What every floor plan must get right (tested for every scenery at many sizes) |
 | `office/world.ts` | Simulation and canvas renderer |

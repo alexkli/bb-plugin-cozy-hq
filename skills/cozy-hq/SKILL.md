@@ -37,6 +37,12 @@ calendar can start one too.
 Desks are dressed by the occupant's model (Opus: walnut + dual monitors,
 Sonnet: oak, Haiku: white + laptop, GPT/Codex: black + ultrawide); chairs by
 provider. A small shirt badge shows the topic guessed from the thread title.
+Small helpers in caps of a thread's color standing by its desk are its own
+subagents (bb's background agent count for the thread, e.g. Claude Code's
+background Agent tasks): up to three per desk (two where the thread sits with
+its back to you), the rest shown as "+n"; they walk in when the count goes up
+and out when it drops. bb child threads (a thread's `parentThreadId`) keep
+their own desks and wear a lanyard in the same color as their parent.
 The office is laid out for the panel's size and the number of threads; tall
 panels (a phone held upright) stack the rooms vertically.
 When an area is full, waiting threads fall back to a desk and drafts to the

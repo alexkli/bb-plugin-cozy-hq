@@ -31,6 +31,7 @@ import {
 import { isUnopened, NO_RECORD, noteOpened, updateOpened, type OpenedRecord } from "./highlight.ts";
 import { hash } from "./pixel.ts";
 import { Sound, type SoundName } from "./sound.ts";
+import { familiesOf, subagentsOf } from "./subagents.ts";
 import { World, type Hit, type LabelAnchor, type SeenState, type SpeechBubble, type Talk, type WorldThread } from "./world.ts";
 import { chairToneFor } from "./desks.ts";
 import { relabel, type Theme, type ThemeLabels } from "./theme.ts";
@@ -429,6 +430,7 @@ export function OfficeView(input: OfficeProps) {
           .sort()
           .slice(0, 2),
       );
+      const families = familiesOf(visible);
       const list: WorldThread[] = [];
       for (const t of visible) {
         const spotId = spots.get(t.id);
@@ -446,6 +448,8 @@ export function OfficeView(input: OfficeProps) {
           chairTone: chairToneFor(t.providerId),
           visionPro: vision.has(t.id),
           unopened: isUnopened(t, opened),
+          subagents: subagentsOf(t),
+          family: families.get(t.id) ?? null,
         });
       }
       world.sync(list, instant, lastSeen);
@@ -726,6 +730,7 @@ export function OfficeView(input: OfficeProps) {
     }
     switch (hit.kind) {
       case "agent":
+      case "helper":
         play("click");
         props.onOpenThread(hit.id);
         break;
@@ -858,6 +863,7 @@ export function OfficeView(input: OfficeProps) {
         const topic = topicOf(t.displayTitle);
         const activity = world.activityOf(t.id);
         const when = ago(Date.now() - t.updatedAt);
+        const family = familyLine(t, visible, named);
         return (
           <>
             <div className="chq-tip-title">
@@ -873,6 +879,23 @@ export function OfficeView(input: OfficeProps) {
               {wait ? WAIT_LABEL[wait] : moodLabel(mood)}
               {mood === "idle" && activity ? ` · ${relabel(named, activity)}` : ""} · {when}
               {when === "just now" ? "" : " ago"}
+            </div>
+            {family ? <div className="chq-tip-hint">{family}</div> : null}
+          </>
+        );
+      }
+      case "helper": {
+        const t = byId.get(hover.id);
+        if (!t) return null;
+        const n = subagentsOf(t);
+        return (
+          <>
+            <div className="chq-tip-title">
+              {relabel(named, "Subagent helping")} {t.displayTitle}
+            </div>
+            <div className="chq-tip-meta">
+              <span className="chq-dot" style={{ background: `hsl(${t.projectHue} 58% 60%)` }} />
+              {n} {n === 1 ? "subagent" : "subagents"} at work · open the thread
             </div>
           </>
         );
@@ -955,7 +978,7 @@ export function OfficeView(input: OfficeProps) {
       case "scenery":
         return <div className="chq-tip-hint">{hover.hover}</div>;
     }
-  }, [hover, byId, world, prefs, overflow, waiting, now, counts, officeEvent, weatherLine, theme]);
+  }, [hover, byId, visible, world, prefs, overflow, waiting, now, counts, officeEvent, weatherLine, theme]);
 
   const W = (layout?.W ?? MIN_W_WIDE) * scale;
   const H = (layout?.H ?? MIN_H_WIDE) * scale;
@@ -1202,6 +1225,18 @@ function NameTags(props: { tags: TagBox[]; width: number; height: number; onOpen
   );
 }
 
+/** Its subagents and family, for a thread's tooltip ("3 subagents helping · Child thread of …"). */
+function familyLine(t: OfficeThread, visible: readonly OfficeThread[], theme: Theme): string | null {
+  const parts: string[] = [];
+  const n = subagentsOf(t);
+  if (n > 0) parts.push(`${n} ${relabel(theme, n === 1 ? "subagent" : "subagents")} helping`);
+  const parent = t.parentThreadId ? visible.find((p) => p.id === t.parentThreadId) : undefined;
+  if (parent) parts.push(`Child thread of ${parent.displayTitle}`);
+  const kids = visible.filter((c) => c.parentThreadId === t.id).length;
+  if (kids > 0) parts.push(`${kids} child ${kids === 1 ? "thread" : "threads"}`);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 /** Comic speech bubbles over whoever is talking. */
 function Speech(props: { bubbles: SpeechBubble[]; scale: number; width: number }) {
   if (props.bubbles.length === 0) return null;
@@ -1259,6 +1294,7 @@ function pokeTip(kind: PokeKind, waiting: OfficeThread[], counts: Record<Mood, O
 
 const LEGEND: { title: string; text: string; color: string; icon: string }[] = [
   { title: "At a desk", text: "Working on it", color: "#cdeefd", icon: "⌨" },
+  { title: "Helpers in caps", text: "Its subagents lending a hand", color: "#d9f7c9", icon: "+" },
   { title: "Meeting room", text: "Planning", color: "#e8dcff", icon: "✎" },
   { title: "Waiting room · hand up", text: "Question or approval for you", color: "#cdeefd", icon: "?" },
   { title: "Meeting room · blueprint", text: "Plan ready for your review", color: "#e8dcff", icon: "▤" },
@@ -1269,8 +1305,8 @@ const LEGEND: { title: string; text: string; color: string; icon: string }[] = [
   { title: "Name tags", text: "Solid = unread, outlined = read", color: "#fff3a3", icon: "▸" },
   { title: "A soft glow", text: "Warm: finished, not opened yet · cool: off to work", color: "#ffe9c7", icon: "✧" },
   { title: "Shirt badge", text: "What the thread is about", color: "#d9f7c9", icon: "★" },
+  { title: "Matching lanyards", text: "A thread and its child threads", color: "#e8dcff", icon: "∪" },
   { title: "Kitchen · cooler", text: "Idle under 20 min", color: "#ffe9c7", icon: "☕" },
-  { title: "Office events", text: "Idle agents join in", color: "#ffd6e5", icon: "★" },
   { title: "Lounge", text: "Idle a while", color: "#fff3a3", icon: "♪" },
   { title: "Beanbag", text: "Idle 8 hours+", color: "#cdeefd", icon: "z" },
 ];

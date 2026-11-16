@@ -18,6 +18,10 @@
   - Opening the thread once ends it. Marking it unread again to keep as a reminder doesn't bring it back; only a new finish does.
   - Cool blue around a thread that just started new work, while it walks to its desk.
 - For scenery authors: `clickables` and `click` hooks for things to click in the scenery, which can ask idle people over with lines and sounds.
+- Subagents help out at the desk: while a thread works with background agents of its own, they come in as small helpers in caps of its color and stand next to its desk, pointing at the screen, holding up a page or a laptop, nodding, now and then a word.
+  - Up to three per desk (two at desks with their back to you), the rest as "+n"; hover a helper to see whose it is, click it to open the thread.
+  - They walk in through the door when they start and back out when they're done.
+  - Child threads keep their own desks and wear lanyards matching their parent's; hovering one points at the rest of the family, and the tooltip says whose child it is.
 
 ## 0.4.0 (2026-11-15)
 

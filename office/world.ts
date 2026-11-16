@@ -22,6 +22,7 @@ import {
   type Expression,
   type Look,
 } from "./characters.ts";
+import { Crew, drawLanyard, type DeskWork } from "./crew.ts";
 import { buildProps, paintBackground, roombaSprite, speakerSprite, type Prop } from "./furniture.ts";
 import type { Facing, Layout, Point, PokeKind, Rect, Spot } from "./layout.ts";
 import { waitsForYou, type DeskStyle, type Mood, type WaitKind } from "./model.ts";
@@ -80,6 +81,10 @@ export interface WorldThread {
   visionPro: boolean;
   /** Finished (or waiting on you) and you haven't opened it since: a warm glow. */
   unopened?: boolean;
+  /** Its own subagents at work (they stand by its desk). */
+  subagents: number;
+  /** The family it belongs to (a thread and the ones it spawned): matching lanyards. */
+  family: string | null;
 }
 
 /** What a thread was doing the last time you looked at the office. */
@@ -128,6 +133,7 @@ export interface LabelAnchor {
 
 export type Hit =
   | { kind: "agent"; id: string }
+  | { kind: "helper"; id: string; key: string }
   | { kind: "desk"; index: number }
   | { kind: "door" }
   | { kind: "legend" }
@@ -431,6 +437,11 @@ export class World {
   /** How the office looks (the scenery), and sprites dressed by it. */
   private theme: Theme = CLASSIC;
   private themed = new Map<string, unknown>();
+  /** Threads' subagents, standing by their desks. */
+  private crew = new Crew(() => {
+    this.doorOpenUntil = this.time + 1.2;
+  });
+  private dressHelper = (look: Look, id: string): Look => this.lookOf(look, id);
 
   constructor(emit: Emit) {
     this.emit = emit;
@@ -531,6 +542,7 @@ export class World {
     this.layoutKey = key;
     const first = this.L === null;
     this.L = L;
+    this.crew.setLayout(L);
     this.bg = paintBackground(L, this.theme);
     this.props = buildProps(L, this.theme);
     this.dark = document.createElement("canvas");
@@ -811,6 +823,20 @@ export class World {
       a.spot = null;
       a.target = null;
     }
+    this.crew.sync(this.deskWork(), this.time, instant);
+  }
+
+  /** Threads at their desk (or on the way) with subagents running. */
+  private deskWork(): DeskWork[] {
+    const L = this.L!;
+    const out: DeskWork[] = [];
+    for (const a of this.agents.values()) {
+      if (a.leaving || a.thread.subagents <= 0 || a.thread.mood !== "working") continue;
+      const id = a.target ?? a.spot?.id;
+      const desk = id?.startsWith("desk-") ? L.desks[Number(id.slice(5))] : undefined;
+      if (desk && desk.spot.id === id) out.push({ id: a.id, look: a.thread.look, subagents: a.thread.subagents, desk });
+    }
+    return out;
   }
 
   private place(a: Agent, spot: Spot): void {
@@ -931,6 +957,8 @@ export class World {
       const top = this.headTop(a);
       if (x >= a.x - 8 && x <= a.x + 8 && y >= top - 2 && y <= this.drawY(a) + 1) return { kind: "agent", id: a.id };
     }
+    const helper = this.crew.hit(x, y);
+    if (helper) return { kind: "helper", ...helper };
     for (const n of this.npcs) {
       const ny = n.y - this.climbOf(n);
       if (Math.abs(x - n.x) <= 8 && y >= ny - ANCHOR_Y + 2 && y <= ny + 1) return { kind: "npc", who: n.kind };
@@ -1310,6 +1338,7 @@ export class World {
     this.updateMishap(dt);
     this.updateWeather();
     this.updateBroken(dt);
+    this.crew.update(dt, t);
   }
 
   private onArrive(a: Agent, spot: Spot): void {
@@ -3192,6 +3221,7 @@ export class World {
       items.push({ z: d.side === "north" ? d.spot.y - 1 : d.spot.y + 2, draw: () => ctx.drawImage(chair, d.chairX, d.chairY) });
     }
     for (const a of this.agents.values()) items.push({ z: a.y + 0.5, draw: () => this.drawAgent(ctx, a) });
+    items.push(...this.crew.items(ctx, this.time, this.dressHelper));
     items.push({ z: L.boss.seat.y + 0.5, draw: () => this.drawBoss(ctx) });
     for (const n of this.npcs) items.push({ z: n.y + 0.5, draw: () => this.drawNpc(ctx, n) });
     for (const k of this.kids) items.push({ z: k.y + 0.4, draw: () => this.drawKid(ctx, k) });
@@ -3220,6 +3250,7 @@ export class World {
       ctx.fillRect(0, 0, L.W, L.H);
     }
     for (const a of this.agents.values()) this.drawBubble(ctx, a);
+    this.crew.drawOverlay(ctx, this.theme);
     this.drawHover(ctx, env);
   }
 
@@ -3510,6 +3541,7 @@ export class World {
       const seatedNow = onChair === true || (settled && s !== null && SEATED_KINDS.has(s.kind));
       this.theme.dress(ctx, { x: Math.round(a.x - ANCHOR_X), y: Math.round(y - ANCHOR_Y), facing, pose, seed: a.seed, seated: seatedNow, look: this.lookOf(a.thread.look, a.id) }, this.time);
     }
+    if (a.thread.family) drawLanyard(ctx, Math.round(a.x - ANCHOR_X), Math.round(y - ANCHOR_Y), facing, pose, a.thread.family);
     if (a.thread.isPinned) {
       ctx.fillStyle = "#ffd84a";
       ctx.fillRect(Math.round(a.x + 2), Math.round(y - ANCHOR_Y + 15), 2, 2);
@@ -4107,6 +4139,15 @@ export class World {
           a.spot?.kind !== "boss-guest" &&
           !((a.thread.waitKind === "done" || a.thread.waitKind === "plan") && (a.spot?.kind === "review" || a.spot?.kind === "present"));
         marker(a.x, this.headTop(a) - (bubble ? 20 : 7) + bob);
+        // The rest of its family (the thread that spawned it, the ones it spawned).
+        if (a.thread.family) {
+          for (const b of this.agents.values()) if (b !== a && !b.leaving && b.thread.family === a.thread.family) marker(b.x, this.headTop(b) - 7 + bob);
+        }
+        break;
+      }
+      case "helper": {
+        const p = this.crew.anchorOf(h.key);
+        if (p) marker(p.x, p.y + bob);
         break;
       }
       case "desk": {
