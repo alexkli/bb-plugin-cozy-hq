@@ -89,7 +89,7 @@ office to another place. Each scenery has its own floor plan, pets, visitors,
 sounds and words; the people and everything that happens (desks, breaks,
 meetings, lunch, events, gags) stay the same:
 
-![The whole office in all seven sceneries, each with its own floor plan](docs/sceneries.png)
+![The whole office in every scenery, each with its own floor plan](docs/sceneries.png)
 
 | Scenery | |
 | --- | --- |
@@ -100,6 +100,10 @@ meetings, lunch, events, gags) stay the same:
 | 🏙️ Sky Loft | A penthouse around an elevator core, the city far below the glass, a terrace with a hot tub; a French bulldog and a grey cat |
 | 🗄️ Dusty Annex | Patchwork rooms off creaky corridors and stairs, an old hall with a stage, storerooms of junk; an old terrier and an alley cat |
 | 🏫 School | Classrooms off a corridor, the cafeteria, the principal's office, and a schoolyard with a field, swings and a bus stop; a reading dog and the class bunny |
+| 🏠 Startup House | A suburban ranch house turned founders' office: desks on the living-room carpet, an energy-drink pyramid, servers in the garage, a slightly green pool and a hammock out back; a bulldog and a backyard hen |
+| 🏔️ Mountain Cabin | A timber lodge above the treeline: a fieldstone fireplace, a mudroom, a sun deck with a sauna, snowy peaks, a chairlift and skiers through the windows; a mountain dog and a marmot |
+| 🌋 Villain's Lair | A secret base inside a volcano: a control room under a blinking world map, a countdown to the next coffee, a shark tank, a big red button and a monorail over the lava; a robot hound and a white cat |
+| 🚀 Spaceship | A deck on a long-haul starship: crew stations, a bridge viewscreen, a galley with a food synthesizer, hydroponics, an engine core and an airlock, with space drifting by; a robot dog and a fluffy critter |
 
 Your pick is kept per browser; the buddy dresses to match.
 

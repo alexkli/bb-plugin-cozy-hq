@@ -102,7 +102,9 @@ crickets at night, rain, wind, thunder, a foghorn in fog).
 The settings (the gear at the top right) pick a scenery that moves the office to another place:
 Classic office, Neon City (cyberpunk streets), Redwood Camp (tents among the
 redwoods), Surf Villa (villa, pool and beach), Sky Loft (a New York
-penthouse), Dusty Annex (a shabby back office) or School. Each has its own
+penthouse), Dusty Annex (a shabby back office), School, Startup House (a
+founders' house), Mountain Cabin (an alpine lodge), Villain's Lair (a volcano
+base) or Spaceship. Each has its own
 floor plan, pets, visitors, sounds and words (the TV says where events
 happen there: the plaza, the schoolyard, the terrace); everything that
 happens stays the same. The pick is kept per browser and the buddy dresses

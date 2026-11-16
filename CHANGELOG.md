@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Four new sceneries, each with its own floor plan, pets, visitors, words, sounds and things to click:
+  - **Startup House**: a suburban ranch house turned founders' office, with a garage server room and a backyard pool, grill and hammock.
+  - **Mountain Cabin**: a timber lodge above the treeline, with a fieldstone fireplace, a sun deck and sauna, peaks, a chairlift and skiers.
+  - **Villain's Lair**: a secret base in a volcano, with a world map, a countdown that always stops at 00:01, a shark tank, a big red button and a monorail.
+  - **Spaceship**: a deck on a long-haul starship, with a viewscreen that jumps between star systems, a food synthesizer, a gravity switch and spacewalks; the local weather becomes space weather.
+- For scenery authors: `windowWeather: false` for windows that don't look out at the local weather.
 - In the Sky Loft you can click the hot tub, the fire table, the telescopes, the glass with the city below, the globe pendants and the spiral stair.
   - The hot tub: the jets come on, idle people climb in for a soak ("Ahh…"), and now and then a rubber duck bobs about.
   - The fire table roars up; people come over to toast marshmallows (one goes flambé) or, on cold nights, to sip cocoa.
