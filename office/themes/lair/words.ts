@@ -21,7 +21,7 @@ export const LABELS: ThemeLabels = {
     plant: "Water the jungle plant",
     bin: "Bin · shred the evidence",
     clock: "Clock · synchronize watches",
-    arcade: "Arcade · insert a gold doubloon",
+    arcade: "Arcade cabinet · play a game (world domination can wait)",
     pingpong: "Ping-pong table · serve",
     fishtank: "The shark tank · feeding time",
     whiteboard: "The briefing screen · threads in plan mode",

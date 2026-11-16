@@ -15,6 +15,7 @@ import type { Layout, Rect, WallSegment } from "../../layout.ts";
 import {
   bossToys,
   Builder,
+  buildArcade,
   buildKitchen,
   buildMeeting,
   buildPods,
@@ -107,11 +108,17 @@ function buttonOf(desk: Rect): Rect {
   return { x: desk.x + 5, y: desk.y - 1, w: 10, h: 9 };
 }
 
+/** The arcade cabinet with its top-left at x, y, reached along a lane just below where its player stands. */
+function arcadeAt(b: Builder, x: number, y: number, acc: Access): Rect | null {
+  return buildArcade(b, x, y, via(acc, y + 62, x + 12, y + 58));
+}
+
 /**
  * The lounge with a standing TV sized to the room (classic `buildLounge`
- * with a smaller set when it's short): TV, couch, piano, the shark tank.
+ * with a smaller set when it's short): TV, couch, piano, the shark tank, and
+ * the arcade cabinet in the corner left of the TV when it fits there.
  */
-function buildDen(b: Builder, r: Rect, acc: Access, naps: boolean): { tv: Rect; screen: Rect; speakers: Rect[]; couch: Rect; fishtank: Rect } {
+function buildDen(b: Builder, r: Rect, acc: Access, naps: boolean, cabinet: boolean): { tv: Rect; screen: Rect; speakers: Rect[]; couch: Rect; fishtank: Rect; arcade: Rect | null } {
   b.rooms.push({ kind: "lounge", rect: r });
   const tvH = clamp(r.h - 80, 45, 72);
   const tvW = Math.min(Math.round(tvH / 0.56), r.w - 70);
@@ -142,8 +149,11 @@ function buildDen(b: Builder, r: Rect, acc: Access, naps: boolean): { tv: Rect; 
   b.prop("fishtank-stand", "fishtank-stand", fishtank.x - 1, fishtank.y + 24, fishtank.y + 44);
   b.poke("fishtank", "fishtank", { x: fishtank.x, y: fishtank.y, w: 40, h: 44 });
   b.spot({ id: "fishtank", kind: "fishtank", group: "lounge", x: fishtank.x + 20, y: fishtank.y + 54, facing: "back", pose: "stand", path: via(acc, fishtank.y + 58, fishtank.x + 20, fishtank.y + 54), activity: "watching the fish" });
-  // Potted palms in the top corners when there's room beside the speakers.
-  if (speakers[0]!.x - 4 - r.x >= 36) b.plant("LARGE_PLANT", r.x + Math.round((speakers[0]!.x - r.x - 32) / 2), r.y);
+  // The arcade (or a potted palm) in the top left corner, a palm in the right one, when there's room beside the speakers.
+  const left = speakers[0]!.x - 4 - r.x;
+  let arcade: Rect | null = null;
+  if (cabinet && left >= 32 && r.y + 2 + 62 < py - 2) arcade = arcadeAt(b, r.x + Math.max(4, Math.floor((left - 24) / 2)), r.y + 2, acc);
+  else if (left >= 36) b.plant("LARGE_PLANT", r.x + Math.round((speakers[0]!.x - r.x - 32) / 2), r.y);
   if (r.x + r.w - (speakers[1]!.x + speakers[1]!.w + 4) >= 36) b.plant("LARGE_PLANT", speakers[1]!.x + speakers[1]!.w + Math.round((r.x + r.w - speakers[1]!.x - speakers[1]!.w - 32) / 2), r.y);
   const by = r.y + r.h - 8;
   if (naps && by - (fishtank.y + 58) >= 30) {
@@ -153,7 +163,7 @@ function buildDen(b: Builder, r: Rect, acc: Access, naps: boolean): { tv: Rect; 
       b.spot({ id: `beanbag-${i + 1}`, kind: "beanbag", group: "nap", x: bx, y: by, facing: "front", pose: "nap", path: via(acc, by + 5, bx, by), activity: "napping" });
     }
   }
-  return { tv, screen, speakers, couch, fishtank };
+  return { tv, screen, speakers, couch, fishtank, arcade };
 }
 
 /** The water cooler, printer and bin in a row standing at baseY, reached straight from a hall. */
@@ -295,15 +305,18 @@ function tallPlan(W: number, H: number, threads: number): Layout | null {
   if (side) {
     const denW = clamp(Math.round(cW * 0.55), 200, 250);
     lounge = { x: a2 - 8 - denW, y: y0 + 4, w: denW, h: bottomH - 4 };
-    tvParts = buildDen(b, lounge, accR, true);
-    const concW = lounge.x - 10 - cx0;
-    eventArea = { x: cx0 + 6, y: y0 + 2, w: concW - 12, h: Math.min(84, bottomH - 52) };
-    utilitiesAt(b, cx0 + 8, FB - 8, hy);
+    tvParts = buildDen(b, lounge, accR, true, true);
+    // No room beside the TV: the cabinet stands at the head of the concourse instead.
+    if (!tvParts.arcade) arcadeAt(b, cx0 + 6, y0 + 4, accL);
+    const left = tvParts.arcade ? cx0 + 6 : cx0 + 40;
+    const concW = lounge.x - 10 - left;
+    eventArea = { x: left, y: y0 + 2, w: concW - 6, h: Math.min(84, bottomH - 52) };
+    utilitiesAt(b, left + 2, FB - 8, hy);
   } else {
     utilitiesAt(b, cx0 + 4, y0 + 38, hy);
     eventArea = { x: cx0 + 82, y: y0 + 2, w: cW - 88, h: EV };
     lounge = { x: cx0, y: y0 + EV + 10, w: cW, h: bottomH - EV - 10 };
-    tvParts = buildDen(b, lounge, accL, true);
+    tvParts = buildDen(b, lounge, accL, true, true);
   }
 
   const wx = a2 + 8;
@@ -322,7 +335,7 @@ function tallPlan(W: number, H: number, threads: number): Layout | null {
     lounge,
     games: null,
     eventArea,
-    tvParts: { ...tvParts, arcade: null },
+    tvParts,
     gamesParts: null,
     doorX: a2,
     lamp: boss.lamp,
@@ -480,7 +493,7 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
       }
       case "lounge":
         lounge = rect;
-        tvParts = buildDen(b, rect, { hallY: below, aisleX }, !withLedge);
+        tvParts = buildDen(b, rect, { hallY: below, aisleX }, !withLedge, true);
         break;
       case "waitingBoss": {
         const ww = Math.round(rect.w * 0.56);
@@ -518,7 +531,7 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
     lounge,
     games: null,
     eventArea,
-    tvParts: { ...tv, arcade: null },
+    tvParts: tv,
     gamesParts: null,
     doorX: aisleX,
     lamp: boss.lamp,

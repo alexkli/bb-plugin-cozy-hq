@@ -148,6 +148,34 @@ function speaker(): HTMLCanvasElement {
   });
 }
 
+function arcade(): HTMLCanvasElement {
+  // A teal-and-steel cabinet with a volcano on the marquee; the office plays the screen (x+3..22, y+10..23).
+  return sprite("arcade", 26, 48, (g) => {
+    g.rect(1, 1, 24, 46, C.tealLo);
+    g.rect(1, 1, 2, 46, C.teal).rect(23, 1, 2, 46, C.tealLo);
+    g.rect(1, 1, 24, 1, C.tealHi);
+    // The marquee: a little volcano with lava on top, lit from behind.
+    g.rect(2, 2, 22, 6, "#1a1418");
+    g.rect(9, 6, 8, 1, C.rockHi).rect(10, 5, 6, 1, C.rockHi).rect(11, 4, 4, 1, C.rockHi);
+    g.rect(12, 3, 2, 1, C.lava).set(11, 3, C.lavaHi).set(14, 3, C.lavaHi).set(12, 2, C.lavaHot);
+    g.set(4, 4, C.glowRed).set(21, 4, C.glowRed);
+    // The bezel round the screen.
+    g.rect(2, 8, 22, 17, "#121418");
+    g.rect(3, 10, 20, 14, "#0c1012");
+    g.rect(2, 8, 22, 1, C.steelDk);
+    // The control deck: a red ball-top stick and two buttons.
+    g.rect(1, 25, 24, 6, C.cream).rect(1, 25, 24, 1, C.creamHi).rect(1, 30, 24, 1, C.creamLo);
+    g.rect(7, 26, 1, 3, C.ink).rect(6, 25, 3, 2, C.velvetHi);
+    g.rect(14, 27, 2, 2, C.glowRed).rect(18, 27, 2, 2, C.hazard);
+    // The coin door and the kick plate.
+    g.rect(2, 31, 22, 13, C.steelLo);
+    g.rect(9, 34, 8, 6, C.steelDk);
+    g.set(11, 36, C.lavaHi).set(14, 36, C.lavaHi);
+    hazardStripes(g, 1, 44, 24, 3);
+    g.outline(OUTLINE);
+  });
+}
+
 // ------------------------------------------------------------------ the briefing room
 
 function meetingTable(): HTMLCanvasElement {
@@ -602,6 +630,8 @@ export function lairProp(p: PropPlacement, L: Layout, classic: () => HTMLCanvasE
       return beanbag("lava", "#d8622a", "#f08a4a", "#a8441a");
     case "piano":
       return piano();
+    case "arcade":
+      return arcade();
     case "fishtank-stand":
       return fishtankStand();
     case "tv":
