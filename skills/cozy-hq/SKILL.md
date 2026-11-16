@@ -60,7 +60,7 @@ Inside a thread, the buddy is that thread's own figure from the office.
 Idle threads get together every minute or so: a coffee at the espresso
 machine, water-cooler talk, a hallway chat, the couch, a ping-pong match or
 darts. Most get-togethers (and office events) come with comic speech bubbles:
-small talk, a Hacker News headline, or a line from what the thread last did
+small talk, a tech headline, or a line from what the thread last did
 (the first real sentence of its latest reply; `workTalk false` turns that
 off). Once a day after noon idle threads have lunch together at a long table;
 a delivery person brings pizza, sushi, burgers, tacos or ramen, and some
@@ -103,9 +103,11 @@ weather.
 - The pinboard shows one note per enabled provider account that publishes
   `provider-usage.v1` usage. Providers sharing a quota merge into one note.
   Click it (or its ↻) to refresh.
-- The TV rotates channels: HQ NEWS (thread events), TECH (Hacker News), and
-  INBOX (newest items from the Work Dashboard plugin, if installed). Click the
-  TV to switch channels; click a headline to open it.
+- The TV rotates channels: HQ NEWS (thread events), TECH (tech headlines,
+  Hacker News unless `newsSource` picks another source; the channel names
+  it, e.g. "TECH ▸ LOBSTERS"), and INBOX (newest items from the Work
+  Dashboard plugin, if installed). Click the TV to switch channels; click a
+  headline to open it.
 - The TV announces a running office event on the HQ NEWS channel.
 - The gear at the top right (or either speaker next to the TV) opens the
   settings: sound on/off, volume and ambient sounds (background life such as
@@ -121,3 +123,11 @@ outside the windows) and `workTalk` (speech bubbles may quote what a thread
 did last). `weatherPlace` sets the weather's place: a city or
 `latitude,longitude`; empty means your approximate location from your IP
 address (via geojs.io).
+
+`newsSource` picks the TECH channel's source: `hn` (Hacker News, the
+default), `lobsters`, `techmeme`, `verge` (The Verge), `ars` (Ars Technica),
+`dev` (DEV Community), `slashdot`, `github` (the GitHub Blog), `mix` (Hacker
+News, Lobsters, Techmeme, The Verge and Ars Technica taking turns, each
+headline labeled with its source) or `custom`, which reads the RSS or Atom
+feed at the `https://` address in `newsFeed`. Headlines refresh at most every
+20 minutes; when a source fails, the TV keeps its last headlines.

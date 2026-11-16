@@ -10,7 +10,7 @@ import { lookFor } from "./characters.ts";
 import { buildLayout, layoutSize, MIN_H_WIDE, MIN_W_WIDE, PORTRAIT_MIN_H, PORTRAIT_W, type Layout, type PokeKind, type Rect } from "./layout.ts";
 import { EVENT_KINDS, type EventKind } from "./life.ts";
 import { SEASON_TITLE, SEASONS, seasonsOf, type Season } from "./seasons.ts";
-import { SAMPLE_NEWS, SAMPLE_WEATHER, sampleRecap, sampleThreads, sampleUsage } from "./sample.ts";
+import { SAMPLE_WEATHER, sampleNews, sampleRecap, sampleThreads, sampleUsage } from "./sample.ts";
 import {
   ago,
   assignSpots,
@@ -93,6 +93,8 @@ export interface OfficeProps {
   usage: { cards: UsageCard[]; updatedAt: number } | null;
   usageLoading: boolean;
   news: Story[];
+  /** The TV's name for the tech news source ("HN", "Mix", a feed's title). */
+  newsSource: string;
   newsEnabled: boolean;
   inbox: { enabled: boolean; available: boolean; sources: string[]; items: InboxItem[] };
   /** Live weather outside (null until known, or when turned off). */
@@ -130,6 +132,8 @@ interface DebugPrefs {
   sample?: boolean;
   /** Pretend it's this season ("holidays", "laternenfest", "holi", …) whatever the date; "none" for none. */
   season?: string;
+  /** With `sample`: headlines from a "mix" of sources or a plain "feed" instead of Hacker News. */
+  news?: string;
 }
 
 function readJson<T>(key: string, fallback: T): T {
@@ -277,19 +281,21 @@ export function OfficeView(input: OfficeProps) {
   const props = useMemo<OfficeProps>(() => {
     if (!debug.sample) return input;
     const now = Date.now();
+    const news = sampleNews(debug.news, now);
     return {
       ...input,
       threads: sampleThreads(now),
       loading: false,
       usage: sampleUsage(now),
       usageLoading: false,
-      news: SAMPLE_NEWS,
+      news: news.stories,
+      newsSource: news.source,
       newsEnabled: true,
       inbox: { enabled: false, available: false, sources: [], items: [] },
       weather: SAMPLE_WEATHER,
       onRecap: async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, sampleRecap(id)]).filter((e): e is [string, string] => e[1] !== null)),
     };
-  }, [input, debug.sample]);
+  }, [input, debug.sample, debug.news]);
   const { threads } = props;
   useEffect(() => {
     if (debug.expose) (window as unknown as { __cozyHq?: unknown }).__cozyHq = worldRef.current;
@@ -981,6 +987,7 @@ export function OfficeView(input: OfficeProps) {
                 events={events}
                 counts={counts}
                 news={props.newsEnabled ? props.news : []}
+                newsSource={props.newsSource}
                 inbox={props.inbox}
                 onNext={() => {
                   sound.unlock();
@@ -1419,6 +1426,7 @@ function Tv(props: {
   events: OfficeEvent[];
   counts: Record<Mood, OfficeThread[]>;
   news: Story[];
+  newsSource: string;
   inbox: OfficeProps["inbox"];
   now: Date;
   weather: TvWeather;
@@ -1530,9 +1538,21 @@ function Tv(props: {
   } else if (ch === "tech") {
     const s = props.news[(props.tick + props.channel) % props.news.length]!;
     const rank = props.news.indexOf(s) + 1;
+    // Feeds have no points: their badge says how fresh the headline is.
+    const age = s.at === null ? null : ago(Date.now() - s.at);
+    const badge = s.score !== null ? `▲ ${s.score}` : age === null ? "NEW" : age === "just now" ? age : `${age} ago`;
     body = (
       <>
-        {top("TECH ▸ HN", "tech", <span className="chq-tv-live">#{rank.toString().padStart(2, "0")}</span>)}
+        {top(
+          `TECH ▸ ${props.newsSource.toUpperCase()}`,
+          "tech",
+          // A mix names each headline's own source, as the inbox does.
+          s.source === props.newsSource ? (
+            <span className="chq-tv-live">#{rank.toString().padStart(2, "0")}</span>
+          ) : (
+            <span className="chq-tv-src">{s.source.toUpperCase()}</span>
+          ),
+        )}
         <button
           type="button"
           className="chq-tv-card big"
@@ -1545,10 +1565,8 @@ function Tv(props: {
           <span className="chq-tv-text">{s.title}</span>
         </button>
         <div className="chq-tv-ticker">
-          <i>▲ {s.score}</i>
-          <span className="static">
-            {s.comments} comments{s.site ? ` · ${s.site}` : ""}
-          </span>
+          <i>{badge}</i>
+          <span className="static">{[s.comments === null ? "" : `${s.comments} comments`, s.site].filter(Boolean).join(" · ")}</span>
         </div>
       </>
     );

@@ -3,7 +3,8 @@
 // preview/index.html?scenery=neon&w=1000&h=711&hour=14 in a browser.
 //
 // Query: scenery, w, h (CSS px of the office), hour, weather, event, gag,
-// season, labels=1, catalog=1 (every sprite, classic next to the scenery's).
+// season, news (mix, feed: other TV headlines), labels=1, catalog=1 (every
+// sprite, classic next to the scenery's).
 import "../app.css";
 import { createRoot } from "react-dom/client";
 import { OfficeView } from "../office/OfficeView.tsx";
@@ -32,7 +33,7 @@ if (q.has("hour")) {
 }
 const debug: Record<string, unknown> = { sample: true, expose: true };
 if (q.has("hour")) debug.hour = Number(q.get("hour"));
-for (const k of ["weather", "event", "gag", "season", "scenery"]) if (q.has(k)) debug[k] = q.get(k);
+for (const k of ["weather", "event", "gag", "season", "scenery", "news"]) if (q.has(k)) debug[k] = q.get(k);
 localStorage.setItem(`${key}:debug`, JSON.stringify(debug));
 localStorage.setItem(`${key}:labels`, JSON.stringify({ on: q.get("labels") === "1" }));
 localStorage.setItem(`${key}:sound`, JSON.stringify({ on: false, volume: 0, ambient: false }));
@@ -54,6 +55,7 @@ if (q.get("catalog") === "1") {
       usage={null}
       usageLoading={false}
       news={[]}
+      newsSource=""
       newsEnabled={false}
       inbox={{ enabled: false, available: false, sources: [], items: [] }}
       weather={null}

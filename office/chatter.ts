@@ -62,7 +62,7 @@ export interface Talker {
 }
 
 export interface TalkContext {
-  /** Hacker News headlines (or none). */
+  /** Tech headlines from the TV (or none). */
   news: readonly string[];
   weather: WeatherKind | null;
   hour: number;

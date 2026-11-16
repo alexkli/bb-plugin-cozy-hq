@@ -6,6 +6,19 @@ import { type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { rpcContract, type InboxItem, type Story, type UsageCard, type Weather } from "./contract.ts";
 import { recapLine, weatherKindOf } from "./office/chatter.ts";
+import {
+  decodeFeedBytes,
+  feedUrl,
+  interleave,
+  MAX_STORIES,
+  MIX,
+  NEWS_SOURCE_IDS,
+  NEWS_SOURCES,
+  newsSourceOf,
+  parseFeed,
+  siteOf,
+  type NewsSourceId,
+} from "./office/feeds.ts";
 
 const LIST_METHOD = "provider-usage.v1.listResources";
 const FETCH_METHOD = "provider-usage.v1.getResource";
@@ -81,6 +94,26 @@ const hnItemSchema = z.looseObject({
   score: z.number().optional(),
   descendants: z.number().optional(),
   by: z.string().optional(),
+  time: z.number().optional(),
+});
+const lobstersItemSchema = z.looseObject({
+  short_id: z.string(),
+  title: z.string(),
+  url: z.string().nullish(),
+  comments_url: z.string(),
+  score: z.number().optional(),
+  comment_count: z.number().optional(),
+  submitter_user: z.string().catch(""),
+  created_at: z.string().optional(),
+});
+const devItemSchema = z.looseObject({
+  id: z.number(),
+  title: z.string(),
+  url: z.string(),
+  positive_reactions_count: z.number().optional(),
+  comments_count: z.number().optional(),
+  published_at: z.string().nullish(),
+  user: z.looseObject({ username: z.string() }).optional(),
 });
 
 /** Only plain web links leave the server: anything else (javascript:, file:, …) is dropped. */
@@ -94,10 +127,51 @@ function webUrl(raw: string | null | undefined): URL | null {
   }
 }
 
-async function fetchJson(url: string, signal: AbortSignal): Promise<unknown> {
-  const res = await fetch(url, { signal, headers: { accept: "application/json" } });
+async function fetchJson(url: string, signal: AbortSignal, headers?: Record<string, string>): Promise<unknown> {
+  const res = await fetch(url, { signal, headers: { accept: "application/json", ...headers } });
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
   return res.json();
+}
+
+/** News sites see who's asking, as with any feed reader. */
+const NEWS_HEADERS = { "user-agent": "Cozy HQ (bb plugin; +https://github.com/alexkli/bb-plugin-cozy-hq)" };
+const MAX_FEED_BYTES = 2_000_000;
+
+/** A feed's text, read up to 2 MB. */
+async function fetchFeed(url: string, signal: AbortSignal): Promise<string> {
+  const res = await fetch(url, {
+    signal,
+    headers: { ...NEWS_HEADERS, accept: "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.9, */*;q=0.5" },
+  });
+  if (!res.ok || !res.body) throw new Error(`${url}: HTTP ${res.status}`);
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_FEED_BYTES) {
+      await reader.cancel();
+      throw new Error(`${url}: over 2 MB`);
+    }
+    chunks.push(value);
+  }
+  return decodeFeedBytes(Buffer.concat(chunks), res.headers.get("content-type"));
+}
+
+/** Parses each entry on its own: a broken one is skipped, not the whole list. */
+function eachValid<T>(raw: unknown, schema: z.ZodType<T>): T[] {
+  if (!Array.isArray(raw)) throw new Error("not a list");
+  return raw.flatMap((it) => {
+    const r = schema.safeParse(it);
+    return r.success ? [r.data] : [];
+  });
+}
+
+function timeOf(raw: string | null | undefined): number | null {
+  const t = raw ? Date.parse(raw) : NaN;
+  return Number.isFinite(t) ? t : null;
 }
 
 export default async function plugin(bb: BbPluginApi) {
@@ -105,8 +179,26 @@ export default async function plugin(bb: BbPluginApi) {
     techNews: {
       type: "boolean",
       label: "Tech news on the office TV",
-      description: "Show Hacker News front-page headlines as a TV channel.",
+      description: "Show tech headlines as a TV channel, from the source below.",
       default: true,
+    },
+    newsSource: {
+      type: "select",
+      label: "Tech news source",
+      description:
+        "Where the TV's tech headlines come from. Mix takes turns between Hacker News, Lobsters, Techmeme, The Verge and Ars Technica. Custom feed reads the RSS or Atom feed below.",
+      options: [...NEWS_SOURCE_IDS],
+      experimental_optionLabels: Object.fromEntries(NEWS_SOURCE_IDS.map((id) => [id, NEWS_SOURCES[id].name])),
+      default: "hn",
+    },
+    newsFeed: {
+      type: "string",
+      label: "Custom news feed",
+      description: "The https:// address of an RSS or Atom feed, for the TV when the source is Custom feed.",
+      default: "",
+      experimental_schema: z
+        .string()
+        .refine((v) => v.trim() === "" || feedUrl(v) !== null, "Use the https:// address of an RSS or Atom feed."),
     },
     buddy: {
       type: "boolean",
@@ -263,15 +355,12 @@ export default async function plugin(bb: BbPluginApi) {
   }
 
   // ---------------------------------------------------------------- news
-  let newsCache: { at: number; stories: Story[] } | null = null;
-  async function readNews(): Promise<Story[]> {
-    if (newsCache && Date.now() - newsCache.at < 20 * 60_000) return newsCache.stories;
-    const signal = AbortSignal.timeout(15_000);
+  async function fetchHn(signal: AbortSignal): Promise<Story[]> {
     const ids = z
       .array(z.number())
       .parse(await fetchJson("https://hacker-news.firebaseio.com/v0/topstories.json", signal));
     const items = await Promise.all(
-      ids.slice(0, 16).map((id) =>
+      ids.slice(0, MAX_STORIES).map((id) =>
         fetchJson(`https://hacker-news.firebaseio.com/v0/item/${id}.json`, signal)
           .then((raw) => hnItemSchema.parse(raw))
           .catch(() => null),
@@ -282,17 +371,136 @@ export default async function plugin(bb: BbPluginApi) {
       if (it === null || typeof it.title !== "string") continue;
       const link = webUrl(it.url);
       stories.push({
-        id: it.id,
+        id: `hn:${it.id}`,
         title: it.title,
         url: link?.href ?? `https://news.ycombinator.com/item?id=${it.id}`,
-        site: link ? link.hostname.replace(/^www\./, "") : "",
+        site: link ? siteOf(link) : "",
         score: it.score ?? 0,
         comments: it.descendants ?? 0,
         by: it.by ?? "",
+        source: NEWS_SOURCES.hn.tv,
+        at: it.time ? it.time * 1000 : null,
       });
     }
-    newsCache = { at: Date.now(), stories };
     return stories;
+  }
+
+  async function fetchLobsters(signal: AbortSignal): Promise<Story[]> {
+    const items = eachValid(await fetchJson("https://lobste.rs/hottest.json", signal, NEWS_HEADERS), lobstersItemSchema);
+    const stories: Story[] = [];
+    for (const it of items.slice(0, MAX_STORIES)) {
+      // Text posts have no link of their own: open the discussion.
+      const link = webUrl(it.url);
+      const url = link ?? webUrl(it.comments_url);
+      if (!url) continue;
+      stories.push({
+        id: `lobsters:${it.short_id}`,
+        title: it.title,
+        url: url.href,
+        site: link ? siteOf(link) : "",
+        score: it.score ?? 0,
+        comments: it.comment_count ?? 0,
+        by: it.submitter_user,
+        source: NEWS_SOURCES.lobsters.tv,
+        at: timeOf(it.created_at),
+      });
+    }
+    return stories;
+  }
+
+  async function fetchDev(signal: AbortSignal): Promise<Story[]> {
+    const url = `https://dev.to/api/articles?top=1&per_page=${MAX_STORIES}`;
+    const items = eachValid(await fetchJson(url, signal, NEWS_HEADERS), devItemSchema);
+    const stories: Story[] = [];
+    for (const it of items) {
+      const link = webUrl(it.url);
+      if (!link) continue;
+      stories.push({
+        id: `dev:${it.id}`,
+        title: it.title,
+        url: link.href,
+        site: "",
+        score: it.positive_reactions_count ?? 0,
+        comments: it.comments_count ?? 0,
+        by: it.user?.username ?? "",
+        source: NEWS_SOURCES.dev.tv,
+        at: timeOf(it.published_at),
+      });
+    }
+    return stories;
+  }
+
+  /** An RSS or Atom feed's headlines; a custom feed is named by its own title. */
+  async function fetchFeedStories(url: URL, source: string | null, signal: AbortSignal): Promise<{ name: string; stories: Story[] }> {
+    const feed = parseFeed(await fetchFeed(url.href, signal), url.href);
+    const name = source ?? (feed.title && feed.title.length <= 40 ? feed.title : siteOf(url));
+    return {
+      name,
+      stories: feed.items.map((it) => ({
+        id: it.id,
+        title: it.title,
+        url: it.url,
+        site: siteOf(new URL(it.url)),
+        score: null,
+        comments: null,
+        by: "",
+        source: name,
+        at: it.at,
+      })),
+    };
+  }
+
+  interface Headlines {
+    /** When they were fetched (or last tried). */
+    at: number;
+    ok: boolean;
+    /** The source's name on the TV. */
+    name: string;
+    stories: Story[];
+  }
+  const newsCache = new Map<string, Headlines>();
+
+  /**
+   * One source's headlines, fetched at most every 20 minutes. After a failure
+   * the last good ones stay and the next try waits 5 minutes.
+   */
+  async function readSource(id: NewsSourceId, custom: URL | null): Promise<Headlines> {
+    const tv = NEWS_SOURCES[id].tv;
+    const feed = id === "custom" ? custom : NEWS_SOURCES[id].feed ? new URL(NEWS_SOURCES[id].feed) : null;
+    if (id === "custom" && !feed) return { at: Date.now(), ok: false, name: tv, stories: [] };
+    const key = id === "custom" ? `custom:${feed!.href}` : id;
+    const hit = newsCache.get(key);
+    if (hit && Date.now() - hit.at < (hit.ok ? 20 : 5) * 60_000) return hit;
+    const signal = AbortSignal.timeout(15_000);
+    let next: Headlines;
+    try {
+      if (feed) {
+        const got = await fetchFeedStories(feed, id === "custom" ? null : tv, signal);
+        next = { at: Date.now(), ok: true, name: got.name, stories: got.stories };
+      } else {
+        const stories = await (id === "lobsters" ? fetchLobsters(signal) : id === "dev" ? fetchDev(signal) : fetchHn(signal));
+        next = { at: Date.now(), ok: true, name: tv, stories };
+      }
+      // An error page or an empty list is no reason to drop good headlines.
+      if (next.stories.length === 0) throw new Error("no headlines");
+    } catch (cause) {
+      bb.log.warn(`news fetch failed for ${NEWS_SOURCES[id].name}: ${String(cause)}`);
+      next = { at: Date.now(), ok: false, name: hit?.name ?? tv, stories: hit?.stories ?? [] };
+    }
+    newsCache.set(key, next);
+    if (newsCache.size > 24) newsCache.delete(newsCache.keys().next().value!);
+    return next;
+  }
+
+  async function readNews(setting: string, customFeed: string): Promise<Omit<Headlines, "ok">> {
+    const id = newsSourceOf(setting);
+    if (id !== "mix") return readSource(id, feedUrl(customFeed));
+    const parts = await Promise.all(MIX.map((m) => readSource(m, null)));
+    return {
+      at: Math.max(...parts.map((p) => p.at)),
+      name: NEWS_SOURCES.mix.tv,
+      stories: interleave(parts.map((p) => p.stories), MAX_STORIES),
+    };
   }
 
   // ---------------------------------------------------------------- weather
@@ -468,14 +676,10 @@ export default async function plugin(bb: BbPluginApi) {
     },
     usage: async ({ force }) => ({ cards: await readUsage(force), updatedAt: usageCache?.at ?? Date.now() }),
     news: async () => {
-      const { techNews } = await settings.get();
-      if (!techNews) return { enabled: false, stories: [], updatedAt: Date.now() };
-      try {
-        return { enabled: true, stories: await readNews(), updatedAt: newsCache?.at ?? Date.now() };
-      } catch (cause) {
-        bb.log.warn(`news fetch failed: ${String(cause)}`);
-        return { enabled: true, stories: newsCache?.stories ?? [], updatedAt: newsCache?.at ?? 0 };
-      }
+      const { techNews, newsSource, newsFeed } = await settings.get();
+      if (!techNews) return { enabled: false, source: "", stories: [], updatedAt: Date.now() };
+      const news = await readNews(newsSource, newsFeed);
+      return { enabled: true, source: news.name, stories: news.stories, updatedAt: news.at };
     },
     weather: async () => {
       const { weather, weatherPlace } = await settings.get();

@@ -24,14 +24,19 @@ export type UsageCard = z.infer<typeof usageCardSchema>;
 export type UsageWindow = z.infer<typeof usageWindowSchema>;
 
 export const storySchema = z.object({
-  id: z.number(),
+  id: z.string(),
   title: z.string(),
   url: z.string(),
-  /** The link's site, e.g. "github.com"; empty for Hacker News discussions. */
+  /** The link's site, e.g. "github.com"; empty for discussions on the source itself (Ask HN, DEV posts). */
   site: z.string(),
-  score: z.number(),
-  comments: z.number(),
+  /** Points and comments where the source counts them (Hacker News, Lobsters, DEV); null for feeds. */
+  score: z.number().nullable(),
+  comments: z.number().nullable(),
   by: z.string(),
+  /** Where it's from, as the TV names it ("HN", "Verge", a custom feed's title). */
+  source: z.string(),
+  /** When it was published (ms), if known. */
+  at: z.number().nullable(),
 });
 export type Story = z.infer<typeof storySchema>;
 
@@ -85,7 +90,13 @@ export const rpcContract = defineRpcContract({
   },
   news: {
     input: z.null(),
-    output: z.object({ enabled: z.boolean(), stories: z.array(storySchema), updatedAt: z.number() }),
+    output: z.object({
+      enabled: z.boolean(),
+      /** The TV's name for the picked source ("HN", "Mix", a custom feed's title). */
+      source: z.string(),
+      stories: z.array(storySchema),
+      updatedAt: z.number(),
+    }),
   },
   weather: {
     input: z.null(),

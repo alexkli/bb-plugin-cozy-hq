@@ -125,7 +125,7 @@ function OfficePanel() {
 
   const [usage, setUsage] = useState<{ cards: UsageCard[]; updatedAt: number } | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
-  const [news, setNews] = useState<{ enabled: boolean; stories: Story[] }>({ enabled: false, stories: [] });
+  const [news, setNews] = useState<{ enabled: boolean; source: string; stories: Story[] }>({ enabled: false, source: "", stories: [] });
   const [inbox, setInbox] = useState<{ enabled: boolean; available: boolean; sources: string[]; items: InboxItem[] }>({
     enabled: false,
     available: false,
@@ -144,9 +144,13 @@ function OfficePanel() {
     [rpc],
   );
   const pollUsage = useCallback(() => loadUsage(false), [loadUsage]);
+  // Picking another news source shows on the TV right away, not at the next poll.
+  const { values } = useSettings();
+  const newsSettings = `${values?.techNews}|${values?.newsSource}|${values?.newsFeed}`;
   const pollNews = useCallback(() => {
-    rpc.call("news", null).then((r) => setNews({ enabled: r.enabled, stories: r.stories }), () => undefined);
-  }, [rpc]);
+    rpc.call("news", null).then((r) => setNews({ enabled: r.enabled, source: r.source, stories: r.stories }), () => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rpc, newsSettings]);
   const pollInbox = useCallback(() => {
     rpc.call("inbox", null).then(setInbox, () => undefined);
   }, [rpc]);
@@ -175,6 +179,7 @@ function OfficePanel() {
       usage={usage}
       usageLoading={usageLoading}
       news={news.stories}
+      newsSource={news.source}
       newsEnabled={news.enabled}
       inbox={inbox}
       weather={weather}

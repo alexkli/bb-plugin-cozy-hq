@@ -315,8 +315,13 @@
   font-size: 4.6cqw;
   font-weight: 800;
   letter-spacing: 0.06em;
+  white-space: nowrap;
 }
 .chq-tv-logo {
+  /* A long name (a custom feed's title) gives way to the clock. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 0.3cqh 1.6cqw;
   background: #e5484d;
   color: #fff;

@@ -8,6 +8,7 @@
   - The windows are gaps in the treeline that look out of the woods at the sky.
   - The weather falls on the whole camp: rain with puddles, snow that settles, fog between the trunks, storm gusts and cloud shadows.
 - For scenery authors: an `openWindow` hook, and the "Open the window" hover text goes through `labels.words`.
+- Tech news on the TV from more sources: pick Hacker News, Lobsters, Techmeme, The Verge, Ars Technica, DEV Community, Slashdot, the GitHub Blog, a mix of the first five, or any RSS or Atom feed (`newsSource`, `newsFeed`). The TECH channel names its source, and in a mix each headline's.
 
 ## 0.4.0 (2026-11-15)
 

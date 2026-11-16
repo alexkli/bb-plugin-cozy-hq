@@ -84,8 +84,9 @@ Your pick is kept per browser; the buddy dresses to match.
 - **The wall is a home screen**: a pinboard with every enabled provider's
   usage, a calendar, a status light board, the door (a new thread), a cuckoo
   clock (hover for the time) and a big TV: HQ news with live head counts, the
-  office weather and clock, Hacker News headlines and your Work Dashboard
-  inbox, if you use that plugin. Click the TV to switch channels.
+  office weather and clock, tech headlines (Hacker News, or another source you
+  pick) and your Work Dashboard inbox, if you use that plugin. Click the TV to
+  switch channels.
 - **A small server room** with blinking racks and a glowing AI cluster (click
   it to train a model, and someone idle wanders over to have a look). Now and
   then someone messes with the cables, gets a (harmless) shock, lies on the
@@ -150,12 +151,22 @@ Everything else:
 ```sh
 bb plugin config cozy-hq                    # show
 bb plugin config cozy-hq set buddy false    # the office buddy
-bb plugin config cozy-hq set techNews false # Hacker News on the TV
+bb plugin config cozy-hq set techNews false # tech news on the TV
+bb plugin config cozy-hq set newsSource lobsters   # where the tech news comes from (below)
+bb plugin config cozy-hq set newsFeed "https://example.com/feed.xml"   # for newsSource custom
 bb plugin config cozy-hq set inbox false    # Work Dashboard inbox on the TV
 bb plugin config cozy-hq set weather false  # live weather (else the odd rainy day)
 bb plugin config cozy-hq set weatherPlace "Basel"   # or "47.56,7.59"; empty: from your IP
 bb plugin config cozy-hq set workTalk false # speech bubbles don't quote your threads
 ```
+
+The TV's tech news (`newsSource`) comes from `hn` (Hacker News, the
+default), `lobsters` (Lobsters), `techmeme` (Techmeme), `verge` (The Verge),
+`ars` (Ars Technica), `dev` (DEV Community), `slashdot` (Slashdot), `github`
+(the GitHub Blog), `mix` (Hacker News, Lobsters, Techmeme, The Verge and Ars
+Technica taking turns, each headline labeled with its source) or `custom`:
+any RSS or Atom feed at the `https://` address in `newsFeed`, named on the TV
+by its own title. None needs an account or a key.
 
 ## Privacy and network
 
@@ -163,8 +174,18 @@ bb plugin config cozy-hq set workTalk false # speech bubbles don't quote your th
   SDK, and usage from plugins that publish `provider-usage.v1` usage. It
   changes nothing.
 - Outside requests:
-  - The Hacker News API (`hacker-news.firebaseio.com`), at most every 20
-    minutes, for the TECH channel. Turn it off with `techNews false`.
+  - The source you picked for the TECH channel (`newsSource`), at most
+    every 20 minutes (5 after a failure). Turn it off with `techNews false`.
+    - `hn`: the Hacker News API, `hacker-news.firebaseio.com`
+    - `lobsters`: `lobste.rs`
+    - `techmeme`: `www.techmeme.com`
+    - `verge`: `www.theverge.com`
+    - `ars`: `feeds.arstechnica.com`
+    - `dev`: the DEV API, `dev.to`
+    - `slashdot`: `rss.slashdot.org`
+    - `github`: `github.blog`
+    - `mix`: the first five of these
+    - `custom`: the host in `newsFeed`, which you set yourself (`https` only)
   - The weather: `api.open-meteo.com` at most every 15 minutes, with your
     location rounded to about a kilometer. The location comes from your IP
     address via `get.geojs.io` (looked up at most every 6 hours), or from
@@ -200,8 +221,9 @@ localStorage["bb-plugin:cozy-hq:debug"] = '{"hour":20,"sample":true,"event":"lan
   `technician`, `lunch`, `huddle`, or a kind of get-together (`coffee`,
   `cooler`, `chat`, `couch`, `pingpong`, `darts`).
 - `sample` replaces your threads, usage and headlines with made-up ones (the
-  screenshots use it). `demo` dresses your first twelve threads up in every
-  state instead.
+  screenshots use it); with it, `news` set to `mix` or `feed` shows headlines
+  from several sources or from a plain feed. `demo` dresses your first twelve
+  threads up in every state instead.
 - `event` keeps an office event running: `party`, `birthday`, `baby-shower`,
   `lunch`, `karaoke`, `cornhole`, `darts`, `kids`, `yoga`, `ice-cream`, or a
   festival: `snowday`, `lunarnewyear`, `valentines`, `carnival`, `stpatricks`,
@@ -220,7 +242,8 @@ Only the view changes. Remove the key to go back to normal.
 | File | What |
 | --- | --- |
 | `app.tsx` | Panel and buddy registration, rail badge, data hooks |
-| `server.ts`, `contract.ts` | Usage aggregation, Hacker News, weather, thread recaps, Work Dashboard inbox |
+| `server.ts`, `contract.ts` | Usage aggregation, tech news, weather, thread recaps, Work Dashboard inbox |
+| `office/feeds.ts` | Tech news sources and a small RSS/Atom reader (pure) |
 | `office/chatter.ts` | Small talk, weather codes, recap lines (pure) |
 | `office/model.ts` | Pure logic: thread mood, spot assignment, office news |
 | `office/layout.ts` | The classic floor plans (wide and portrait) and the room builders sceneries reuse |

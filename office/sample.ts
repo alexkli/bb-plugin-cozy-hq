@@ -100,10 +100,43 @@ export function sampleUsage(now: number): { cards: UsageCard[]; updatedAt: numbe
   };
 }
 
-export const SAMPLE_NEWS: Story[] = [
-  { id: 1, title: "A pixel-art office for your coding agents", url: "https://example.com/", site: "example.com", score: 412, comments: 88, by: "sample" },
-  { id: 2, title: "Show HN: I taught my agents to take coffee breaks", url: "https://example.com/", site: "example.com", score: 230, comments: 51, by: "sample" },
+const HN_SAMPLE: Story[] = [
+  { id: "1", title: "A pixel-art office for your coding agents", url: "https://example.com/", site: "example.com", score: 412, comments: 88, by: "sample", source: "HN", at: null },
+  { id: "2", title: "Show HN: I taught my agents to take coffee breaks", url: "https://example.com/", site: "example.com", score: 230, comments: 51, by: "sample", source: "HN", at: null },
 ];
+
+/** A headline from a plain feed (no points), published `min` minutes ago. */
+function fed(id: string, source: string, title: string, site: string, min: number, now: number): Story {
+  return { id, title, url: `https://${site}/`, site, score: null, comments: null, by: "", source, at: now - min * 60_000 };
+}
+
+/**
+ * Made-up headlines and the source the TV names: Hacker News by default,
+ * `mix` for several sources taking turns, `feed` for a plain RSS feed.
+ */
+export function sampleNews(kind: string | undefined, now: number): { source: string; stories: Story[] } {
+  if (kind === "feed") {
+    return {
+      source: "Ars",
+      stories: [
+        fed("f1", "Ars", "Office plants are quietly running the building's air conditioning now", "example.org", 25, now),
+        fed("f2", "Ars", "The surprising physics of a perfectly pulled espresso shot", "example.org", 190, now),
+      ],
+    };
+  }
+  if (kind !== "mix") return { source: "HN", stories: HN_SAMPLE };
+  return {
+    source: "Mix",
+    stories: [
+      HN_SAMPLE[0]!,
+      { id: "m1", title: "Writing a tiny RSS reader without dependencies", url: "https://example.net/", site: "example.net", score: 57, comments: 12, by: "sample", source: "Lobsters", at: now - 80 * 60_000 },
+      fed("m2", "Techmeme", "Startup ships an espresso machine that files its own bug reports (Example Daily)", "example.com", 40, now),
+      fed("m3", "Verge", "The best mechanical keyboards for night-owl coders", "example.org", 130, now),
+      fed("m4", "Ars", "Why the office dog is better at standups than you", "example.org", 300, now),
+      HN_SAMPLE[1]!,
+    ],
+  };
+}
 
 /** What a sample thread did last, for its speech bubbles. */
 export function sampleRecap(id: string): string | null {
