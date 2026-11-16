@@ -18,7 +18,7 @@ export const LABELS: ThemeLabels = {
     cooler: "Sparkling water tap",
     plant: "Water the fiddle-leaf fig",
     bin: "Bin · toss some paper",
-    arcade: "Vintage arcade · insert a coin",
+    arcade: "Vintage arcade · play a game",
     pingpong: "Ping-pong table · serve",
     fishtank: "Discus aquarium · feed the fish",
     whiteboard: "Boardroom glass board · threads in plan mode",

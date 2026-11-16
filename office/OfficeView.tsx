@@ -38,6 +38,7 @@ import { relabel, withPets, type Theme, type ThemeLabels } from "./theme.ts";
 import { THEMES, themeById } from "./themes/index.ts";
 import { readYou, withPronouns, type You } from "./you.ts";
 import { LookEditor, YouRow } from "./YouSettings.tsx";
+import { Cabinet } from "./arcade/Cabinet.tsx";
 
 export const TOPIC_EMOJI: Record<Topic, string> = {
   game: "🎮",
@@ -262,6 +263,7 @@ export function OfficeView(input: OfficeProps) {
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
+  const [arcadeOpen, setArcadeOpen] = useState(false);
   const [fit, setFit] = useState<Fit | null>(null);
   const [layout, setLayout] = useState<Layout | null>(null);
   const [hover, setHover] = useState<Hit | null>(null);
@@ -340,6 +342,12 @@ export function OfficeView(input: OfficeProps) {
     world.setEmit((s, ambient) => sound.play(s, ambient));
     return () => world.setEmit(() => undefined);
   }, [world, sound]);
+  // While the arcade's cabinet is open you're over at the arcade, playing along.
+  useEffect(() => {
+    if (!arcadeOpen) return;
+    world.arcade(true);
+    return () => world.arcade(false);
+  }, [arcadeOpen, world]);
 
   // The scenery: the same office dressed as another place, with its own floor plan.
   const [sceneryId, setSceneryId] = useState(() => readJson(`${storageKey}:scenery`, { id: "classic" }).id);
@@ -823,6 +831,7 @@ export function OfficeView(input: OfficeProps) {
         break;
       case "poke":
         world.poke(hit.id);
+        if (hit.poke === "arcade") setArcadeOpen(true);
         if (hit.poke === "bell") {
           const first = waiting[0];
           if (first) props.onOpenThread(first.id);
@@ -1176,6 +1185,15 @@ export function OfficeView(input: OfficeProps) {
             </div>
           ) : null}
         </div>
+        {arcadeOpen && layout ? (
+          <Cabinet
+            storageKey={storageKey}
+            play={(name) => sound.play(name, false)}
+            side={layout.portrait || !layout.arcade ? "center" : layout.arcade.x + layout.arcade.w / 2 < layout.W / 2 ? "right" : "left"}
+            onResult={(won, line) => world.arcadeResult(won, line)}
+            onClose={() => setArcadeOpen(false)}
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -1319,7 +1337,7 @@ const POKE_TIP: Record<PokeKind, string> = {
   plant: "Water the plant",
   bin: "Bin · toss some paper",
   clock: "Clock",
-  arcade: "Arcade · insert a coin",
+  arcade: "Arcade · play a game",
   pingpong: "Ping-pong table · serve",
   fishtank: "Feed the fish",
   whiteboard: "Planning room whiteboard · threads in plan mode",

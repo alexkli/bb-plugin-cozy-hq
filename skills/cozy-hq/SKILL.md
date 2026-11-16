@@ -118,7 +118,12 @@ new thread, the reception bell for the first thread waiting, the calendar to
 start an office event, and the `?` sticky note for the legend. In your office,
 the putting green (where the room has space) sends you over to putt: in the
 hole, lipped out, short, or under the desk, where the dog fetches the ball;
-the paper-ball hoop is a shot from your chair; the Newton's cradle clacks. Most furniture
+the paper-ball hoop is a shot from your chair; the Newton's cradle clacks. The
+arcade (in the games room, where the floor plan has one) opens an arcade cabinet
+over the office with four small games (Noodle, Inbox Zero, Desk Rally, Bug
+Hunt; keys or a touch pad, a high score per game kept per browser), and you
+walk over and play along, cheering a win or sulking under a rain cloud after a
+loss. Most furniture
 does something with a sound when clicked (also the couch, beanbags, roomba,
 string lights and windows); hover the clock for the time and a window for the
 weather.

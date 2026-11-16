@@ -249,7 +249,19 @@ export interface Layout {
   pods: Rect[];
   meeting: Rect;
   whiteboard: Rect;
-  boss: { room: Rect; seat: Point; desk: Rect; dogBed: Point; lamp: Point; toys?: BossToys };
+  boss: {
+    room: Rect;
+    seat: Point;
+    desk: Rect;
+    dogBed: Point;
+    lamp: Point;
+    toys?: BossToys;
+    /**
+     * From a hallway to your chair, like a spot's path (in through your door, round the
+     * end of the desk): your way out for walks across the office. `bossToys` sets it.
+     */
+    way?: Point[];
+  };
   waiting: Rect;
   kitchen: Rect;
   lounge: Rect;
@@ -620,12 +632,12 @@ export function bossToys(b: Builder, boss: Layout["boss"], keepOut: Rect[] = [])
     ...plants.map((q) => base(q)),
     ...keepOut,
   ];
-  const walkable = (a: Point, c: Point) => {
+  const walkable = (a: Point, c: Point, bottom = r.y + r.h - 12) => {
     const n = Math.max(1, Math.ceil(Math.hypot(c.x - a.x, c.y - a.y) / 2));
     for (let i = 0; i <= n; i++) {
       const x = a.x + ((c.x - a.x) * i) / n;
       const y = a.y + ((c.y - a.y) * i) / n;
-      if (x < r.x + 6 || x > r.x + r.w - 6 || y > r.y + r.h - 12) return false;
+      if (x < r.x + 6 || x > r.x + r.w - 6 || y > bottom) return false;
       if (feet.some((q) => x > q.x - 3 && x < q.x + q.w + 3 && y > q.y && y < q.y + q.h + 2)) return false;
     }
     return true;
@@ -699,11 +711,36 @@ export function bossToys(b: Builder, boss: Layout["boss"], keepOut: Rect[] = [])
     sprites.push(g);
   }
 
+  // Your way out: in through the door the way your guests come, then along the top of
+  // the room or the guests' lane to the end of the desk nearer it and round to your
+  // chair. The shortest one clear of the furniture (the lane if none is).
+  let way: Point[] | null = null;
+  const entry = guests[0]?.path;
+  if (entry && entry.length >= 3) {
+    const [hall, door, inside] = entry as [Point, Point, Point];
+    // From just inside the door (a door at the bottom opens onto the guests' lane).
+    const from = door.y < r.y ? { x: door.x, y: r.y + 2 } : inside;
+    let best = Infinity;
+    for (const cx of [desk.x - 8, desk.x + desk.w + 8]) {
+      for (const turn of [seat.y, inside.y]) {
+        const inRoom = [{ x: door.x, y: turn }, { x: cx, y: turn }, { x: cx, y: seat.y }];
+        const ok = [from, ...inRoom].every((q, i, all) => i === 0 || walkable(all[i - 1]!, q, inside.y + 1));
+        const len = Math.abs(turn - door.y) + Math.abs(cx - door.x) + Math.abs(turn - seat.y);
+        if (ok && len < best) {
+          best = len;
+          way = [{ ...hall }, { x: door.x, y: door.y }, ...inRoom, { x: seat.x, y: seat.y }].filter((q, i, all) => i === 0 || q.x !== all[i - 1]!.x || q.y !== all[i - 1]!.y);
+        }
+      }
+    }
+    way ??= [{ ...hall }, { x: door.x, y: door.y }, { x: inside.x, y: inside.y }, { x: desk.x - 8, y: inside.y }, { x: desk.x - 8, y: seat.y }, { x: seat.x, y: seat.y }];
+  }
+
   // The hoop: by the right wall or left of the desk, near the height of the desk, clear of
-  // everything (your way to the green too).
+  // everything (your way to the green too, and its bin off your way out).
   let hoop: Point | null = null;
-  const route = green ? [seat, ...green.walk] : [];
-  const onRoute = (q: Rect) => route.some((a, i) => i > 0 && overlaps(q, { x: Math.min(a.x, route[i - 1]!.x), y: Math.min(a.y, route[i - 1]!.y) - 24, w: Math.abs(a.x - route[i - 1]!.x) + 1, h: Math.abs(a.y - route[i - 1]!.y) + 25 }, 4));
+  const crosses = (route: Point[], q: Rect, up: number) =>
+    route.some((a, i) => i > 0 && overlaps(q, { x: Math.min(a.x, route[i - 1]!.x), y: Math.min(a.y, route[i - 1]!.y) - up, w: Math.abs(a.x - route[i - 1]!.x) + 1, h: Math.abs(a.y - route[i - 1]!.y) + up + 1 }, 4));
+  const onRoute = (q: Rect) => (green !== null && crosses([seat, ...green.walk], q, 24)) || crosses(way?.slice(2) ?? [], base(q), 0);
   const spots: Rect[] = [];
   for (let y = desk.y; y + 30 <= r.y + r.h - 12; y += 2) spots.push({ x: r.x + r.w - 21, y, w: 16, h: 30 }, { x: desk.x - 30, y, w: 16, h: 30 });
   for (const q of spots) {
@@ -713,7 +750,7 @@ export function bossToys(b: Builder, boss: Layout["boss"], keepOut: Rect[] = [])
     hoop = { x: q.x + 8, y: q.y + 11 };
     break;
   }
-  return { ...boss, toys: { cradle, green, hoop } };
+  return { ...boss, toys: { cradle, green, hoop }, way: way ?? undefined };
 }
 
 export function buildWaiting(b: Builder, r: Rect, hallY: number): void {

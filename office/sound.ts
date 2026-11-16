@@ -72,7 +72,22 @@ export type SoundName =
   | "cup"
   | "clack"
   | "clank"
-  | "swish";
+  | "swish"
+  // The arcade's games
+  | "blip"
+  | "bonk"
+  | "chomp"
+  | "pew"
+  | "pop"
+  | "boom"
+  | "miss"
+  | "point"
+  | "select"
+  | "fanfare"
+  | "womp";
+
+/** The arcade's game sounds come quick, one after another. */
+const QUICK = new Set<SoundName>(["blip", "bonk", "chomp", "pew", "pop", "boom", "miss", "point", "select"]);
 
 /** Quiet background sounds play softer than event sounds. */
 const AMBIENT = new Set<SoundName>(["pingpong", "bubble", "coffee", "roomba", "purr", "door", "marker", "toss", "giggle", "whistle", "walkie", "wrench", "drill", "fixed"]);
@@ -144,7 +159,7 @@ export class Sound {
     const now = ctx.currentTime;
     // Rate limit each sound so bursts don't pile up.
     const prev = this.lastPlayed.get(name as SoundName) ?? -1;
-    const minGap = name === "pingpong" ? 0.3 : name === "click" ? 0.03 : 0.25;
+    const minGap = name === "pingpong" ? 0.3 : name === "click" || QUICK.has(name as SoundName) ? 0.03 : 0.25;
     if (now - prev < minGap) return;
     this.lastPlayed.set(name as SoundName, now);
     this.lastAt = performance.now();
@@ -641,6 +656,55 @@ export class Sound {
         break;
       case "chime":
         [784, 659.3, 523.3].forEach((f, i) => tone(f, i * 0.25, 0.6, "sine", 0.15));
+        break;
+      // The arcade: little square-wave bleeps.
+      case "blip":
+        tone(880, 0, 0.05, "square", 0.045);
+        break;
+      case "bonk":
+        tone(330, 0, 0.05, "square", 0.035);
+        break;
+      case "chomp":
+        tone(520, 0, 0.05, "square", 0.045, 880);
+        tone(700, 0.05, 0.05, "square", 0.04, 1040);
+        break;
+      case "pew":
+        tone(1500, 0, 0.12, "square", 0.03, 300);
+        break;
+      case "pop":
+        tone(620 + Math.random() * 160, 0, 0.06, "square", 0.045, 990);
+        break;
+      case "boom":
+        noise(0, 0.22, 0.12, 700);
+        tone(170, 0, 0.2, "triangle", 0.12, 50);
+        break;
+      case "miss":
+        tone(392, 0, 0.12, "square", 0.045, 262);
+        tone(262, 0.13, 0.22, "square", 0.045, 130);
+        break;
+      case "point":
+        [784, 1046.5].forEach((f, i) => tone(f, i * 0.07, 0.08, "square", 0.045));
+        break;
+      case "select":
+        tone(1200, 0, 0.03, "square", 0.03);
+        break;
+      case "fanfare":
+        [
+          [523.3, 0, 0.1],
+          [659.3, 0.1, 0.1],
+          [784, 0.2, 0.1],
+          [1046.5, 0.3, 0.18],
+          [784, 0.5, 0.1],
+          [1046.5, 0.6, 0.45],
+        ].forEach(([f, t0, d]) => {
+          tone(f!, t0!, d!, "square", 0.045);
+          tone(f! / 2, t0!, d!, "triangle", 0.08);
+        });
+        break;
+      case "womp":
+        [392, 370, 349.2].forEach((f, i) => tone(f, i * 0.3, 0.26, "square", 0.045, f * 0.97));
+        tone(329.6, 0.9, 0.7, "square", 0.045, 300);
+        tone(82.4, 0.9, 0.7, "triangle", 0.1, 75);
         break;
     }
   }

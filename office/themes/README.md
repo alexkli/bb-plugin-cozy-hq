@@ -53,7 +53,8 @@ Think of what each place *is* in your scenery, then dress it:
     (and stand), so keep the screen area where it is.
   - `fishtank-stand`: the water and fish are drawn in `L.fishtank` above it.
   - `whiteboard`: marker strokes are drawn on the board area.
-  - `arcade`: the game screen; `server-rack`: drive LEDs at x+10..12,
+  - `arcade`: the game screen (20×14 at x+2, y+9; it plays along while you
+    play the cabinet's games); `server-rack`: drive LEDs at x+10..12,
     y+4..29; `ai-rack`: a light band at y+2..7 and fans.
   - `espresso`: steam and a cup under the spout around x+8..16, y+10..21.
   - `kitchen-counter`: kettle steam around x+34, the microwave at the right
@@ -126,7 +127,7 @@ with the same spot kinds and ids:
 | `buildPods(b, r, { hallY, aisleX })` | desk pods: rows of 48 px desk pairs, `POD_H` (104) tall per row |
 | `buildMeeting(b, r, hallY)` | glass room, door bottom right: the hallway must be **below** it |
 | `buildBoss(b, r, hallY, keepOut?)` | wood room (you, guest chairs, dog bed, lamp, your desk toys), door top left: hallway **above**; `keepOut`: rects your toys stay clear of (a tree you'll add) |
-| `bossToys(b, boss, keepOut?)` | the cradle on the desk, and where there's room the putting green and the hoop: call it last in your own boss room |
+| `bossToys(b, boss, keepOut?)` | the cradle on the desk, and where there's room the putting green and the hoop: call it last in your own boss room. It also sets `boss.way`, your way from a hallway in through your door (the guests' path) to your chair, for walks across the office (to the arcade) |
 | `buildWaiting(b, r, hallY)` | reception and seats (fill order in `b.seats`): hallway **above** |
 | `buildKitchen(b, r, access)` | counter (espresso, kettle, microwave) along the top, fridge, vending, island, stools |
 | `buildLounge(b, r, access, wallTv, naps)` | TV (on the wall if `wallTv`, else standing), couch, piano, fish tank (beanbags if `naps`) |
@@ -163,7 +164,9 @@ chats, darts, ping-pong) quietly goes missing. The event area
   `labels.npc.roomba`.
 - `fishTank(ctx, tank, info)`: draw the tank's water and fish yourself (a
   pond, a jellyfish tank, a tide pool); return true.
-- `dressVisitor(ctx, v, t)`: extras on you and the visitors (`v.kind`).
+- `dressVisitor(ctx, v, t)`: extras on you and the visitors (`v.kind`). You
+  also walk across the office to the arcade and play it from behind (poses
+  `arcade0`/`arcade1`), cheer, or hang your head (`mope`).
 
 ## Things to click
 

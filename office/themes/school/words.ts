@@ -20,7 +20,7 @@ export const LABELS: ThemeLabels = {
     plant: "Water the class sunflower",
     bin: "Recycling bin · toss some paper",
     clock: "School clock",
-    arcade: "Math quiz machine · press start",
+    arcade: "Math quiz machine · press start to play",
     pingpong: "Gym ping-pong table · serve",
     fishtank: "Class aquarium · feed the fish and Shelly the turtle",
     whiteboard: "Chalkboard · threads in plan mode",

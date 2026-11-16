@@ -58,7 +58,7 @@ const poke = {
   plant: "Water the plant · it won't help",
   bin: "Bin · emptied on Thursdays, allegedly",
   clock: "Clock · four minutes slow",
-  arcade: "Arcade cabinet · insert a coin, hope for the best",
+  arcade: "Arcade cabinet · play a game, hope for the best",
   pingpong: "Ping-pong table · net held up with tape",
   fishtank: "Feed the last fish",
   whiteboard: "Whiteboard · threads in plan mode, over last year's scribbles",

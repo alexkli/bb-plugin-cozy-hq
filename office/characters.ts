@@ -108,7 +108,12 @@ export type CharPose =
   | "draw1"
   | "present-plan"
   | "putt0"
-  | "putt1";
+  | "putt1"
+  /** At an arcade cabinet, seen from behind: hands on the stick and buttons, taking turns. */
+  | "arcade0"
+  | "arcade1"
+  /** Standing with your head hung (you, after losing at the arcade). */
+  | "mope";
 
 export interface CharSpec {
   look: Look;
@@ -233,7 +238,7 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair, short }:
   const seated = onChair === true || pose === "type0" || pose === "type1" || pose === "slump" || pose === "sit-back" || pose === "nap" || pose === "read";
   const bob = pose === "walk1" || pose === "walk3" ? -1 : 0;
   const slump = pose === "slump" ? 2 : 0;
-  const napDrop = pose === "nap" ? 1 : 0;
+  const napDrop = pose === "nap" || pose === "mope" ? 1 : 0;
   // Short: two rows less torso and two less leg, so everything above sits 4 rows lower.
   const drop = short ? 4 : 0;
   const torsoH = short ? 5 : 7;
@@ -393,6 +398,14 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair, short }:
       g.rect(armL - 1, bodyTop + 3, 3, 1, sleeve);
       g.rect(armR - 1, bodyTop + 3, 3, 1, sleeve);
       break;
+    case "arcade0":
+    case "arcade1": {
+      // Elbows out to the controls, one hand on the stick and one on the buttons, in turn.
+      const k = pose === "arcade1" ? 1 : 0;
+      g.rect(armL, bodyTop + 1, 1, 2, sleeve).set(armL - 1, bodyTop + 2 + k, sleeve).set(armL, bodyTop + 3 + k, skin);
+      g.rect(armR, bodyTop + 1, 1, 2, sleeve).set(armR + 1, bodyTop + 3 - k, sleeve).set(armR, bodyTop + 4 - k, skin);
+      break;
+    }
     case "cup": {
       drawArmDown(back ? armR : armL);
       const cx = back ? armL : armR;

@@ -256,6 +256,20 @@ interface Shot {
   ball: { x: number; y: number; vx: number; vy: number } | null;
 }
 
+/**
+ * You at the arcade while its game is open (OfficeView's cabinet): over
+ * there once you're free, playing along, a cheer or a sulk when a game
+ * ends, and back to your desk when it's closed.
+ */
+interface Visit {
+  phase: "wait" | "out" | "play" | "won" | "lost" | "back";
+  until: number;
+  /** The game is still open (false: back to your desk after the cheer or the sulk). */
+  open: boolean;
+  /** Whoever came over to watch. */
+  watch: Gathering | null;
+}
+
 interface Dog extends Walker {
   state: "bed" | "walk" | "sit" | "follow";
   goal: DogGoal;
@@ -382,11 +396,26 @@ const WALK_SPEED = 32; // px/s
 const SLOW_SPEED = 11;
 const NPC_SPEED = 24;
 const KID_SPEED = 40;
+/** You, up from your desk. */
+const BOSS_SPEED = 40;
 
 const inRect = (x: number, y: number, r: Rect) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
 
 /** The corner brackets around things to click. */
 const TARGET_COLOR = "#fff7cf";
+
+/** A little grey rain cloud over someone's head (an error; you after losing at the arcade). */
+function drawRainCloud(ctx: CanvasRenderingContext2D, bx: number, by: number): void {
+  ctx.fillStyle = "#8e93a8";
+  ctx.fillRect(bx - 9, by + 3, 14, 5);
+  ctx.fillRect(bx - 7, by + 1, 6, 3);
+  ctx.fillRect(bx - 2, by, 5, 4);
+  ctx.fillStyle = "#b4b8c9";
+  ctx.fillRect(bx - 6, by + 2, 3, 1);
+  ctx.fillRect(bx - 1, by + 1, 2, 1);
+  ctx.fillStyle = OUTLINE;
+  ctx.fillRect(bx - 9, by + 8, 14, 1);
+}
 
 /** The two highlight tints, warm gold and cool sky blue: a saturated rim that shows on pale floors, and a lighter haze around it. */
 const GLOW: Record<Highlight, string> = { finished: "#ffb23c", started: "#4fb8ff" };
@@ -465,7 +494,7 @@ export class World {
   private brokenBulbX: number | null = null;
   private brokenMachine: "coffee" | "printer" | "vending" | null = null;
   private rackBroken = false;
-  /** Bumped when an event starts or ends, so the view reassigns spots. */
+  /** Bumped when an event starts or ends (or you take or leave the arcade), so the view reassigns spots. */
   eventVersion = 0;
 
   private layoutKey = "";
@@ -487,6 +516,7 @@ export class World {
   private golfBall: (Point & { sunk?: boolean }) | null = null;
   private flagUntil = 0;
   private shot: Shot | null = null;
+  private visit: Visit | null = null;
 
   constructor(emit: Emit) {
     this.emit = emit;
@@ -637,6 +667,7 @@ export class World {
     this.golf = null;
     this.golfBall = null;
     this.shot = null;
+    if (this.visit) this.visit = this.visit.open ? { phase: "wait", until: 0, open: true, watch: null } : null;
     this.huddles = [];
     this.replies = [];
     this.mishap = null;
@@ -707,11 +738,12 @@ export class World {
     );
   }
 
-  /** Layout spots plus any event spots, for assignment. */
+  /** Layout spots plus any event spots, for assignment (not the arcade while you're playing it). */
   allSpots(): Spot[] {
     const L = this.L;
     if (!L) return [];
-    return this.event ? [...L.spots, ...this.event.spots] : L.spots;
+    const spots = this.event ? [...L.spots, ...this.event.spots] : L.spots;
+    return this.atArcade ? spots.filter((sp) => sp.kind !== "arcade") : spots;
   }
 
   get eventActive(): boolean {
@@ -1451,6 +1483,7 @@ export class World {
     this.crew.update(dt, t);
     this.updateGolf(dt);
     this.updateShot(dt);
+    this.updateVisit(dt);
   }
 
   private onArrive(a: Agent, spot: Spot): void {
@@ -1775,8 +1808,7 @@ export class World {
     if (!G || this.bossAt || this.shot?.ball) return;
     const r = this.rand();
     const outcome: Golf["outcome"] = r < 0.3 ? "in" : r < 0.55 ? "lip" : r < 0.8 ? "short" : "desk";
-    const seat = L.boss.seat;
-    this.bossAt = { x: seat.x, y: seat.y, path: G.walk.map((p) => ({ x: p.x, y: p.y })), approach: [], facing: "front", walked: 0 };
+    this.bossWalk(G.walk.map((p) => ({ x: p.x, y: p.y })));
     this.golf = { phase: "out", until: 0, outcome, roll: null, fetch: null, fetched: false };
   }
 
@@ -1789,7 +1821,7 @@ export class World {
     const t = this.time;
     switch (g.phase) {
       case "out":
-        if (step(b, dt, 40)) {
+        if (step(b, dt, BOSS_SPEED)) {
           // A fresh ball on the line, a moment to line it up.
           b.facing = "right";
           this.golfBall = { x: G.tee.x, y: G.tee.y };
@@ -1816,7 +1848,7 @@ export class World {
         }
         break;
       case "back":
-        if (step(b, dt, 40)) {
+        if (step(b, dt, BOSS_SPEED)) {
           this.bossAt = null;
           this.golf = null;
         }
@@ -2017,6 +2049,148 @@ export class World {
         if (t >= s.until) this.shot = null;
         break;
     }
+  }
+
+  /** You up from your desk (or on from wherever you are) along `path`. */
+  private bossWalk(path: Point[]): Walker {
+    const L = this.L!;
+    const b = this.bossAt ?? { x: L.boss.seat.x, y: L.boss.seat.y, path: [], approach: [...(L.boss.way ?? [])], facing: "front", walked: 0, cut: 10 };
+    b.path = path;
+    this.bossAt = b;
+    return b;
+  }
+
+  // ------------------------------------------------------------------ you at the arcade
+
+  /**
+   * The arcade's game opened or closed (the view's cabinet). Open: you head
+   * over once you're free (not out on the green) and play along; closed:
+   * back to your desk.
+   */
+  arcade(open: boolean): void {
+    const v = this.visit;
+    if (open) {
+      if (!v) this.visit = { phase: "wait", until: 0, open: true, watch: null };
+      else {
+        v.open = true;
+        if (v.phase === "back") this.toArcade(v);
+      }
+      return;
+    }
+    if (!v) return;
+    v.open = false;
+    if (v.phase === "wait") this.visit = null;
+    else if (v.phase === "out" || v.phase === "play") this.leaveArcade(v);
+  }
+
+  /** A game on the arcade ended: if you're there, you cheer or sulk, and say `line`. */
+  arcadeResult(won: boolean, line: string): void {
+    const v = this.visit;
+    const b = this.bossAt;
+    if (!v || !b || b.path.length > 0 || (v.phase !== "play" && v.phase !== "won" && v.phase !== "lost")) return;
+    const t = this.time;
+    v.phase = won ? "won" : "lost";
+    v.until = t + 5.2;
+    if (won) this.burst(b.x, b.y - 30, "confetti", 18);
+    // The jump (or the cloud) first, then the words (the bubble would hide them), then whoever
+    // came to watch chimes in, one at a time.
+    this.speech.delete("boss");
+    this.sayLater = this.sayLater.filter((l) => l.id !== "boss");
+    this.sayLater.push({ at: t + 1.4, id: "boss", text: line, seconds: 2.6 });
+    const pick = (lines: string[]) => lines[Math.floor(this.rand() * lines.length)]!;
+    this.watchers(v).forEach((a, i) => {
+      const text = won ? pick(["Woo! Nice one!", "{They} did it!", "Teach me that!"]) : pick(["Oof. So close.", "Next time, boss.", "Ouch."]);
+      this.sayLater.push({ at: t + 4.1 + i * 2.4, id: a.id, text, seconds: 2.2 });
+    });
+  }
+
+  /** You're at the arcade or on your way: it's not free for anyone else. */
+  private get atArcade(): boolean {
+    const p = this.visit?.phase;
+    return p === "out" || p === "play" || p === "won" || p === "lost";
+  }
+
+  private updateVisit(dt: number): void {
+    const v = this.visit;
+    const b = this.bossAt;
+    if (!v) return;
+    const t = this.time;
+    switch (v.phase) {
+      case "wait":
+        // Once you're back at your desk from the green or a shot at the hoop.
+        if (!b && !this.golf && !(this.shot && this.shot.phase !== "rest")) this.toArcade(v);
+        break;
+      case "out":
+        if (b && step(b, dt, BOSS_SPEED)) {
+          v.phase = "play";
+          b.facing = "back";
+          this.watchArcade(v);
+        }
+        break;
+      case "won":
+      case "lost":
+        if (b && v.phase === "won" && this.rand() < dt * 6) {
+          this.particles.push({ kind: "sparkle", x: b.x + (this.rand() - 0.5) * 22, y: b.y - 18 - this.rand() * 20, vx: 0, vy: -6, life: 0, max: 0.5, color: this.rand() < 0.5 ? "#ffd84a" : "#ffffff" });
+        }
+        if (b && v.phase === "lost" && this.rand() < dt * 7) {
+          // Drizzle from your own little rain cloud.
+          this.particles.push({ kind: "drop", x: b.x - 4 + this.rand() * 10, y: b.y - ANCHOR_Y - 4, vx: 0, vy: 22, life: 0, max: 0.4, color: "#7fb8e6" });
+        }
+        if (t >= v.until) {
+          if (v.open) v.phase = "play";
+          else this.leaveArcade(v);
+        }
+        break;
+      case "back":
+        if (b && step(b, dt, BOSS_SPEED)) {
+          this.bossAt = null;
+          this.visit = null;
+        }
+        break;
+    }
+  }
+
+  /** Up from your desk (or turn round on your way back) and over to the arcade. */
+  private toArcade(v: Visit): void {
+    const L = this.L!;
+    const spot = L.byId.get("arcade");
+    if (!spot || !L.boss.way) return;
+    const b = this.bossWalk([]);
+    b.path = route(b, L.net, spot.path);
+    v.phase = "out";
+    // Whoever's playing it finds something else to do.
+    this.eventVersion++;
+  }
+
+  private leaveArcade(v: Visit): void {
+    const L = this.L!;
+    const h = this.huddles.find((x) => x.show !== undefined && x.show.gathering === v.watch);
+    if (h) this.endHuddle(h);
+    v.watch = null;
+    v.phase = "back";
+    this.bossAt!.path = route(this.bossAt!, L.net, L.boss.way!);
+    this.eventVersion++;
+  }
+
+  /** Now and then someone idle nearby comes over to watch you play. */
+  private watchArcade(v: Visit): void {
+    const spot = this.L!.byId.get("arcade");
+    if (!spot || spot.path.length < 3 || this.rand() < 0.3) return;
+    const near = this.freeIdle().filter((a) => Math.hypot(a.x - spot.x, a.y - spot.y) < 200).length;
+    if (near === 0) return;
+    const lane = spot.path[spot.path.length - 2]!;
+    const at = (dx: number, dy: number): GatherSpot => {
+      const x = spot.x + dx;
+      const y = spot.y + dy;
+      return { x, y, facing: "right", pose: "stand", activity: "watching you play", path: [...spot.path.slice(0, -2), { x, y: lane.y }, { x, y }] };
+    };
+    v.watch = this.gather([at(-20, 2), at(-34, 5)].slice(0, near), 150, [], 1);
+  }
+
+  private watchers(v: Visit): Agent[] {
+    const h = this.huddles.find((x) => x.show !== undefined && x.show.gathering === v.watch);
+    if (!h) return [];
+    return h.members.map((id) => this.agents.get(id)).filter((a): a is Agent => a !== undefined && a.huddle === h.id && this.settled(a));
   }
 
   // ------------------------------------------------------------------ visitors
@@ -4301,14 +4475,33 @@ export class World {
     }
     const look = this.npcLookOf("boss");
     const sprite = charSprite({ look, facing, pose, expr, emblem: facing === "back" ? null : youEmblem(this.you) });
-    ctx.drawImage(sprite, Math.round(x - ANCHOR_X), Math.round(y - ANCHOR_Y));
-    this.theme.dressVisitor?.(ctx, { x: Math.round(x - ANCHOR_X), y: Math.round(y - ANCHOR_Y), facing, pose, kind: "boss", look }, t);
+    const phase = this.bossAt?.path.length === 0 ? this.visit?.phase : undefined;
+    // At the arcade: leaning into the game and bobbing along, or jumping for joy after a win.
+    const hop = phase === "won" ? Math.round(Math.abs(Math.sin(t * 7)) * 3) : phase === "play" ? Math.floor(t * 3) % 2 : 0;
+    const lean = phase === "play" ? [0, -1, 0, 1][Math.floor(t / 0.7) % 4]! : 0;
+    if (this.bossAt) {
+      ctx.fillStyle = "rgba(40,20,30,0.18)";
+      ctx.fillRect(Math.round(x - 5), Math.round(y - 1), 10, 2);
+    }
+    const sx = Math.round(x - ANCHOR_X + lean);
+    const sy = Math.round(y - ANCHOR_Y - hop);
+    ctx.drawImage(sprite, sx, sy);
+    this.theme.dressVisitor?.(ctx, { x: sx, y: sy, facing, pose, kind: "boss", look }, t);
+    if (phase === "lost") drawRainCloud(ctx, Math.round(x + 3), Math.round(y - ANCHOR_Y - 9 + (Math.floor(t * 2) % 2)));
   }
 
-  /** You away from your desk: walking, putting, reacting to where the ball went. */
+  /** You away from your desk: walking, putting and reacting to where the ball went, at the arcade. */
   private awayPose(b: Walker, open: Expression): { pose: CharPose; facing: Facing; expr: Expression } {
     const t = this.time;
     const g = this.golf;
+    const v = this.visit;
+    if (b.path.length === 0 && v && !g) {
+      // Button mashing, now and then a pause to lean in; then a cheer, or hanging your head.
+      if (v.phase === "won") return { pose: Math.floor(t * 5) % 2 ? "cheer" : "raise", facing: "front", expr: "happy" };
+      if (v.phase === "lost") return { pose: "mope", facing: "front", expr: "worried" };
+      const mash = Math.floor(t * 7) % 2 === 0 && Math.floor(t / 1.7) % 4 !== 3;
+      return { pose: mash ? "arcade1" : "arcade0", facing: "back", expr: "focus" };
+    }
     if (b.path.length > 0 || !g) return { pose: b.path.length > 0 ? (`walk${Math.floor(b.walked / 4) % 4}` as CharPose) : "stand", facing: b.facing, expr: open };
     if (g.phase === "aim") return { pose: "putt0", facing: "right", expr: "focus" };
     if (g.phase === "roll") return { pose: t - g.roll!.at < 0.12 ? "putt0" : "putt1", facing: "right", expr: "focus" };
@@ -4549,15 +4742,7 @@ export class World {
     const bx = Math.round(a.x + 3);
     const by = Math.round(top - 13 - bounce);
     if (kind === "error") {
-      ctx.fillStyle = "#8e93a8";
-      ctx.fillRect(bx - 9, by + 3, 14, 5);
-      ctx.fillRect(bx - 7, by + 1, 6, 3);
-      ctx.fillRect(bx - 2, by, 5, 4);
-      ctx.fillStyle = "#b4b8c9";
-      ctx.fillRect(bx - 6, by + 2, 3, 1);
-      ctx.fillRect(bx - 1, by + 1, 2, 1);
-      ctx.fillStyle = OUTLINE;
-      ctx.fillRect(bx - 9, by + 8, 14, 1);
+      drawRainCloud(ctx, bx, by);
       return;
     }
     // In the waiting room, the page or blueprint they hold says "done" / "plan".
@@ -4787,10 +4972,23 @@ export class World {
     const w = 20;
     const h = 14;
     const t = this.time;
-    const playing = [...this.agents.values()].some((a) => a.spot?.id === "arcade" && a.path.length === 0);
-    const coin = (this.anim.get("arcade") ?? 0) > t;
+    // You at the controls (and how your last game went).
+    const you = this.bossAt?.path.length === 0 ? this.visit?.phase : undefined;
+    const playing = you !== undefined || [...this.agents.values()].some((a) => a.spot?.id === "arcade" && a.path.length === 0);
+    const coin = (this.anim.get("arcade") ?? 0) > t || you === "won";
     ctx.fillStyle = "#120f22";
     ctx.fillRect(x, y, w, h);
+    if (you === "lost") {
+      // Game over: a red screen blinking an X.
+      ctx.fillStyle = Math.floor(t * 3) % 2 ? "#5a1730" : "#3a0f22";
+      ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+      ctx.fillStyle = "#ff6b8b";
+      for (let i = 0; i < 6; i++) {
+        ctx.fillRect(x + 7 + i, y + 4 + i, 1, 1);
+        ctx.fillRect(x + 12 - i, y + 4 + i, 1, 1);
+      }
+      return;
+    }
     if (coin) {
       const colors = ["#ff6b8b", "#ffd84a", "#5ad1ff", "#86e07f", "#c39bff"];
       for (let i = 0; i < 5; i++) {
@@ -4817,6 +5015,11 @@ export class World {
     ctx.fillRect(shipX + 1, y + h - 4, 1, 1);
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(shipX + 1, y + h - 5 - ((t * 18) % h), 1, 2);
+    // A flicker now and then while you play.
+    if (you === "play" && Math.floor(t * 13) % 9 === 0) {
+      ctx.fillStyle = "rgba(200,230,255,0.28)";
+      ctx.fillRect(x, y, w, h);
+    }
   }
 
   private drawCat(ctx: CanvasRenderingContext2D): void {

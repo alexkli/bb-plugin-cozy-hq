@@ -155,7 +155,7 @@ export const BEACH_LABELS: NonNullable<Theme["labels"]> = {
     plant: "Water the plant",
     bin: "Wicker basket · toss some paper",
     clock: "Life-ring clock",
-    arcade: "Tiki arcade · insert a coin",
+    arcade: "Tiki arcade · play a game",
     pingpong: "Table tennis under the sail · serve",
     fishtank: "Rock pool · feed the fish",
     whiteboard: "Cabana whiteboard · threads in plan mode",

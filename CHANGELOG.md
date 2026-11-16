@@ -27,6 +27,14 @@
   - Their own synth sounds, and the hover texts and remarks use your pronouns ("watch her putt", "He sank it!").
   - Every scenery gets them; the treehouse keeps them clear of its redwood, and other decor keeps clear of your way to the green.
   - For scenery authors: props `putting-green`, `cradle`, `hoop` (pokes `putt`, `cradle`, `hoop`), `bossToys()` for your own boss room, and `buildBoss(…, keepOut)`.
+- **The arcade** has real games: click it and an arcade cabinet opens over the office.
+  - Four small originals to pick from: Noodle (steer a noodle to twenty dumplings without biting yourself), Inbox Zero (knock out the unread mail with a ball), Desk Rally (a paddle duel with the CPU, first to five) and Bug Hunt (zap the swarm before it lands).
+  - Each has a title screen, a score, lives, you win and game over screens, and a high score kept per browser.
+  - Arrow keys or WASD, space or Enter, P to pause, Esc to quit; on a phone a d-pad and an A button, or swipe and tap the screen. It pauses when you click away, and the bleeps go through the office's synth (sound settings apply).
+  - Meanwhile you get up from your desk, walk over through the hallways and play along at the arcade, its screen flickering. Win and you jump for joy under confetti; lose and you hang your head under a little rain cloud, each with a line. Someone idle nearby may come and watch. Close the cabinet and you walk back.
+  - Busy out on the green? You come over once you're done. Whoever was playing the arcade finds something else to do.
+  - Floor plans without a games room have no arcade, so nothing changes there.
+  - For scenery authors: `bossToys()` sets `L.boss.way` (your way out through your door), the arcade poses `arcade0`, `arcade1` and `mope`, and `node --test` walks you to the arcade and back in every plan.
 - Redwood Camp has no back wall any more: the forest runs to the top edge.
   - The usage board stands on log posts, and the clock, calendar and status board hang on trunks.
   - The door is a trailhead gate.

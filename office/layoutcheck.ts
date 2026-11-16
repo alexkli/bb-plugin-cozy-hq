@@ -133,6 +133,44 @@ export function checkLayout(L: Layout, opts: { threads: number }): string[] {
     }
   }
 
+  // Your way out of your office: from a hallway to your chair, and walked to the arcade
+  // and back you arrive, leave and enter your office only through its door and keep
+  // out of the other walled rooms.
+  const way = L.boss?.way;
+  if (!way) bad("L.boss.way (your way out of the office) is missing: bossToys() sets it");
+  else {
+    if (!way[0]?.c || !halls.has(way[0].y)) bad("L.boss.way must start on a hallway point");
+    const end = way[way.length - 1];
+    if (!end || end.x !== L.boss.seat.x || end.y !== L.boss.seat.y) bad("L.boss.way must end at your chair");
+    const arcade = L.byId.get("arcade");
+    const room = L.boss.room;
+    if (arcade && end) {
+      const others = L.rooms.filter((r) => r.walls && r.kind !== "boss").map((r) => r.rect);
+      const door = L.rooms.find((r) => r.kind === "boss")?.doorX ?? way[1]!.x;
+      const w: Walker = { x: end.x, y: end.y, path: [], approach: [...way], facing: "front", walked: 0, cut: 10 };
+      for (const [to, target] of [["the arcade", arcade.path], ["your chair", way]] as const) {
+        w.path = route(w, L.net, target);
+        let inside = within(w.x, w.y, room, 0);
+        for (let k = 0; k < 8000 && w.path.length > 0; k++) {
+          step(w, 1 / 30, 40);
+          const hit = others.find((r) => within(w.x, w.y, r, 4));
+          if (hit) {
+            bad(`your walk to ${to} goes through the walled room at ${JSON.stringify(hit)} (near ${Math.round(w.x)},${Math.round(w.y)})`);
+            break;
+          }
+          const now = within(w.x, w.y, room, 0);
+          if (now !== inside && Math.abs(w.x - door) > 6) {
+            bad(`on your walk to ${to} you go through the wall of your office at ${Math.round(w.x)},${Math.round(w.y)}, not the door`);
+            break;
+          }
+          inside = now;
+        }
+        const goal = target[target.length - 1]!;
+        if (w.path.length > 0 || w.x !== goal.x || w.y !== goal.y) bad(`your walk to ${to} doesn't arrive`);
+      }
+    }
+  }
+
   // Your desk toys stay in your office, off the places people sit and stand.
   const toys = L.boss?.toys;
   const room = L.boss?.room;

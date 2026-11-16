@@ -148,12 +148,21 @@ Your pick is kept per browser; the buddy dresses to match.
   Easter, Carnival and Thanksgiving are computed for each year. Lunar New
   Year, Diwali and Holi follow lunar calendars and are looked up through 2030.
 - **Click things**: the espresso machine, kettle, microwave, fridge, vending
-  machine, piano, dartboard, printer, plants, globe, arcade, couch, beanbags,
+  machine, piano, dartboard, printer, plants, globe, couch, beanbags,
   roomba, string lights, your lamp, your own desk (whistles for the dog) and
   more. In your office: the putting green (you walk over and putt: in the
   hole, lipped out, way short, or under the desk, where the dog fetches it),
   the paper-ball hoop (a shot from your chair) and the Newton's cradle. Each does something, with a synthesized sound. Open a window to hear
   outside: birds, crickets at night, rain, wind, thunder or a foghorn.
+- **The arcade** (in the games room, where the office has one) has real games
+  to play: click it and an arcade cabinet opens over the office. Pick Noodle
+  (steer a noodle to twenty dumplings), Inbox Zero (knock out the unread mail
+  with a ball), Desk Rally (a paddle duel with the CPU, first to five) or Bug
+  Hunt (zap the swarm before it lands). Arrow keys or WASD, space, P to pause,
+  Esc to quit; on a phone a d-pad and an A button, or swipe. Each game keeps
+  its high score. Meanwhile you walk over from your desk and play along at
+  the arcade: you jump for joy when you win and hang your head under a rain
+  cloud when you lose. Close the cabinet and you walk back.
 - **Day and night** follow your clock, with sunsets, stars and lamps. **The
   weather outside is your real local weather**: sun, clouds, fog, drizzle,
   rain, snow or a thunderstorm with lightning, also on the TV.

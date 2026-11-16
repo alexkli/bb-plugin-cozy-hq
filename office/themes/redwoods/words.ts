@@ -21,7 +21,7 @@ export const LABELS: ThemeLabels = {
     lamp: "Your lantern · on/off",
     plant: "Water the fern",
     bin: "Bucket · toss some paper",
-    arcade: "Old wooden arcade · insert a coin",
+    arcade: "Old wooden arcade · play a game",
     pingpong: "Lawn ping-pong · serve",
     fishtank: "The trout pond · feed the trout (mind the frog)",
     whiteboard: "Big-tent planning board · threads in plan mode",

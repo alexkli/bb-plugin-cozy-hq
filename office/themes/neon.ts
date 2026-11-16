@@ -72,7 +72,7 @@ export const NEON: Theme = {
       lamp: "Your neon lamp · on/off",
       plant: "Neon bonsai · mist it",
       bin: "Recycler · toss some scrap",
-      arcade: "Arcade cabinet · insert a credit",
+      arcade: "Arcade cabinet · play a game",
       pingpong: "Laser pong · serve",
       fishtank: "Jellyfish tank · feed them",
       whiteboard: "Holo-board · threads in plan mode",
