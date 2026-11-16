@@ -1,8 +1,11 @@
 // Cozy HQ backend: gathers usage from every enabled provider's usage source,
-// tech headlines for the office TV, and (optionally) the Work Dashboard inbox.
+// tech headlines for the office TV, the weather outside the windows, what
+// threads did last (for office small talk) and, optionally, the Work
+// Dashboard inbox.
 import { type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
-import { rpcContract, type InboxItem, type Story, type UsageCard } from "./contract.ts";
+import { rpcContract, type InboxItem, type Story, type UsageCard, type Weather } from "./contract.ts";
+import { recapLine, weatherKindOf } from "./office/chatter.ts";
 
 const LIST_METHOD = "provider-usage.v1.listResources";
 const FETCH_METHOD = "provider-usage.v1.getResource";
@@ -56,6 +59,21 @@ const dashboardSchema = z.looseObject({
   accounts: z.array(z.looseObject({ provider: z.string(), state: z.string() })).optional(),
 });
 
+const ipPlaceSchema = z.looseObject({
+  latitude: z.union([z.string(), z.number()]),
+  longitude: z.union([z.string(), z.number()]),
+  city: z.string().nullish(),
+});
+const geocodeSchema = z.looseObject({
+  results: z.array(z.looseObject({ name: z.string(), latitude: z.number(), longitude: z.number() })).optional(),
+});
+const forecastSchema = z.looseObject({
+  current: z.looseObject({ temperature_2m: z.number(), weather_code: z.number(), is_day: z.number() }),
+});
+const outlineSchema = z.looseObject({
+  items: z.array(z.looseObject({ preview: z.string(), role: z.string() })),
+});
+
 const hnItemSchema = z.looseObject({
   id: z.number(),
   title: z.string().optional(),
@@ -101,6 +119,26 @@ export default async function plugin(bb: BbPluginApi) {
       label: "Work Dashboard inbox on the office TV",
       description:
         "Show your newest Slack, Teams, GitHub and mail items from the Work Dashboard plugin as a TV channel, when that plugin is installed.",
+      default: true,
+    },
+    weather: {
+      type: "boolean",
+      label: "Live weather outside the windows",
+      description:
+        "Show your local weather outside the office windows and on the TV, from Open-Meteo. Your location comes from your IP address (via geojs.io) unless you set a place below.",
+      default: true,
+    },
+    weatherPlace: {
+      type: "string",
+      label: "Weather place",
+      description: "A city (\"Basel\") or latitude,longitude (\"47.56,7.59\") for the weather. Empty: your approximate location from your IP address.",
+      default: "",
+    },
+    workTalk: {
+      type: "boolean",
+      label: "Agents chat about their work",
+      description:
+        "When idle agents get together, their speech bubbles sometimes quote what their thread did last. Off: only small talk and tech news.",
       default: true,
     },
   });
@@ -257,6 +295,85 @@ export default async function plugin(bb: BbPluginApi) {
     return stories;
   }
 
+  // ---------------------------------------------------------------- weather
+  interface Place {
+    key: string;
+    name: string | null;
+    lat: number;
+    lon: number;
+    at: number;
+  }
+  let place: Place | null = null;
+  let weatherCache: { key: string; at: number; value: Weather } | null = null;
+  const validCoords = (lat: number, lon: number) =>
+    Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+
+  /** Where to get the weather for: the configured place, else the IP's city. */
+  async function findPlace(setting: string, signal: AbortSignal): Promise<Place | null> {
+    const key = setting.trim().slice(0, 120);
+    if (place && place.key === key && Date.now() - place.at < 6 * 3_600_000) return place;
+    let next: Place | null = null;
+    const coords = /^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/.exec(key);
+    if (coords) {
+      const lat = Number(coords[1]);
+      const lon = Number(coords[2]);
+      if (validCoords(lat, lon)) next = { key, name: null, lat, lon, at: Date.now() };
+    } else if (key) {
+      const url = `https://geocoding-api.open-meteo.com/v1/search?count=1&format=json&name=${encodeURIComponent(key)}`;
+      const hit = geocodeSchema.parse(await fetchJson(url, signal)).results?.[0];
+      if (hit && validCoords(hit.latitude, hit.longitude)) next = { key, name: hit.name, lat: hit.latitude, lon: hit.longitude, at: Date.now() };
+    } else {
+      const geo = ipPlaceSchema.parse(await fetchJson("https://get.geojs.io/v1/ip/geo.json", signal));
+      const lat = Number(geo.latitude);
+      const lon = Number(geo.longitude);
+      if (validCoords(lat, lon)) next = { key, name: geo.city ?? null, lat, lon, at: Date.now() };
+    }
+    if (next) place = next;
+    return next;
+  }
+
+  async function readWeather(setting: string): Promise<Weather> {
+    const key = setting.trim();
+    if (weatherCache && weatherCache.key === key && Date.now() - weatherCache.at < 15 * 60_000) return weatherCache.value;
+    const signal = AbortSignal.timeout(15_000);
+    const where = await findPlace(key, signal);
+    if (!where) return { enabled: true, place: null, kind: null, tempC: null, isDay: null, updatedAt: Date.now() };
+    // City-level precision is plenty for the sky outside the window.
+    const url =
+      `https://api.open-meteo.com/v1/forecast?latitude=${where.lat.toFixed(2)}&longitude=${where.lon.toFixed(2)}` +
+      "&current=temperature_2m,weather_code,is_day";
+    const now = forecastSchema.parse(await fetchJson(url, signal)).current;
+    const value: Weather = {
+      enabled: true,
+      place: where.name,
+      kind: weatherKindOf(now.weather_code),
+      tempC: Math.round(now.temperature_2m * 10) / 10,
+      isDay: now.is_day === 1,
+      updatedAt: Date.now(),
+    };
+    weatherCache = { key, at: Date.now(), value };
+    return value;
+  }
+
+  // ---------------------------------------------------------------- recaps
+  const recapCache = new Map<string, { text: string | null; at: number }>();
+  /** One line on what a thread did last, from the preview of its latest reply. */
+  async function recapOf(threadId: string): Promise<string | null> {
+    const hit = recapCache.get(threadId);
+    if (hit && Date.now() - hit.at < 5 * 60_000) return hit.text;
+    let text: string | null = null;
+    try {
+      const raw = await bb.sdk.threads.conversationOutline({ threadId, role: "assistant", signal: AbortSignal.timeout(8_000) });
+      const items = outlineSchema.parse(raw).items.filter((it) => it.role === "assistant");
+      for (let i = items.length - 1; i >= Math.max(0, items.length - 3) && !text; i--) text = recapLine(items[i]!.preview);
+    } catch {
+      text = hit?.text ?? null;
+    }
+    recapCache.set(threadId, { text, at: Date.now() });
+    if (recapCache.size > 300) recapCache.delete(recapCache.keys().next().value!);
+    return text;
+  }
+
   // ---------------------------------------------------------------- inbox
   async function readInbox(): Promise<{ available: boolean; sources: string[]; items: InboxItem[] }> {
     try {
@@ -360,6 +477,28 @@ export default async function plugin(bb: BbPluginApi) {
         return { enabled: true, stories: newsCache?.stories ?? [], updatedAt: newsCache?.at ?? 0 };
       }
     },
+    weather: async () => {
+      const { weather, weatherPlace } = await settings.get();
+      if (!weather) return { enabled: false, place: null, kind: null, tempC: null, isDay: null, updatedAt: Date.now() };
+      try {
+        return await readWeather(weatherPlace);
+      } catch (cause) {
+        bb.log.warn(`weather fetch failed: ${String(cause)}`);
+        return weatherCache?.value ?? { enabled: true, place: null, kind: null, tempC: null, isDay: null, updatedAt: 0 };
+      }
+    },
+    recap: async ({ threadIds }) => {
+      const { workTalk } = await settings.get();
+      if (!workTalk) return { enabled: false, recaps: {} };
+      const recaps: Record<string, string> = {};
+      await Promise.all(
+        threadIds.map(async (id) => {
+          const line = await recapOf(id);
+          if (line) recaps[id] = line;
+        }),
+      );
+      return { enabled: true, recaps };
+    },
     inbox: async () => {
       const { inbox } = await settings.get();
       if (!inbox) return { enabled: false, available: false, sources: [], items: [] };
@@ -372,7 +511,10 @@ export default async function plugin(bb: BbPluginApi) {
     if (usageCache) usageCache.at = 0;
     // A finished turn may have switched models.
     const id = (event as { threadId?: string } | undefined)?.threadId;
-    if (id) modelCache.delete(id);
+    if (id) {
+      modelCache.delete(id);
+      recapCache.delete(id);
+    }
   };
   bb.events.on("thread.idle", invalidate);
   bb.events.on("thread.failed", invalidate);

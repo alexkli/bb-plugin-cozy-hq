@@ -21,6 +21,12 @@ export interface Walker {
   approach: Point[];
   facing: Facing;
   walked: number;
+  /** Own lane: hallway points are walked this far off the center line, so people don't walk single file. */
+  lane?: { x: number; y: number };
+  /** Cut hallway corners diagonally once this close to them (px). */
+  cut?: number;
+  /** How far they weave from side to side on long hallway stretches (px). */
+  sway?: number;
 }
 
 export function nearestHall(net: Network, y: number): number {
@@ -47,19 +53,59 @@ export function route(w: Walker, net: Network, target: readonly Point[]): Point[
   return [...back, ...connect(net, hall, start), ...target.slice(1)];
 }
 
-/** Advance along the path; true when the last waypoint was reached in this step. */
+/**
+ * Advance along the path; true when the last waypoint was reached in this
+ * step. Hallway points are aimed at with the walker's own lane offset, and a
+ * hallway corner is cut diagonally once the walker is close to it, so people
+ * don't march single file at right angles. The path itself stays on the
+ * hallways (re-routing and walking back out rely on that).
+ */
 export function step(w: Walker, dt: number, speed: number): boolean {
   if (w.path.length === 0) return false;
   let budget = speed * dt;
   while (budget > 0 && w.path.length > 0) {
     const p = w.path[0]!;
-    const dx = p.x - w.x;
-    const dy = p.y - w.y;
+    const next = w.path[1];
+    let ox = 0;
+    let oy = 0;
+    if (p.c && next) {
+      ox = w.lane?.x ?? 0;
+      oy = w.lane?.y ?? 0;
+      // A gentle weave across the hallway on long stretches.
+      if (w.sway) {
+        const fx = p.x - w.x;
+        const fy = p.y - w.y;
+        const len = Math.hypot(fx, fy);
+        if (len > 30) {
+          const k = Math.sin(w.walked / 34 + ox) * w.sway * Math.min(1, (len - 30) / 30);
+          ox += (-fy / len) * k;
+          oy += (fx / len) * k;
+        }
+      }
+    }
+    const tx = p.x + ox;
+    const ty = p.y + oy;
+    const dx = tx - w.x;
+    const dy = ty - w.y;
     const d = Math.hypot(dx, dy);
+    // Close to a hallway corner: cut across it diagonally, coming out as far
+    // past the corner as they went in, so the cut stays in the crossing.
+    if (p.c && next?.c && w.cut && d <= w.cut && d > 0.5) {
+      const bx = next.x - p.x;
+      const by = next.y - p.y;
+      const blen = Math.hypot(bx, by) || 1;
+      const turn = Math.abs(dx * by - dy * bx) / ((d || 1) * blen);
+      if (turn > 0.5) {
+        const k = Math.min(d, blen - 1);
+        w.path[0] = { x: p.x + (bx / blen) * k + ox, y: p.y + (by / blen) * k + oy };
+        w.approach = [p];
+        continue;
+      }
+    }
     if (d > 0.01) w.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "front" : "back";
     if (d <= budget) {
-      w.x = p.x;
-      w.y = p.y;
+      w.x = tx;
+      w.y = ty;
       budget -= d;
       w.walked += d;
       w.path.shift();
@@ -104,7 +150,7 @@ export type EventKind =
   | "party"
   | "birthday"
   | "baby-shower"
-  | "pizza"
+  | "lunch"
   | "karaoke"
   | "cornhole"
   | "darts"
@@ -146,7 +192,7 @@ export const EVENTS: Record<EventKind, EventInfo> = {
   party: { title: "Office party", tv: "Office party! Snacks and music in the lounge", banner: "PARTY!", start: "party", ambient: ["cheer", 18], hours: [15, 22] },
   birthday: { title: "Birthday cake", tv: "Happy birthday! There's cake in the lounge", banner: "HAPPY BIRTHDAY", start: "birthday", hours: [10, 18] },
   "baby-shower": { title: "Baby shower", tv: "Baby shower in the lounge. Sign the card!", banner: "OH BABY!", start: "party", ambient: ["giggle", 20], hours: [11, 17] },
-  pizza: { title: "Pizza lunch", tv: "Free pizza in the lounge. First come, first served", banner: "PIZZA!", start: "cheer", hours: [11.5, 14] },
+  lunch: { title: "Team lunch", tv: "Team lunch in the lounge. The food's on its way!", banner: "LUNCH", start: "chime", hours: [11.5, 14] },
   karaoke: { title: "Karaoke", tv: "Karaoke hour. Who's next on the mic?", banner: "KARAOKE", start: "party", ambient: ["piano", 5], hours: [16, 23] },
   cornhole: { title: "Cornhole tournament", tv: "Cornhole tournament in progress", banner: "CORNHOLE CUP", start: "whistle", ambient: ["toss", 2.6], hours: [12, 19] },
   darts: { title: "Darts night", tv: "Darts night in the games room", banner: "DARTS NIGHT", start: "whistle", ambient: ["dart", 3.2], hours: [15, 23], needsGames: true },
@@ -175,6 +221,10 @@ export function pickEventKind(hour: number, hasGames: boolean, rand: () => numbe
   return pool[Math.floor(rand() * pool.length)]!;
 }
 
+/** What the delivery brings for a team lunch. */
+export type Food = "pizza" | "sushi" | "burgers" | "tacos" | "ramen";
+export const FOODS: Food[] = ["pizza", "sushi", "burgers", "tacos", "ramen"];
+
 export interface EventPlan {
   kind: EventKind;
   area: Rect;
@@ -188,6 +238,10 @@ export interface EventPlan {
   /** Hidden things to find (Easter eggs), and how many are found. */
   items: Point[];
   found: number;
+  /** Team lunch: what's ordered, whether it arrived, and who brought their own. */
+  food?: Food;
+  delivered?: boolean;
+  lunchboxes?: string[];
 }
 
 /** Where people stand for an event, and how they get there. */
@@ -244,6 +298,19 @@ export function planEvent(kind: EventKind, area: Rect, net: Network, count: numb
     }
   } else if (kind === "darts") {
     for (let i = 0; i < n; i++) add(i, area.x + 30 + (i % 5) * 20, area.y + area.h - 6 - Math.floor(i / 5) * 18, "left");
+  } else if (kind === "lunch") {
+    // A long table: a bench row behind it facing you, one in front with their backs to you.
+    // The table sits between the rows: the far row's legs hide behind it, the
+    // near row's heads only cover its front edge.
+    const cols = Math.max(2, Math.min(6, Math.ceil(n / 2), Math.floor((area.w - 24) / 17)));
+    const x0 = cx - ((cols - 1) * 17) / 2;
+    const shift = Math.max(0, cy + 27 - (area.y + area.h + 8));
+    const far = cy - 6 - shift;
+    for (let i = 0; i < Math.min(n, cols * 2); i++) {
+      const back = i % 2 === 1;
+      const col = Math.floor(i / 2);
+      add(i, x0 + col * 17, back ? far + 33 : far, back ? "back" : "front");
+    }
   } else {
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + 0.5;
@@ -262,6 +329,15 @@ export function planEvent(kind: EventKind, area: Rect, net: Network, count: numb
     }
   }
   return { kind, area, center: { x: cx, y: cy }, spots, boards, rx, ry, items, found: 0 };
+}
+
+/** The long lunch table between the two rows of a team lunch. */
+export function lunchTable(plan: EventPlan): Rect {
+  const xs = plan.spots.map((s) => s.x);
+  const x0 = Math.min(...xs, plan.center.x) - 10;
+  const x1 = Math.max(...xs, plan.center.x) + 10;
+  const far = Math.min(...plan.spots.map((s) => s.y));
+  return { x: x0, y: far - 4, w: x1 - x0, h: 24 };
 }
 
 // ------------------------------------------------------------------ event decor
@@ -355,6 +431,146 @@ function cake(ctx: CanvasRenderingContext2D, x: number, y: number, t: number): v
     ctx.fillRect(x + dx, y - 10, 1, 3);
     ctx.fillStyle = Math.floor(t * 8 + dx) % 2 ? "#ffd84a" : "#ff9a3d";
     ctx.fillRect(x + dx, y - 12, 1, 2);
+  }
+}
+
+/** A long table with a cloth, plates at every seat, lunchboxes, and the delivery once it's here. */
+function drawLunchTable(ctx: CanvasRenderingContext2D, plan: EventPlan, r: Rect, t: number): void {
+  const { x, y, w, h } = r;
+  ctx.fillStyle = OUTLINE;
+  ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+  ctx.fillStyle = "#c98e5a";
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = "#f4f1ea";
+  ctx.fillRect(x + 3, y, w - 6, h - 3);
+  ctx.fillStyle = "#e5484d";
+  for (let i = x + 3; i < x + w - 3; i += 4) ctx.fillRect(i, y + h - 4, 2, 1);
+  ctx.fillStyle = "#8a5a34";
+  ctx.fillRect(x + 2, y + h + 1, 2, 3);
+  ctx.fillRect(x + w - 4, y + h + 1, 2, 3);
+  const boxes = new Set(plan.lunchboxes ?? []);
+  plan.spots.forEach((s, i) => {
+    const py = s.facing === "front" ? y + 2 : y + 11;
+    const own = boxes.has(s.id);
+    if (own) {
+      // A bento box with a lid on the side.
+      const c = ["#5aa9e6", "#ff8fb2", "#86e07f", "#ffcf4a"][i % 4]!;
+      ctx.fillStyle = OUTLINE;
+      ctx.fillRect(s.x - 3, py - 1, 7, 5);
+      ctx.fillStyle = c;
+      ctx.fillRect(s.x - 2, py, 5, 3);
+      ctx.fillStyle = "#fbfaf5";
+      ctx.fillRect(s.x - 2, py, 2, 2);
+      ctx.fillStyle = "#e5484d";
+      ctx.fillRect(s.x + 1, py + 1, 1, 1);
+    } else {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(s.x - 2, py, 5, 3);
+      ctx.fillStyle = "#d8d2c4";
+      ctx.fillRect(s.x - 2, py + 2, 5, 1);
+      if (plan.delivered) drawFoodBite(ctx, plan.food ?? "pizza", s.x, py);
+    }
+  });
+  if (!plan.delivered) return;
+  // The order, along the middle of the table.
+  const cy = y + 6;
+  const n = Math.max(1, Math.floor((w - 16) / 18));
+  for (let i = 0; i < n; i++) {
+    const fx = Math.round(x + 10 + (i + 0.5) * ((w - 20) / n));
+    drawFoodPlatter(ctx, plan.food ?? "pizza", fx, cy, t, i);
+  }
+}
+
+/** A share of the order on someone's plate. */
+function drawFoodBite(ctx: CanvasRenderingContext2D, food: Food, x: number, y: number): void {
+  switch (food) {
+    case "pizza":
+      ctx.fillStyle = "#f2b24e";
+      ctx.fillRect(x - 1, y, 3, 2);
+      ctx.fillStyle = "#d9482b";
+      ctx.fillRect(x, y, 1, 1);
+      break;
+    case "sushi":
+      ctx.fillStyle = "#fbfaf5";
+      ctx.fillRect(x - 1, y, 3, 2);
+      ctx.fillStyle = "#ff8a5c";
+      ctx.fillRect(x - 1, y, 3, 1);
+      break;
+    case "burgers":
+      ctx.fillStyle = "#c98a4a";
+      ctx.fillRect(x - 1, y, 3, 2);
+      ctx.fillStyle = "#57b86f";
+      ctx.fillRect(x - 1, y + 1, 3, 1);
+      break;
+    case "tacos":
+      ctx.fillStyle = "#f2c14e";
+      ctx.fillRect(x - 1, y, 3, 2);
+      ctx.fillStyle = "#57b86f";
+      ctx.fillRect(x, y, 1, 1);
+      break;
+    case "ramen":
+      ctx.fillStyle = "#f0d9a8";
+      ctx.fillRect(x - 1, y, 3, 2);
+      ctx.fillStyle = "#c4383f";
+      ctx.fillRect(x - 1, y + 1, 3, 1);
+      break;
+  }
+}
+
+/** The delivered food in the middle of the table. */
+function drawFoodPlatter(ctx: CanvasRenderingContext2D, food: Food, x: number, y: number, t: number, i: number): void {
+  switch (food) {
+    case "pizza":
+      pizzaBox(ctx, x, y + 4, 6 - (i % 3));
+      break;
+    case "sushi":
+      ctx.fillStyle = OUTLINE;
+      ctx.fillRect(x - 7, y - 1, 14, 6);
+      ctx.fillStyle = "#2a2a34";
+      ctx.fillRect(x - 6, y, 12, 4);
+      for (let k = 0; k < 4; k++) {
+        ctx.fillStyle = "#fbfaf5";
+        ctx.fillRect(x - 5 + k * 3, y + 1, 2, 2);
+        ctx.fillStyle = k % 2 ? "#ff8a5c" : "#e5484d";
+        ctx.fillRect(x - 5 + k * 3, y + 1, 2, 1);
+      }
+      ctx.fillStyle = "#86e07f";
+      ctx.fillRect(x + 5, y + 3, 1, 1);
+      break;
+    case "burgers":
+      for (const dx of [-4, 3]) {
+        ctx.fillStyle = OUTLINE;
+        ctx.fillRect(x + dx - 3, y - 1, 6, 6);
+        ctx.fillStyle = "#d9a050";
+        ctx.fillRect(x + dx - 2, y, 4, 2);
+        ctx.fillStyle = "#57b86f";
+        ctx.fillRect(x + dx - 2, y + 2, 4, 1);
+        ctx.fillStyle = "#7a4a2a";
+        ctx.fillRect(x + dx - 2, y + 3, 4, 1);
+      }
+      ctx.fillStyle = "#ffcf4a";
+      ctx.fillRect(x - 1, y + 4, 1, 1);
+      break;
+    case "tacos":
+      for (const dx of [-5, 0, 5]) {
+        ctx.fillStyle = OUTLINE;
+        ctx.fillRect(x + dx - 2, y, 5, 4);
+        ctx.fillStyle = "#f2c14e";
+        ctx.fillRect(x + dx - 1, y + 1, 3, 2);
+        ctx.fillStyle = (dx === 0 ? "#e5484d" : "#57b86f");
+        ctx.fillRect(x + dx, y + 1, 1, 1);
+      }
+      break;
+    case "ramen":
+      ctx.fillStyle = OUTLINE;
+      ctx.fillRect(x - 5, y, 10, 5);
+      ctx.fillStyle = "#e5484d";
+      ctx.fillRect(x - 4, y + 1, 8, 3);
+      ctx.fillStyle = "#f0d9a8";
+      ctx.fillRect(x - 3, y + 1, 6, 1);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(x + Math.round(Math.sin(t * 3 + i) * 1.5), y - 3, 1, 2);
+      break;
   }
 }
 
@@ -525,17 +741,11 @@ export function eventDecor(ctx: CanvasRenderingContext2D, plan: EventPlan, t: nu
       bunch(area.x + 12, c.y + 8, 4);
       bunch(area.x + area.w - 12, c.y + 8, 3);
       break;
-    case "pizza":
-      out.push({
-        z: c.y + 2,
-        draw: () => {
-          roundTable(ctx, c.x, c.y + 2, "#e8f0f8");
-          const left = Math.max(1, 6 - Math.floor((t % 120) / 20));
-          pizzaBox(ctx, c.x - 7, c.y - 3, left);
-          pizzaBox(ctx, c.x + 7, c.y - 3, Math.max(0, left - 2));
-        },
-      });
+    case "lunch": {
+      const table = lunchTable(plan);
+      out.push({ z: table.y + table.h - 1, draw: () => drawLunchTable(ctx, plan, table, t) });
       break;
+    }
     case "ice-cream":
       out.push({ z: c.y + 2, draw: () => iceCreamCart(ctx, c.x, c.y + 2, t) });
       break;

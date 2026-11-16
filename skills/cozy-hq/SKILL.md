@@ -41,22 +41,53 @@ The office is laid out for the panel's size and the number of threads; tall
 panels (a phone held upright) stack the rooms vertically.
 When an area is full, waiting threads fall back to a desk and drafts to the
 waiting room; threads that still do not fit are counted on a sign next to the
-door. Waiting-room title tags tier upward so they never overlap.
+door.
+
+The **Names** button (top right of the office) puts a name tag over every
+character; tags tier upward so they never overlap, and clicking one opens the
+thread. A tag's chip shows the state (`?` question, `!` approval, `▤` plan,
+`✓` done, `✕` error, `✎` draft or planning, `▸` working, `~` idle): a solid
+chip with a red dot means unread, an outlined chip means read. Without tags,
+threads waiting for you show a small bubble over their heads instead.
 
 The office keeps living while you're elsewhere in bb and remembers what each
 thread was doing when you last looked; coming back, only threads whose state
-changed since then walk to their new place. The office buddy's bubble counts
-threads with news since you last looked (none, no bubble). The number on the
-Cozy HQ rail icon counts threads waiting for your input.
+changed since then walk to their new place. The office buddy's bubble and
+the number on the Cozy HQ rail icon both count threads with news since you
+last looked at the office (yellow when one waits on you, red for an error).
+Inside a thread, the buddy is that thread's own figure from the office.
+
+Idle threads get together every minute or so: a coffee at the espresso
+machine, water-cooler talk, a hallway chat, the couch, a ping-pong match or
+darts. Most get-togethers (and office events) come with comic speech bubbles:
+small talk, a Hacker News headline, or a line from what the thread last did
+(the first real sentence of its latest reply; `workTalk false` turns that
+off). Once a day after noon idle threads have lunch together at a long table;
+a delivery person brings pizza, sushi, burgers, tacos or ramen, and some
+bring their own lunchbox. Once in a while someone pokes at the server cables,
+gets a harmless shock (a flash and an x-ray skeleton), lies on the floor
+seeing stars and shuffles back; clicking the server room sends someone idle
+over right away. A technician
+does the rounds in working hours: a crashed computer, a dead string-light
+bulb (up a ladder), the espresso machine, the printer or the vending machine,
+and the server rack after a shock.
+
+The windows show your real local weather (clear, partly cloudy, cloudy, fog,
+drizzle, rain, snow, thunderstorms with lightning), from Open-Meteo for your
+approximate location; click a window to open it and hear outside (birds,
+crickets at night, rain, wind, thunder, a foghorn in fog).
 
 Characters that are not threads: you (the boss at the big desk), Biscuit the
 dog, Pixel the cat, a roomba, the cleaning crew (evenings and early mornings),
-a guard on occasional rounds, and kids on bring-your-kids-to-work day.
+a guard on occasional rounds, the technician, and kids on
+bring-your-kids-to-work day.
 
 Click a character or a tag to open its thread, the door or an empty desk for a
 new thread, the reception bell for the first thread waiting, the calendar to
 start an office event, and the `?` sticky note for the legend. Most furniture
-does something with a sound when clicked; hover the clock for the time.
+does something with a sound when clicked (also the couch, beanbags, roomba,
+string lights and windows); hover the clock for the time and a window for the
+weather.
 
 ## Pinboard, TV, sound
 
@@ -73,6 +104,10 @@ does something with a sound when clicked; hover the clock for the time.
 
 ## Settings
 
-`bb plugin config cozy-hq` lists three booleans, all on by default:
-`techNews` (TECH channel), `inbox` (INBOX channel) and `buddy` (the office
-buddy that strolls in a corner of bb; also toggled from the speaker controls).
+`bb plugin config cozy-hq` lists, all on by default: `techNews` (TECH
+channel), `inbox` (INBOX channel), `buddy` (the office buddy that strolls in a
+corner of bb; also toggled from the speaker controls), `weather` (live weather
+outside the windows) and `workTalk` (speech bubbles may quote what a thread
+did last). `weatherPlace` sets the weather's place: a city or
+`latitude,longitude`; empty means your approximate location from your IP
+address (via geojs.io).

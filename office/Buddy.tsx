@@ -1,6 +1,7 @@
 // The office buddy: one of your agents strolls in a corner of bb wherever you
-// are. It prefers an agent that needs you; otherwise it rotates through the
-// office. Click it to open Cozy HQ; drag it anywhere.
+// are. Inside a thread it's that thread's own figure from the office;
+// elsewhere it prefers an agent with news for you, otherwise it rotates
+// through the office. Click it to open Cozy HQ; drag it anywhere.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { charSprite, lookFor, CHAR_W, CHAR_H, type CharPose, type Expression } from "./characters.ts";
@@ -15,6 +16,8 @@ interface Props {
   threads: BuddyThread[];
   storageKey: string;
   hidden: boolean;
+  /** The thread open in bb right now, if any: the buddy becomes its figure. */
+  currentId: string | null;
   onOpen: () => void;
 }
 
@@ -23,14 +26,14 @@ const TOP = 12; // sprite pixels of headroom for the speech bubble
 const TRACK = 70; // CSS px it strolls back and forth
 
 /** Threads with something new for you since you last looked at the office. */
-function freshSince(threads: BuddyThread[], since: number): BuddyThread[] {
+export function freshSince<T extends ThreadLike>(threads: T[], since: number): T[] {
   return threads.filter((t) => {
     const k = waitKindOf(t);
     return k !== null && k !== "drafting" && (t.latestAttentionAt || t.updatedAt) > since;
   });
 }
 
-function readLook(key: string): number {
+export function readLook(key: string): number {
   try {
     const raw = window.localStorage.getItem(key);
     const n = raw ? Number(JSON.parse(raw)) : NaN;
@@ -44,12 +47,18 @@ function readLook(key: string): number {
   }
 }
 
-/** The bubble's color: something waits on you, something broke, or just news. */
-function bubbleColor(fresh: BuddyThread[]): string {
+/** How urgent the news is: something waits on you, something broke, or just done. */
+export function newsLevel(fresh: ThreadLike[]): "needs-you" | "error" | "done" {
   const kinds = new Set(fresh.map((t) => waitKindOf(t)));
-  if (kinds.has("question") || kinds.has("approval") || kinds.has("plan")) return "#ffcf4a";
-  if (kinds.has("error")) return "#ff9a9a";
-  return "#7be08f";
+  if (kinds.has("question") || kinds.has("approval") || kinds.has("plan")) return "needs-you";
+  if (kinds.has("error")) return "error";
+  return "done";
+}
+
+/** The bubble's color for that news. */
+function bubbleColor(fresh: BuddyThread[]): string {
+  const level = newsLevel(fresh);
+  return level === "needs-you" ? "#ffcf4a" : level === "error" ? "#ff9a9a" : "#7be08f";
 }
 
 export function Buddy(props: Props) {
@@ -66,7 +75,8 @@ export function Buddy(props: Props) {
   const count = fresh.length;
   const badge = count > 0 ? { text: count > 9 ? "9+" : String(count), color: bubbleColor(fresh) } : null;
   const [index, setIndex] = useState(0);
-  const current = order.length > 0 ? order[index % order.length]! : null;
+  const here = props.currentId ? visible.find((t) => t.id === props.currentId) : undefined;
+  const current = here ?? (order.length > 0 ? order[index % order.length]! : null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pos, setPos] = useState<{ right: number; bottom: number }>(() => {
     try {
@@ -218,6 +228,7 @@ export function Buddy(props: Props) {
         <span className="chq-buddy-tip">
           <b>{current.displayTitle}</b>
           <span>
+            {here ? "This thread in the office · " : ""}
             {count > 0 ? `${count} ${count === 1 ? "update" : "updates"} since you last looked` : kind ? WAIT_LABEL[kind] : moodOf(current) === "working" ? "Working" : "Hanging out"} · open
             Cozy HQ
           </span>

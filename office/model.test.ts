@@ -165,7 +165,7 @@ test("layouts fill any panel size and keep every spot reachable", () => {
 
 test("every office past the smallest has a server room, and tall ones don't sprawl", () => {
   // A folded phone, a tablet in landscape and one held upright, and friends.
-  for (const [w, h, threads] of [[390, 600, 16], [600, 425, 16], [600, 698, 16], [600, 446, 12], [900, 420, 8], [345, 640, 8], [390, 844, 12], [700, 480, 8]] as const) {
+  for (const [w, h, threads] of [[390, 600, 16], [600, 425, 16], [600, 698, 16], [600, 446, 12], [900, 420, 8], [345, 640, 8], [390, 844, 12], [700, 480, 8], [600, 365, 16], [700, 360, 8]] as const) {
     const lay = buildLayout(w, h, { threads });
     assert.ok(lay.server, `${w}×${h} has a server room`);
     const s = lay.server!;

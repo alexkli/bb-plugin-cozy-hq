@@ -40,9 +40,9 @@ Cozy HQ appears as **Cozy HQ** in bb's sidebar rail (route
 | Idle up to 8 hours | Lounge: TV, piano, fish tank, darts, ping-pong, arcade |
 | Idle longer | Napping on a beanbag |
 
-Threads waiting for you get a title tag above their heads; the tags stack so
-they never overlap, and clicking one opens the thread. So does clicking a
-character. Desks are furnished by the thread's model (Opus walnut with dual
+The **Names** button (top right) puts a name tag over everyone; the tags stack
+so they never overlap, and clicking one opens the thread. So does clicking a
+character. A solid chip with a red dot means unread, an outlined one read. Desks are furnished by the thread's model (Opus walnut with dual
 flat screens, Sonnet oak, Haiku white with a laptop, GPT/Codex black with an
 ultrawide; everyone else gets a flat screen, with the odd retro CRT), chairs
 by provider, and a shirt badge shows what the thread is about. One or two
@@ -52,6 +52,12 @@ The office keeps going while you're elsewhere in bb, and it remembers what
 everyone was doing when you last looked: coming back, only the threads whose
 state changed since then get up and walk.
 
+Idle threads get together every minute or so for a coffee, water-cooler
+talk, a hallway chat, the couch, ping-pong or darts, mostly with comic speech
+bubbles: small talk, a tech headline, or what the thread actually did last.
+After noon they have lunch together at a long table: a delivery brings pizza,
+sushi, burgers, tacos or ramen, and a few bring their own lunchbox.
+
 ## What else is going on
 
 - **The wall is a home screen**: a pinboard with every enabled provider's
@@ -60,13 +66,22 @@ state changed since then get up and walk.
   office weather and clock, Hacker News headlines and your Work Dashboard
   inbox, if you use that plugin. Click the TV to switch channels.
 - **A small server room** with blinking racks and a glowing AI cluster (click
-  it to train a model).
+  it to train a model, and someone idle wanders over to have a look). Now and
+  then someone messes with the cables, gets a (harmless) shock, lies on the
+  floor seeing stars and shuffles back.
+
+  <img src="docs/server-room.png" width="420" alt="An agent pokes at the server cables, gets zapped (an x-ray flash) and lies on the floor seeing stars">
+- **A technician** comes round in working hours to fix a crashed computer, a
+  dead bulb in the string lights (up a ladder), the espresso machine, the
+  printer or the vending machine, and the server rack after a shock.
+
+  <img src="docs/technician.png" width="560" alt="The technician up a ladder changing a string-light bulb, and fixing a crashed computer">
 - **You're the boss** at the big desk, with Biscuit the corgi asleep in the
   corner. Pixel the cat, a roomba, the fish, a cleaning crew in the evening and
   a night guard on the occasional round keep the place alive.
 - **Office events**: now and then idle threads gather for a party, birthday
-  cake, pizza, karaoke, cornhole, darts, a stretch break or bring-your-kids-to-
-  work day. Click the calendar to start one.
+  cake, karaoke, cornhole, darts, a stretch break or bring-your-kids-to-work
+  day, and for lunch every day after noon. Click the calendar to start one.
 - **Festivals** through the year, each with decorations and its own party:
 
   | When | Festival |
@@ -86,18 +101,20 @@ state changed since then get up and walk.
   Easter, Carnival and Thanksgiving are computed for each year. Lunar New
   Year, Diwali and Holi follow lunar calendars and are looked up through 2030.
 - **Click things**: the espresso machine, kettle, microwave, fridge, vending
-  machine, piano, dartboard, printer, plants, globe, arcade, your lamp, your
-  own desk (whistles for the dog) and more. Each does something, with a
-  synthesized sound.
-- **Day and night** follow your clock, with sunsets, stars and lamps, and
-  rainy days now and then.
+  machine, piano, dartboard, printer, plants, globe, arcade, couch, beanbags,
+  roomba, string lights, your lamp, your own desk (whistles for the dog) and
+  more. Each does something, with a synthesized sound. Open a window to hear
+  outside: birds, crickets at night, rain, wind, thunder or a foghorn.
+- **Day and night** follow your clock, with sunsets, stars and lamps. **The
+  weather outside is your real local weather**: sun, clouds, fog, drizzle,
+  rain, snow or a thunderstorm with lightning, also on the TV.
 - **Office buddy**: an agent from the office strolls in a corner of bb
-  wherever you are (drag it anywhere, click it to open Cozy HQ). Its bubble
-  counts the threads with news for you since you last looked at the office:
-  yellow when one waits on you, red for an error, green when they're just
-  done. No news, no bubble.
-- **Rail badge**: the number on the Cozy HQ icon counts threads waiting for
-  your input (a question, an approval or a plan to review).
+  wherever you are (drag it anywhere, click it to open Cozy HQ). Inside a
+  thread it's that thread's own figure. Its bubble counts the threads with
+  news for you since you last looked at the office: yellow when one waits on
+  you, red for an error, green when they're just done. No news, no bubble.
+- **Rail badge**: the number on the Cozy HQ icon is the same count, so you
+  see it even with the buddy off.
 - **Fits any panel**: a wide floor plan in landscape, rooms stacked top to
   bottom on a phone held upright. Taller panels get a reading nook in the
   lounge, a library and a small indoor garden instead of empty floor.
@@ -112,6 +129,9 @@ bb plugin config cozy-hq                    # show
 bb plugin config cozy-hq set buddy false    # the office buddy
 bb plugin config cozy-hq set techNews false # Hacker News on the TV
 bb plugin config cozy-hq set inbox false    # Work Dashboard inbox on the TV
+bb plugin config cozy-hq set weather false  # live weather (else the odd rainy day)
+bb plugin config cozy-hq set weatherPlace "Basel"   # or "47.56,7.59"; empty: from your IP
+bb plugin config cozy-hq set workTalk false # speech bubbles don't quote your threads
 ```
 
 ## Privacy and network
@@ -119,9 +139,17 @@ bb plugin config cozy-hq set inbox false    # Work Dashboard inbox on the TV
 - The office reads your threads, projects and providers through the plugin
   SDK, and usage from plugins that publish `provider-usage.v1` usage. It
   changes nothing.
-- The only outside request is to the Hacker News API
-  (`hacker-news.firebaseio.com`), at most every 20 minutes, for the TECH
-  channel. Turn it off with `techNews false`.
+- Outside requests:
+  - The Hacker News API (`hacker-news.firebaseio.com`), at most every 20
+    minutes, for the TECH channel. Turn it off with `techNews false`.
+  - The weather: `api.open-meteo.com` at most every 15 minutes, with your
+    location rounded to about a kilometer. The location comes from your IP
+    address via `get.geojs.io` (looked up at most every 6 hours), or from
+    `weatherPlace`, which is looked up with `geocoding-api.open-meteo.com`.
+    Turn it all off with `weather false`.
+- Speech bubbles can quote the first sentence of a thread's latest reply,
+  read through the plugin SDK. That stays in the office on your screen; turn
+  it off with `workTalk false`.
 - Only `http`/`https` links from headlines and inbox items are opened.
 - Preferences (sound, the buddy's position, remembered desks, what everyone
   was doing when you last looked, recent office news) stay in your browser's
@@ -142,12 +170,17 @@ To preview other times and states, set this in devtools on the bb page:
 localStorage["bb-plugin:cozy-hq:debug"] = '{"hour":20,"sample":true,"event":"lanterns"}'
 ```
 
-- `hour` (0–24) and `rainy` set the time of day and the weather.
+- `hour` (0–24) sets the time of day; `weather` the weather (`clear`,
+  `partly`, `cloudy`, `fog`, `drizzle`, `rain`, `snow`, `storm`; `rainy`
+  still works).
+- `gag` sets something off now: `shock` (the server-room mishap),
+  `technician`, `lunch`, `huddle`, or a kind of get-together (`coffee`,
+  `cooler`, `chat`, `couch`, `pingpong`, `darts`).
 - `sample` replaces your threads, usage and headlines with made-up ones (the
   screenshots use it). `demo` dresses your first twelve threads up in every
   state instead.
 - `event` keeps an office event running: `party`, `birthday`, `baby-shower`,
-  `pizza`, `karaoke`, `cornhole`, `darts`, `kids`, `yoga`, `ice-cream`, or a
+  `lunch`, `karaoke`, `cornhole`, `darts`, `kids`, `yoga`, `ice-cream`, or a
   festival: `snowday`, `lunarnewyear`, `valentines`, `carnival`, `stpatricks`,
   `holi`, `easter`, `maifest`, `summer`, `oktoberfest`, `halloween`, `diwali`,
   `lanterns`, `thanksgiving`, `holiday`.
@@ -162,7 +195,8 @@ Only the view changes. Remove the key to go back to normal.
 | File | What |
 | --- | --- |
 | `app.tsx` | Panel and buddy registration, rail badge, data hooks |
-| `server.ts`, `contract.ts` | Usage aggregation, Hacker News, Work Dashboard inbox |
+| `server.ts`, `contract.ts` | Usage aggregation, Hacker News, weather, thread recaps, Work Dashboard inbox |
+| `office/chatter.ts` | Small talk, weather codes, recap lines (pure) |
 | `office/model.ts` | Pure logic: thread mood, spot assignment, office news |
 | `office/layout.ts` | Floor plans (wide and portrait) for the panel size |
 | `office/world.ts` | Simulation and canvas renderer |

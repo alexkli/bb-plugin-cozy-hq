@@ -39,7 +39,9 @@ export type SpotKind =
   | "piano"
   | "fishtank"
   | "bench"
-  | "event";
+  | "event"
+  /** Made up on the spot: a get-together or a trip to the server room. */
+  | "huddle";
 
 export type SpotGroup = "desk" | "meeting" | "present" | "review" | "boss" | "break" | "lounge" | "nap" | "event";
 
@@ -208,7 +210,9 @@ export type PokeKind =
   | "boss"
   | "cornhole"
   | "globe"
-  | "server";
+  | "server"
+  | "couch"
+  | "beanbag";
 
 export interface Pokeable {
   id: string;
@@ -413,7 +417,7 @@ function buildPods(b: Builder, r: Rect, acc: Access): void {
       });
     }
   }
-  b.rooms.push({ kind: "pod", rect: r });
+  b.rooms.push({ kind: "pod", rect: { ...r, h: Math.min(r.h, rows * POD_H) } });
 }
 
 function buildMeeting(b: Builder, r: Rect, hallY: number): Rect {
@@ -683,6 +687,7 @@ function buildLounge(b: Builder, r: Rect, acc: Access, wallTv: Rect | null, naps
   const couchY = wallTv ? r.y + 30 : tvY + tvH + 34;
   const couch: Rect = { x: couchX, y: couchY, w: couchW, h: 26 };
   b.prop("couch", "couch", couchX - 1, couchY - 1, couchY + 26);
+  b.poke("couch", "couch", { x: couchX, y: couchY - 2, w: couchW, h: 28 });
   b.prop("coffee-table", "coffee-table", couchX + 22, couchY - 22, couchY - 10);
   const lane = couchY - 8;
   for (const [i, dx] of [20, 41, 62].entries()) {
@@ -704,6 +709,7 @@ function buildLounge(b: Builder, r: Rect, acc: Access, wallTv: Rect | null, naps
   if (naps && by - (fishtank.y + 58) >= 30) {
     for (const [i, bx] of [r.x + 20, r.x + r.w - 20].entries()) {
       b.prop(`beanbag-${i + 1}`, i ? "beanbag-pink" : "beanbag-blue", bx - 13, by - 10, by - 6);
+      b.poke(`beanbag-${i + 1}`, "beanbag", { x: bx - 13, y: by - 10, w: 26, h: 14 });
       b.spot({ id: `beanbag-${i + 1}`, kind: "beanbag", group: "nap", x: bx, y: by, facing: "front", pose: "nap", path: via(acc, by + 5, bx, by), activity: "napping" });
     }
   }
@@ -736,6 +742,7 @@ function buildGames(b: Builder, r: Rect, acc: Access): { pingpong: Rect | null; 
     const by = r.y + r.h - 8;
     for (const [i, bx] of [r.x + 22, r.x + r.w - 22].entries()) {
       b.prop(`beanbag-${i + 1}`, i ? "beanbag-pink" : "beanbag-blue", bx - 13, by - 10, by - 6);
+      b.poke(`beanbag-${i + 1}`, "beanbag", { x: bx - 13, y: by - 10, w: 26, h: 14 });
       b.spot({ id: `beanbag-${i + 1}`, kind: "beanbag", group: "nap", x: bx, y: by, facing: "front", pose: "nap", path: via(acc, by - 16, bx, by), activity: "napping" });
     }
   }
@@ -830,7 +837,7 @@ function finish(
   // Hanging plants in a few free stretches of wall.
   let hanging = 0;
   for (const s of segments) {
-    for (let x = s.x0 + 10; x + 16 <= s.x1 - 10 && hanging < 4; x += 4) {
+    for (let x = s.x0 + 10; x + 16 <= s.x1 - 10 && hanging < 7; x += 4) {
       const free = !busy.some(([a, z]) => x < z + 2 && x + 16 > a - 2) && !pillars.some((p) => x < p + 8 && x + 16 > p - 8);
       if (!free) continue;
       b.plants.push({ sprite: "HANGING_PLANT", x, y: 0, z: 1 });
@@ -997,6 +1004,12 @@ function buildWide(W: number, H: number, opts: LayoutOptions): Layout {
       }
     }
   }
+  // Short panels: the floor under a single pod row, above the hallway.
+  const podRows = Math.max(1, Math.floor((hy - 8 - d1 + 8) / POD_H));
+  const podGapY = d1 + podRows * POD_H + 6;
+  if (!b.server && underBoss < 40 && hy - 12 - podGapY >= 44) {
+    buildServerRoom(b, { x: c1x + 8, y: podGapY, w: Math.min(c1w - 16, 132), h: Math.min(56, hy - 12 - podGapY) });
+  }
   if (underBoss >= 40) {
     const y = bossRoom.y + bossRoom.h + 8;
     if (!b.server) buildServerRoom(b, { x: c3x, y, w: c3w, h: Math.min(56, underBoss) });
@@ -1098,7 +1111,8 @@ function buildPortrait(W: number, H: number, opts: LayoutOptions): Layout {
       case "kitchenMeeting": {
         const kw = Math.round(rect.w * 0.54);
         kitchen = { x: rect.x, y: rect.y, w: kw - 6, h: rect.h };
-        buildKitchen(b, { ...kitchen, y: kitchen.y + 10, h: kitchen.h - 10 }, acc);
+        // In through the gap between the kitchen and the meeting room, not across the meeting room.
+        buildKitchen(b, { ...kitchen, y: kitchen.y + 10, h: kitchen.h - 10 }, { hallY, aisleX: rect.x + kw - 1 });
         meeting = { x: rect.x + kw + 4, y: rect.y, w: rect.w - kw - 4, h: rect.h - 4 };
         whiteboard = buildMeeting(b, meeting, hallY);
         break;

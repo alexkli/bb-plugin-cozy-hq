@@ -11,10 +11,10 @@ import {
   useSettings,
   useSidebarThreadDraftIds,
 } from "@get-bb/plugin-sdk/app";
-import type { InboxItem, RpcContract, Story, UsageCard } from "./contract.ts";
-import { OfficeView, type OfficeThread } from "./office/OfficeView.tsx";
-import { Buddy } from "./office/Buddy.tsx";
-import { moodOf, type InteractionKind } from "./office/model.ts";
+import type { InboxItem, RpcContract, Story, UsageCard, Weather } from "./contract.ts";
+import { lookKey, OfficeView, type OfficeThread } from "./office/OfficeView.tsx";
+import { Buddy, freshSince, newsLevel, readLook } from "./office/Buddy.tsx";
+import { visibleThreads, type InteractionKind } from "./office/model.ts";
 
 const PROJECT_HUES = [205, 340, 145, 32, 268, 175, 8, 295, 55, 225];
 
@@ -150,9 +150,22 @@ function OfficePanel() {
   const pollInbox = useCallback(() => {
     rpc.call("inbox", null).then(setInbox, () => undefined);
   }, [rpc]);
+  const [weather, setWeather] = useState<Weather | null>(null);
+  const pollWeather = useCallback(() => {
+    rpc.call("weather", null).then(setWeather, () => undefined);
+  }, [rpc]);
+  const recap = useCallback(
+    (threadIds: string[]) =>
+      rpc.call("recap", { threadIds: threadIds.slice(0, 6) }).then(
+        (r) => (r.enabled ? r.recaps : null),
+        () => ({}),
+      ),
+    [rpc],
+  );
   usePoll(pollUsage, 90_000);
   usePoll(pollNews, 10 * 60_000);
   usePoll(pollInbox, 3 * 60_000);
+  usePoll(pollWeather, 10 * 60_000);
 
   return (
     <OfficeView
@@ -164,6 +177,8 @@ function OfficePanel() {
       news={news.stories}
       newsEnabled={news.enabled}
       inbox={inbox}
+      weather={weather}
+      onRecap={recap}
       onOpenThread={(id) => navigate.toThread(id)}
       onNewThread={() => navigate.toCompose({ focusPrompt: true })}
       onOpenUrl={(url) => {
@@ -178,20 +193,32 @@ function OfficePanel() {
   );
 }
 
-/** Tracks whether the Cozy HQ page itself is showing (the buddy hides there). */
-function useOnOfficePage(pluginId: string): boolean {
-  const [on, setOn] = useState(false);
+/** The page bb is showing (bb navigates without popstate, so poll too). */
+function usePathname(): string {
+  const [path, setPath] = useState(() => window.location.pathname);
   useEffect(() => {
-    const check = () => setOn(window.location.pathname.startsWith(`/plugins/${pluginId}/office`));
-    check();
+    const check = () => setPath(window.location.pathname);
     const id = window.setInterval(check, 800);
     window.addEventListener("popstate", check);
     return () => {
       window.clearInterval(id);
       window.removeEventListener("popstate", check);
     };
-  }, [pluginId]);
-  return on;
+  }, []);
+  return path;
+}
+
+/** The thread whose page is open, if any. */
+function threadOnPage(threads: OfficeThread[], path: string): string | null {
+  for (const t of threads) {
+    if (path.includes(t.id)) return t.id;
+    try {
+      if (t.href && t.href !== "#" && new URL(t.href, window.location.origin).pathname === path) return t.id;
+    } catch {
+      // not a URL
+    }
+  }
+  return null;
 }
 
 function BuddyOverlay() {
@@ -199,7 +226,9 @@ function BuddyOverlay() {
   const navigate = useBbNavigate();
   const { threads } = useOfficeThreads(false);
   const [buddyOn] = useBuddySetting();
-  const onOffice = useOnOfficePage(pluginId);
+  const path = usePathname();
+  const onOffice = path.startsWith(`/plugins/${pluginId}/office`);
+  const currentId = useMemo(() => (onOffice ? null : threadOnPage(threads, path)), [threads, path, onOffice]);
   if (!buddyOn) return null;
   return (
     <Buddy
@@ -207,17 +236,31 @@ function BuddyOverlay() {
       threads={threads}
       storageKey={`bb-plugin:${pluginId}`}
       hidden={onOffice}
+      currentId={currentId}
       onOpen={() => navigate.toPluginPanel("office")}
     />
   );
 }
 
-/** Rail badge: how many threads are waiting on you. */
-function useNeedsYouBadge() {
+/** Rail badge: threads with news for you since you last looked at the office (as the buddy counts). */
+function useNewsBadge() {
+  const pluginId = experimental_usePluginId();
   const { threads } = experimental_useSidebarThreads();
-  const n = threads.filter((t) => !t.isHidden && !t.isArchived && moodOf(t) === "needs-you").length;
+  const key = lookKey(`bb-plugin:${pluginId}`);
+  const [lastLook, setLastLook] = useState(() => readLook(key));
+  useEffect(() => {
+    const id = window.setInterval(() => setLastLook(readLook(key)), 4_000);
+    return () => window.clearInterval(id);
+  }, [key]);
+  const fresh = useMemo(() => freshSince(visibleThreads(threads), lastLook), [threads, lastLook]);
+  const n = fresh.length;
   if (n === 0) return null;
-  return { count: n, tone: "warning" as const, label: `${n} ${n === 1 ? "thread needs" : "threads need"} you` };
+  const level = newsLevel(fresh);
+  return {
+    count: n,
+    tone: level === "needs-you" ? ("warning" as const) : level === "error" ? ("critical" as const) : ("neutral" as const),
+    label: `${n} ${n === 1 ? "update" : "updates"} since you last looked`,
+  };
 }
 
 export default definePluginApp((app) => {
@@ -227,7 +270,7 @@ export default definePluginApp((app) => {
     icon: "cozy-hq/office",
     path: "office",
     component: OfficePanel,
-    experimental_useBadge: useNeedsYouBadge,
+    experimental_useBadge: useNewsBadge,
   });
   app.slots.experimental_appOverlay({ id: "buddy", component: BuddyOverlay });
 });

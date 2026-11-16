@@ -4,12 +4,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import type { InboxItem, Story, UsageCard } from "../contract.ts";
+import type { InboxItem, Story, UsageCard, Weather, WeatherKind } from "../contract.ts";
+import { openLine, pickTopic, replyLine, type TalkContext, type Talker } from "./chatter.ts";
 import { lookFor } from "./characters.ts";
 import { buildLayout, MIN_H_WIDE, MIN_W_WIDE, PORTRAIT_MIN_H, PORTRAIT_W, type Layout, type PokeKind, type Rect } from "./layout.ts";
 import { EVENT_KINDS, type EventKind } from "./life.ts";
 import { SEASON_TITLE, SEASONS, seasonsOf, type Season } from "./seasons.ts";
-import { SAMPLE_NEWS, sampleThreads, sampleUsage } from "./sample.ts";
+import { SAMPLE_NEWS, SAMPLE_WEATHER, sampleRecap, sampleThreads, sampleUsage } from "./sample.ts";
 import {
   ago,
   assignSpots,
@@ -29,7 +30,7 @@ import {
 } from "./model.ts";
 import { hash } from "./pixel.ts";
 import { Sound, type SoundName } from "./sound.ts";
-import { World, type Hit, type SeenState, type WorldThread } from "./world.ts";
+import { World, type Hit, type LabelAnchor, type SeenState, type SpeechBubble, type Talk, type WorldThread } from "./world.ts";
 import { chairToneFor } from "./desks.ts";
 
 export const TOPIC_EMOJI: Record<Topic, string> = {
@@ -92,6 +93,10 @@ export interface OfficeProps {
   news: Story[];
   newsEnabled: boolean;
   inbox: { enabled: boolean; available: boolean; sources: string[]; items: InboxItem[] };
+  /** Live weather outside (null until known, or when turned off). */
+  weather: Weather | null;
+  /** What these threads did last, one line each (null: work talk is off). */
+  onRecap: (threadIds: string[]) => Promise<Record<string, string> | null>;
   onOpenThread: (id: string) => void;
   onNewThread: () => void;
   onOpenUrl: (url: string) => void;
@@ -110,6 +115,10 @@ interface DebugPrefs {
   expose?: boolean;
   hour?: number;
   rainy?: boolean;
+  /** Pretend the weather is this ("clear", "partly", "cloudy", "fog", "drizzle", "rain", "snow", "storm"). */
+  weather?: string;
+  /** Set something off now: "shock" (the server-room gag), "technician", "huddle" or a kind of get-together. */
+  gag?: string;
   demo?: boolean;
   /** Keep this office event running (e.g. "party"). */
   event?: string;
@@ -150,9 +159,25 @@ function greeting(h: number): string {
   return "Good night";
 }
 
-/** A rainy day roughly one day in four, the same for everyone that day. */
+/** Without live weather: a rainy day roughly one day in four, the same for everyone that day. */
 function isRainy(d: Date): boolean {
   return hash(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`) % 4 === 0;
+}
+
+const WEATHER_KINDS: WeatherKind[] = ["clear", "partly", "cloudy", "fog", "drizzle", "rain", "snow", "storm"];
+
+/** The weather outside: debug override, then live weather, then the made-up rainy days. */
+function weatherNow(debug: DebugPrefs, live: Weather | null, date: Date): WeatherKind {
+  if (debug.weather && (WEATHER_KINDS as string[]).includes(debug.weather)) return debug.weather as WeatherKind;
+  if (debug.rainy !== undefined) return debug.rainy ? "rain" : "clear";
+  if (live?.kind) return live.kind;
+  return isRainy(date) ? "rain" : "clear";
+}
+
+/** °F where people expect it, °C everywhere else. */
+function tempText(c: number): string {
+  const region = (navigator.language || "").split("-")[1]?.toUpperCase();
+  return region === "US" || region === "LR" || region === "MM" ? `${Math.round((c * 9) / 5 + 32)}°F` : `${Math.round(c)}°C`;
 }
 
 /** Preview the other states on real threads (debug only, nothing is changed). */
@@ -257,6 +282,8 @@ export function OfficeView(input: OfficeProps) {
       news: SAMPLE_NEWS,
       newsEnabled: true,
       inbox: { enabled: false, available: false, sources: [], items: [] },
+      weather: SAMPLE_WEATHER,
+      onRecap: async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, sampleRecap(id)]).filter((e): e is [string, string] => e[1] !== null)),
     };
   }, [input, debug.sample]);
   const { threads } = props;
@@ -459,6 +486,70 @@ export function OfficeView(input: OfficeProps) {
   countsRef.current = counts;
   const overflowRef = useRef(overflow);
   overflowRef.current = overflow;
+  const weatherRef = useRef(props.weather);
+  weatherRef.current = props.weather;
+
+  // ------------------------------------------------------------ small talk
+  const recaps = useRef(new Map<string, string | null>());
+  const asking = useRef(new Set<string>());
+  const talkData = useRef({ byId: new Map<string, OfficeThread>(), news: [] as string[], festival: null as string | null });
+  const onRecapRef = useRef(props.onRecap);
+  onRecapRef.current = props.onRecap;
+  useEffect(() => {
+    const rand = Math.random;
+    const talker = (id: string): Talker | null => {
+      const t = talkData.current.byId.get(id);
+      if (!t) return null;
+      const m = moodOf(t);
+      return {
+        id,
+        title: t.displayTitle,
+        project: t.projectName,
+        recap: recaps.current.get(id) ?? null,
+        mood: m === "idle" ? "idle" : m === "done" ? "done" : m === "error" ? "error" : "other",
+      };
+    };
+    const context = (): TalkContext => {
+      const d = new Date();
+      return {
+        news: talkData.current.news,
+        weather: weatherNow(debugRef.current, weatherRef.current, d),
+        hour: debugRef.current.hour ?? d.getHours(),
+        festival: talkData.current.festival,
+      };
+    };
+    const talk: Talk = {
+      open(id) {
+        const who = talker(id);
+        if (!who) return null;
+        const ctx = context();
+        const topic = pickTopic(who, ctx, rand);
+        return { text: openLine(topic, who, ctx, rand), topic };
+      },
+      reply(id, topic) {
+        const who = talker(id);
+        return who ? replyLine(topic, who, rand) : null;
+      },
+      gather(ids) {
+        const missing = ids.filter((id) => !recaps.current.has(id) && !asking.current.has(id));
+        if (missing.length === 0) return;
+        for (const id of missing) asking.current.add(id);
+        onRecapRef.current(missing).then(
+          (got) => {
+            for (const id of missing) {
+              asking.current.delete(id);
+              recaps.current.set(id, got?.[id] ?? null);
+            }
+            // Forget them after a while: threads move on.
+            window.setTimeout(() => missing.forEach((id) => recaps.current.delete(id)), 5 * 60_000);
+          },
+          () => missing.forEach((id) => asking.current.delete(id)),
+        );
+      },
+    };
+    world.setTalk(talk);
+    return () => world.setTalk(null);
+  }, [world]);
 
   // ------------------------------------------------------------ loop
   const prefsRef = useRef(prefs);
@@ -478,6 +569,7 @@ export function OfficeView(input: OfficeProps) {
     let lastChimeHour = new Date().getHours();
     let eventVersion = world.eventVersion;
     let forcedAt = -Infinity;
+    let gagAt = -Infinity;
     const frame = (ts: number) => {
       raf = requestAnimationFrame(frame);
       const dt = Math.min(0.1, (ts - last) / 1000);
@@ -500,6 +592,14 @@ export function OfficeView(input: OfficeProps) {
         forcedAt = ts;
         world.startEvent(dbgEvent as EventKind);
       }
+      const gag = debugRef.current.gag;
+      if (gag && ts - gagAt > 45_000) {
+        gagAt = ts;
+        if (gag === "shock") world.startMishap();
+        else if (gag === "technician") world.callTechnician();
+        else if (gag === "lunch") world.startEvent("lunch");
+        else world.startHuddle(gag === "huddle" ? undefined : (gag as Parameters<World["startHuddle"]>[0]));
+      }
       if (world.eventVersion !== eventVersion) {
         // An office event started or ended: idle agents head over or back.
         eventVersion = world.eventVersion;
@@ -516,7 +616,7 @@ export function OfficeView(input: OfficeProps) {
       world.render(ctx, {
         hour: dbg.hour ?? date.getHours() + date.getMinutes() / 60,
         date,
-        rainy: dbg.rainy ?? isRainy(date),
+        weather: weatherNow(dbg, weatherRef.current, date),
         soundOn: prefsRef.current.on && prefsRef.current.volume > 0,
         soundPulse: (performance.now() - sound.lastAt) / 1000,
         hover: hoverRef.current,
@@ -617,7 +717,19 @@ export function OfficeView(input: OfficeProps) {
         break;
       }
       case "npc":
-        play(hit.who === "guard" ? "walkie" : hit.who === "janitor" ? "whistle" : "giggle");
+        play(hit.who === "guard" ? "walkie" : hit.who === "janitor" ? "whistle" : hit.who === "technician" ? "wrench" : hit.who === "delivery" ? "dingdong" : "giggle");
+        break;
+      case "window":
+        world.openWindow(hit.index);
+        break;
+      case "roomba":
+        world.bumpRoomba();
+        break;
+      case "lights":
+        world.twinkle();
+        break;
+      case "status":
+        play("beep");
         break;
       case "poke":
         world.poke(hit.id);
@@ -644,17 +756,23 @@ export function OfficeView(input: OfficeProps) {
     }
   };
 
-  const [occupants, setOccupants] = useState<Occupant[]>([]);
+  // Name tags over everyone's head, when you want them.
+  const [labelsOn, setLabelsOn] = useState(() => readJson(`${storageKey}:labels`, { on: false }).on);
+  useEffect(() => writeJson(`${storageKey}:labels`, { on: labelsOn }), [labelsOn, storageKey]);
+  const [anchors, setAnchors] = useState<LabelAnchor[]>([]);
+  const [speech, setSpeech] = useState<SpeechBubble[]>([]);
   useEffect(() => {
     const id = window.setInterval(() => {
-      const next = world.waitingOccupants();
-      setOccupants((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
-    }, 300);
+      const next = labelsOn ? world.labelAnchors() : [];
+      setAnchors((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+      const said = world.speechBubbles();
+      setSpeech((prev) => (JSON.stringify(prev) === JSON.stringify(said) ? prev : said));
+    }, 250);
     return () => window.clearInterval(id);
-  }, [world]);
+  }, [world, labelsOn]);
   const tags = useMemo(
-    () => (layout ? placeTags(occupants, byId, scale, layout.W * scale) : []),
-    [occupants, byId, scale, layout],
+    () => (layout ? placeTags(anchors, byId, scale, layout.W * scale) : []),
+    [anchors, byId, scale, layout],
   );
   useEffect(() => {
     world.setLabeled(tags.map((t) => t.id));
@@ -663,16 +781,26 @@ export function OfficeView(input: OfficeProps) {
   const night = world.nightness(debug.hour ?? now.getHours() + now.getMinutes() / 60);
   const today = seasonsFor(debug.season, now);
   const festival = today.season ? SEASON_TITLE[today.season] : null;
+  const outside = weatherNow(debug, props.weather, now);
   const tvWeather: TvWeather =
     today.season === "holidays" || today.season === "snowday"
       ? "snow"
-      : (debug.rainy ?? isRainy(now))
-        ? "rain"
-        : night > 0.5
+      : outside === "clear" || outside === "partly"
+        ? night > 0.5
           ? "night"
           : night > 0.15
+            ? "dusk"
+            : outside === "partly"
+              ? "partly"
+              : "sun"
+        : outside === "drizzle"
+          ? "rain"
+          : outside === "cloudy"
             ? "cloud"
-            : "sun";
+            : outside;
+  const live = props.weather?.kind && !debug.weather && debug.rainy === undefined ? props.weather : null;
+  const weatherLine = [WEATHER_TEXT[tvWeather], live?.tempC != null ? tempText(live.tempC) : null, live?.place ?? null].filter(Boolean).join(" · ");
+  talkData.current = { byId, news: (props.newsEnabled ? props.news : []).map((n) => n.title), festival };
 
   const tooltip = useMemo<ReactNode>(() => {
     if (!hover) return null;
@@ -739,7 +867,15 @@ export function OfficeView(input: OfficeProps) {
       case "npc":
         return (
           <div className="chq-tip-hint">
-            {hover.who === "guard" ? "Night guard on their rounds" : hover.who === "janitor" ? "Cleaning crew · mind the wet floor" : "A visiting kid · bring your kids to work day"}
+            {hover.who === "guard"
+              ? "Night guard on their rounds"
+              : hover.who === "janitor"
+                ? "Cleaning crew · mind the wet floor"
+                : hover.who === "technician"
+                  ? "The technician · fixing things around the office"
+                  : hover.who === "delivery"
+                    ? "Lunch delivery for the team"
+                    : "A visiting kid · bring your kids to work day"}
           </div>
         );
       case "poke":
@@ -758,8 +894,19 @@ export function OfficeView(input: OfficeProps) {
         return <div className="chq-tip-hint">Sound {prefs.on ? `${Math.round(prefs.volume * 100)}%` : "off"}</div>;
       case "pinboard":
         return <div className="chq-tip-hint">Provider usage · refresh</div>;
+      case "window":
+        return (
+          <>
+            <div className="chq-tip-hint">{weatherLine}</div>
+            <div className="chq-tip-hint chq-tip-sub">Open the window</div>
+          </>
+        );
+      case "roomba":
+        return <div className="chq-tip-hint">The roomba · send it off (or home)</div>;
+      case "lights":
+        return <div className="chq-tip-hint">String lights · make them twinkle</div>;
     }
-  }, [hover, byId, world, prefs, overflow, waiting, now, counts, officeEvent]);
+  }, [hover, byId, world, prefs, overflow, waiting, now, counts, officeEvent, weatherLine]);
 
   const W = (layout?.W ?? MIN_W_WIDE) * scale;
   const H = (layout?.H ?? MIN_H_WIDE) * scale;
@@ -799,6 +946,7 @@ export function OfficeView(input: OfficeProps) {
                 special={officeEvent ? { tag: "TODAY", text: officeEvent.tv } : null}
                 now={now}
                 weather={tvWeather}
+                weatherLine={weatherLine}
                 festival={festival}
                 channel={channel}
                 tick={tvTick}
@@ -843,7 +991,27 @@ export function OfficeView(input: OfficeProps) {
               ) : null}
             </>
           ) : null}
-          <WaitTags tags={tags} width={W} height={H} onOpen={props.onOpenThread} />
+          <NameTags tags={tags} width={W} height={H} onOpen={props.onOpenThread} />
+          <Speech bubbles={speech} scale={scale} width={W} />
+          {layout ? (
+            <button
+              type="button"
+              className={`chq-labels-btn${labelsOn ? " is-on" : ""}`}
+              aria-pressed={labelsOn}
+              title={labelsOn ? "Hide the name tags" : "Show a name tag over everyone"}
+              onClick={() => {
+                sound.unlock();
+                play("click");
+                setLabelsOn((on) => !on);
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden>
+                <path d="M1.5 2.5v5l7 7 6-6-7-7h-5z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                <circle cx="5" cy="6" r="1.3" fill="currentColor" />
+              </svg>
+              <span>Names</span>
+            </button>
+          ) : null}
           {tooltip && tipPos ? (
             <div
               className={`chq-tip${tipPos.y * scale < 96 ? " is-below" : ""}`}
@@ -864,19 +1032,16 @@ export function OfficeView(input: OfficeProps) {
   );
 }
 
-// -------------------------------------------------------------- wait tags
-
-interface Occupant {
-  id: string;
-  x: number;
-  y: number;
-  kind: WaitKind;
-}
+// -------------------------------------------------------------- name tags
 
 interface TagBox {
   id: string;
-  kind: WaitKind;
+  /** Glyph in the chip, and the chip's color class. */
+  icon: string;
+  tone: string;
+  unread: boolean;
   title: string;
+  label: string;
   left: number;
   top: number;
   w: number;
@@ -889,21 +1054,29 @@ interface TagBox {
 const TAG_H = 16;
 const TAG_GAP = 3;
 
+const MOOD_ICON: Partial<Record<Mood, string>> = { working: "▸", planning: "✎", idle: "~" };
+
 /**
- * Lay the waiting room's title tags out above their heads so none overlap:
- * each tag tries straight above, then nudged sideways, then a tier higher.
+ * Lay the name tags out above their heads so none overlap: each tag tries
+ * straight above, then nudged sideways, then a tier higher. Ones waiting
+ * on you come first and get the best places.
  */
-function placeTags(occupants: Occupant[], byId: Map<string, OfficeThread>, scale: number, sceneW: number): TagBox[] {
+function placeTags(anchors: LabelAnchor[], byId: Map<string, OfficeThread>, scale: number, sceneW: number): TagBox[] {
   const placed: TagBox[] = [];
   const hits = (a: { left: number; top: number; w: number; h: number }) =>
     placed.some((b) => a.left < b.left + b.w + TAG_GAP && b.left < a.left + a.w + TAG_GAP && a.top < b.top + b.h + TAG_GAP && b.top < a.top + a.h + TAG_GAP);
-  for (const o of occupants) {
+  const chars = anchors.length > 10 ? 16 : 24;
+  for (const o of anchors) {
     const t = byId.get(o.id);
     if (!t) continue;
     const title = t.displayTitle;
-    const w = Math.round(Math.min(156, 24 + Math.min(title.length, 24) * 6));
+    const w = Math.round(Math.min(156, 24 + Math.min(title.length, chars) * 6));
     const ax = o.x * scale;
     const ay = (o.y - 2) * scale;
+    const unread = t.isUnread || o.kind === "done" || o.kind === "error";
+    const icon = o.kind ? WAIT_ICON[o.kind] : (MOOD_ICON[o.mood] ?? "·");
+    const tone = o.kind ?? o.mood;
+    const label = `${o.kind ? WAIT_LABEL[o.kind] : moodLabel(o.mood)} · ${unread ? "unread" : "read"}: ${title}`;
     let done = false;
     for (let tier = 0; tier < 5 && !done; tier++) {
       for (const shift of [0, -0.6, 0.6, -1.15, 1.15]) {
@@ -912,7 +1085,7 @@ function placeTags(occupants: Occupant[], byId: Map<string, OfficeThread>, scale
         if (top < 2) continue;
         const box = { left, top, w, h: TAG_H };
         if (hits(box)) continue;
-        placed.push({ id: o.id, kind: o.kind, title, ...box, ax, ay });
+        placed.push({ id: o.id, icon, tone, unread, title, label, ...box, ax, ay });
         done = true;
         break;
       }
@@ -921,8 +1094,8 @@ function placeTags(occupants: Occupant[], byId: Map<string, OfficeThread>, scale
   return placed;
 }
 
-/** Title tags over the agents in the waiting room, with a thin line to each head. */
-function WaitTags(props: { tags: TagBox[]; width: number; height: number; onOpen: (id: string) => void }) {
+/** Name tags over the agents, with a thin line to each head. Unread threads get a solid chip, read ones an outlined one. */
+function NameTags(props: { tags: TagBox[]; width: number; height: number; onOpen: (id: string) => void }) {
   if (props.tags.length === 0) return null;
   return (
     <>
@@ -936,15 +1109,35 @@ function WaitTags(props: { tags: TagBox[]; width: number; height: number; onOpen
         <button
           key={t.id}
           type="button"
-          className={`chq-tag chq-tag-${t.kind}`}
+          className={`chq-tag chq-tag-${t.tone} ${t.unread ? "is-unread" : "is-read"}`}
           style={{ left: t.left, top: t.top, width: t.w }}
           onClick={() => props.onOpen(t.id)}
-          title={`${WAIT_LABEL[t.kind]}: ${t.title}`}
+          title={t.label}
         >
-          <i aria-hidden>{WAIT_ICON[t.kind]}</i>
+          <i aria-hidden>{t.icon}</i>
           <span>{t.title}</span>
         </button>
       ))}
+    </>
+  );
+}
+
+/** Comic speech bubbles over whoever is talking. */
+function Speech(props: { bubbles: SpeechBubble[]; scale: number; width: number }) {
+  if (props.bubbles.length === 0) return null;
+  return (
+    <>
+      {props.bubbles.map((b) => {
+        const x = b.x * props.scale;
+        const half = Math.min(95, 14 + b.text.length * 3);
+        const left = Math.max(half + 4, Math.min(props.width - half - 4, x));
+        return (
+          <div key={b.id} className="chq-say" style={{ left, top: b.y * props.scale - 8 }} aria-live="polite">
+            {b.text}
+            <i style={{ left: `calc(50% + ${Math.round(x - left)}px)` }} />
+          </div>
+        );
+      })}
     </>
   );
 }
@@ -970,6 +1163,8 @@ const POKE_TIP: Record<PokeKind, string> = {
   bell: "Reception bell",
   boss: "That's you · whistle for Biscuit",
   server: "Server room · the AI cluster · click to train a model",
+  couch: "The couch · bounce on it",
+  beanbag: "Beanbag · squish",
   cornhole: "Cornhole · toss a bag",
   globe: "Spin the globe",
 };
@@ -991,6 +1186,7 @@ const LEGEND: { title: string; text: string; color: string; icon: string }[] = [
   { title: "Waiting room · page ✓", text: "Done, not read yet", color: "#d9f7c9", icon: "✓" },
   { title: "Waiting room · rain cloud", text: "Hit an error", color: "#ffd6e5", icon: "☁" },
   { title: "Desk & chair", text: "Desk = model, chair = provider", color: "#ffe9c7", icon: "◧" },
+  { title: "Name tags", text: "Solid = unread, outlined = read", color: "#fff3a3", icon: "▸" },
   { title: "Shirt badge", text: "What the thread is about", color: "#d9f7c9", icon: "★" },
   { title: "Kitchen · cooler", text: "Idle under 20 min", color: "#ffe9c7", icon: "☕" },
   { title: "Office events", text: "Idle agents join in", color: "#ffd6e5", icon: "★" },
@@ -1145,10 +1341,20 @@ function eventText(e: OfficeEvent): { tag: string; text: string } {
   }
 }
 
-export type TvWeather = "sun" | "cloud" | "rain" | "snow" | "night";
+export type TvWeather = "sun" | "partly" | "dusk" | "cloud" | "fog" | "rain" | "snow" | "storm" | "night";
 
-const WEATHER_ICON: Record<TvWeather, string> = { sun: "☀️", cloud: "⛅", rain: "🌧️", snow: "❄️", night: "🌙" };
-const WEATHER_TEXT: Record<TvWeather, string> = { sun: "Sunny", cloud: "Fair", rain: "Rainy", snow: "Snow", night: "Clear night" };
+const WEATHER_ICON: Record<TvWeather, string> = { sun: "☀️", partly: "🌤️", dusk: "⛅", cloud: "☁️", fog: "🌫️", rain: "🌧️", snow: "❄️", storm: "⛈️", night: "🌙" };
+const WEATHER_TEXT: Record<TvWeather, string> = {
+  sun: "Sunny",
+  partly: "Partly cloudy",
+  dusk: "Fair",
+  cloud: "Cloudy",
+  fog: "Foggy",
+  rain: "Rainy",
+  snow: "Snow",
+  storm: "Thunderstorms",
+  night: "Clear night",
+};
 
 function Tv(props: {
   style: CSSProperties;
@@ -1161,6 +1367,8 @@ function Tv(props: {
   inbox: OfficeProps["inbox"];
   now: Date;
   weather: TvWeather;
+  /** "Rainy · 14°C · Basel" */
+  weatherLine: string;
   festival: string | null;
   onNext: () => void;
   onOpenUrl: (url: string) => void;
@@ -1252,7 +1460,7 @@ function Tv(props: {
             <b>{clock}</b>
             <span>{date}</span>
             <span className="chq-tv-forecast">
-              {WEATHER_TEXT[props.weather]}
+              {props.weatherLine}
               {props.festival ? ` · ${props.festival}` : ""}
             </span>
           </div>

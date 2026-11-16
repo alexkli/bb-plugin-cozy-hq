@@ -52,10 +52,25 @@ export type SoundName =
   | "tusch"
   | "firecracker"
   | "oompah"
-  | "server";
+  | "server"
+  | "birds"
+  | "crickets"
+  | "rainfall"
+  | "wind"
+  | "thunder"
+  | "foghorn"
+  | "squeak"
+  | "squish"
+  | "zap"
+  | "wrench"
+  | "drill"
+  | "fixed"
+  | "beep"
+  | "twinkle"
+  | "dingdong";
 
 /** Quiet background sounds play softer than event sounds. */
-const AMBIENT = new Set<SoundName>(["pingpong", "bubble", "coffee", "roomba", "purr", "door", "marker", "toss", "giggle", "whistle", "walkie"]);
+const AMBIENT = new Set<SoundName>(["pingpong", "bubble", "coffee", "roomba", "purr", "door", "marker", "toss", "giggle", "whistle", "walkie", "wrench", "drill", "fixed"]);
 
 export class Sound {
   private ctx: AudioContext | null = null;
@@ -153,7 +168,109 @@ export class Sound {
       src.start(now + start);
     };
 
+    /** Filtered noise that swells in and fades out (rain, wind, rumble). */
+    const swell = (start: number, dur: number, vol: number, fromHz: number, toHz: number, q = 0.8, type: BiquadFilterType = "bandpass") => {
+      const len = Math.floor(ctx.sampleRate * dur);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const f = ctx.createBiquadFilter();
+      f.type = type;
+      f.Q.value = q;
+      f.frequency.setValueAtTime(fromHz, now + start);
+      f.frequency.linearRampToValueAtTime(toHz, now + start + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, now + start);
+      g.gain.linearRampToValueAtTime(vol * amb, now + start + dur * 0.3);
+      g.gain.linearRampToValueAtTime(0.0001, now + start + dur);
+      src.connect(f).connect(g).connect(out);
+      src.start(now + start);
+    };
+
     switch (name) {
+      case "birds":
+        // A breezy day: a couple of birds and the city far off.
+        swell(0, 2.4, 0.03, 300, 380, 0.5, "lowpass");
+        for (let i = 0; i < 7; i++) {
+          const f = 2600 + Math.random() * 1400;
+          const t0 = i * 0.24 + (i > 3 ? 0.4 : 0) + Math.random() * 0.06;
+          tone(f, t0, 0.06, "sine", 0.07, f * 1.35);
+          if (i % 2 === 0) tone(f * 1.1, t0 + 0.08, 0.05, "sine", 0.05, f * 0.9);
+        }
+        break;
+      case "crickets":
+        for (const [base, off] of [
+          [4300, 0],
+          [3900, 0.3],
+        ] as const) {
+          for (let burst = 0; burst < 3; burst++) {
+            for (let k = 0; k < 5; k++) tone(base, off + burst * 0.62 + k * 0.035, 0.022, "sine", 0.045);
+          }
+        }
+        break;
+      case "rainfall":
+        swell(0, 2.6, 0.13, 2600, 2200, 0.5);
+        swell(0, 2.6, 0.05, 700, 600, 0.6);
+        for (let i = 0; i < 8; i++) tone(1500 + Math.random() * 1500, Math.random() * 2.2, 0.03, "sine", 0.05, 900);
+        break;
+      case "wind":
+        swell(0, 2.8, 0.16, 280, 900, 5);
+        swell(0.7, 2.2, 0.1, 500, 260, 6);
+        break;
+      case "thunder":
+        noise(0, 0.18, 0.18, 1100);
+        swell(0.05, 3, 0.45, 110, 55, 0.7, "lowpass");
+        swell(0.4, 2, 0.25, 80, 50, 0.7, "lowpass");
+        break;
+      case "foghorn":
+        // A foghorn out in the bay, and a gull.
+        tone(98, 0, 1.7, "sawtooth", 0.035);
+        tone(196, 0, 1.7, "sine", 0.06);
+        tone(1300, 1.9, 0.22, "triangle", 0.05, 900);
+        tone(1250, 2.2, 0.25, "triangle", 0.045, 850);
+        break;
+      case "squeak":
+        // Sofa springs.
+        tone(200, 0, 0.32, "sine", 0.22, 420);
+        tone(900, 0.04, 0.12, "triangle", 0.05, 1400);
+        tone(1200, 0.2, 0.1, "triangle", 0.04, 800);
+        break;
+      case "squish":
+        noise(0, 0.28, 0.1, 380);
+        tone(170, 0, 0.22, "sine", 0.16, 85);
+        break;
+      case "zap":
+        tone(55, 0, 0.7, "sawtooth", 0.12);
+        tone(3100, 0, 0.55, "square", 0.025, 1400);
+        for (let i = 0; i < 10; i++) noise(i * 0.06, 0.05, 0.22, 2200 + Math.random() * 3500);
+        break;
+      case "wrench":
+        for (let i = 0; i < 4; i++) tone(2800 + (i % 2) * 300, i * 0.06, 0.025, "square", 0.025);
+        tone(1700, 0.3, 0.12, "triangle", 0.06);
+        noise(0.3, 0.05, 0.05, 5000);
+        break;
+      case "drill":
+        tone(380, 0, 0.7, "sawtooth", 0.018, 620);
+        noise(0, 0.7, 0.03, 2200);
+        break;
+      case "fixed":
+        tone(1046.5, 0, 0.14, "triangle", 0.1);
+        tone(1568, 0.12, 0.3, "triangle", 0.1);
+        break;
+      case "beep":
+        tone(1760, 0, 0.07, "square", 0.045);
+        tone(2093, 0.09, 0.09, "square", 0.045);
+        break;
+      case "dingdong":
+        // The delivery's here.
+        tone(784, 0, 0.5, "triangle", 0.16);
+        tone(622.3, 0.32, 0.7, "triangle", 0.15);
+        break;
+      case "twinkle":
+        [1318.5, 1568, 1975.5, 2637, 1975.5, 2637].forEach((f, i) => tone(f, i * 0.08, 0.25, "sine", 0.07));
+        break;
       case "needs-you":
         // Gentle doorbell: E6 → C6
         tone(1318.5, 0, 0.35, "triangle", 0.32);

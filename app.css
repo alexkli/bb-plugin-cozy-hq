@@ -289,7 +289,11 @@
 .chq-ch-office.chq-wx-night .chq-tv-bg { background: radial-gradient(2px 2px at 20% 30%, #fff 50%, transparent 51%), radial-gradient(2px 2px at 70% 20%, #fff 50%, transparent 51%), radial-gradient(1.5px 1.5px at 45% 55%, #fff 50%, transparent 51%), linear-gradient(180deg, #0e1440 0%, #23306e 70%, #3a3a7a 100%); }
 .chq-ch-office.chq-wx-rain .chq-tv-bg { background: linear-gradient(180deg, #4c5a72 0%, #7d8ca6 60%, #a9b6c9 100%); }
 .chq-ch-office.chq-wx-snow .chq-tv-bg { background: linear-gradient(180deg, #8ea9c9 0%, #c9dcf0 60%, #f4f9ff 100%); }
-.chq-ch-office.chq-wx-cloud .chq-tv-bg { background: linear-gradient(180deg, #f39a6b 0%, #ffc98f 55%, #ffe7c2 100%); }
+.chq-ch-office.chq-wx-dusk .chq-tv-bg { background: linear-gradient(180deg, #f39a6b 0%, #ffc98f 55%, #ffe7c2 100%); }
+.chq-ch-office.chq-wx-partly .chq-tv-bg { background: linear-gradient(180deg, #6fb3e8 0%, #a9d6f5 60%, #e3f2fc 100%); }
+.chq-ch-office.chq-wx-cloud .chq-tv-bg { background: linear-gradient(180deg, #8a96a8 0%, #b5bfcc 60%, #dde3ea 100%); }
+.chq-ch-office.chq-wx-fog .chq-tv-bg { background: linear-gradient(180deg, #b9c0c9 0%, #d6dbe1 55%, #eef1f4 100%); }
+.chq-ch-office.chq-wx-storm .chq-tv-bg { background: linear-gradient(180deg, #2c3346 0%, #4a5368 60%, #6d778c 100%); }
 
 .chq-tv-screen {
   position: absolute;
@@ -428,6 +432,7 @@
   color: #0f2747;
 }
 .chq-wx-night .chq-tv-weather,
+.chq-wx-storm .chq-tv-weather,
 .chq-wx-rain .chq-tv-weather { color: #f2f7ff; }
 .chq-tv-sky { flex: none; width: 30%; display: grid; place-items: center; }
 .chq-tv-icon { font-size: 17cqw; line-height: 1; filter: drop-shadow(0 1cqw 0 rgba(0, 0, 0, 0.18)); animation: chq-tv-float 4s ease-in-out infinite; }
@@ -733,12 +738,88 @@
   color: #fff;
   flex: none;
 }
-.chq-tag-question i { background: #3e8ed0; }
-.chq-tag-plan i { background: #3e7cc4; }
-.chq-tag-approval i { background: #e0a92c; color: #3b2500; }
-.chq-tag-drafting i { background: #8a7a8e; }
-.chq-tag-done i { background: #30a46c; }
-.chq-tag-error i { background: #c4383f; }
+.chq-tag { --chq-tag: #6b5a6e; }
+.chq-tag-question { --chq-tag: #3e8ed0; }
+.chq-tag-plan { --chq-tag: #3e7cc4; }
+.chq-tag-approval { --chq-tag: #d29b1f; }
+.chq-tag-drafting { --chq-tag: #8a7a8e; }
+.chq-tag-done { --chq-tag: #30a46c; }
+.chq-tag-error { --chq-tag: #c4383f; }
+.chq-tag-working { --chq-tag: #2f8f6a; }
+.chq-tag-planning { --chq-tag: #6b55c4; }
+.chq-tag-idle { --chq-tag: #9a7b5a; }
+/* Unread: a solid chip with a dot; read: an outlined chip, the tag a little quieter. */
+.chq-tag.is-unread i { background: var(--chq-tag); color: #fff; position: relative; }
+.chq-tag.is-unread i::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #ff4d6d;
+  box-shadow: 0 0 0 1px #fffaf0;
+}
+.chq-tag.is-read i { background: #fffaf0; color: var(--chq-tag); box-shadow: inset 0 0 0 1.5px var(--chq-tag); }
+.chq-tag.is-read { font-weight: 500; background: #f6f1e7; }
+.chq-tag.is-read span { opacity: 0.85; }
+
+/* The name tag switch, top right of the office. */
+.chq-labels-btn {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 9;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px 0 7px;
+  border: 1px solid #2a1e2e;
+  border-radius: 11px;
+  background: rgba(255, 250, 240, 0.82);
+  color: #2a1e2e;
+  font: 700 10px/1 var(--chq-mono);
+  cursor: pointer;
+  box-shadow: 1px 1px 0 rgba(42, 30, 46, 0.35);
+  opacity: 0.8;
+}
+.chq-labels-btn:hover { opacity: 1; background: #fffaf0; }
+.chq-labels-btn.is-on { background: #2a1e2e; color: #fffaf0; opacity: 1; }
+
+/* Comic speech bubbles. */
+.chq-say {
+  position: absolute;
+  z-index: 8;
+  transform: translate(-50%, -100%);
+  max-width: 190px;
+  width: max-content;
+  padding: 4px 8px 5px;
+  border: 2px solid #2a1e2e;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #2a1e2e;
+  font: 700 11px/1.25 "Chalkboard SE", "Comic Sans MS", "Comic Neue", "Marker Felt", cursive, sans-serif;
+  text-align: center;
+  box-shadow: 2px 2px 0 rgba(42, 30, 46, 0.3);
+  pointer-events: none;
+  animation: chq-say-pop 0.18s ease-out;
+}
+.chq-say i {
+  position: absolute;
+  bottom: -6px;
+  width: 9px;
+  height: 9px;
+  background: #ffffff;
+  border-right: 2px solid #2a1e2e;
+  border-bottom: 2px solid #2a1e2e;
+  transform: translateX(-50%) rotate(45deg);
+}
+@keyframes chq-say-pop {
+  from { transform: translate(-50%, -100%) scale(0.6); opacity: 0; }
+  to { transform: translate(-50%, -100%) scale(1); opacity: 1; }
+}
 .chq-tip-topic { margin-right: 4px; }
 .chq-tip-mood.chq-mood-drafting { color: #6b5a6e; }
 .chq-tip-mood.chq-mood-planning { color: #5b4bb0; }

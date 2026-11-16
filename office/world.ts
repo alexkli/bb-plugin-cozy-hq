@@ -2,6 +2,8 @@
 // boss (you), the dog and the cat, cleaners and the night guard, office
 // events, things to click, day and night. Pure canvas, no React.
 
+import type { WeatherKind } from "../contract.ts";
+import { deliveryLine, GAME_LINES, lunchLine, type Topic } from "./chatter.ts";
 import {
   ANCHOR_X,
   ANCHOR_Y,
@@ -10,6 +12,7 @@ import {
   dogSprite,
   kidSprite,
   npcLook,
+  skeletonSprite,
   KID_H,
   KID_W,
   OUTLINE,
@@ -44,6 +47,8 @@ import {
   drawEventFloor,
   eventDecor,
   EVENTS,
+  FOODS,
+  lunchTable,
   pickEventKind,
   planEvent,
   route,
@@ -82,7 +87,37 @@ export interface SeenState {
 /** Sound callback; `ambient` marks background life rather than a reaction to a click. */
 export type Emit = (sound: SoundName, ambient?: boolean) => void;
 
-export type NpcKind = "guard" | "janitor";
+export type NpcKind = "guard" | "janitor" | "technician" | "delivery";
+
+/**
+ * What agents say when they get together. The view supplies it (it knows
+ * the headlines and what each thread did); the world decides when.
+ */
+export interface Talk {
+  /** An opening line for this speaker, and what it's about. */
+  open(speakerId: string): { text: string; topic: Topic } | null;
+  /** A reply on that topic. */
+  reply(speakerId: string, topic: Topic): string | null;
+  /** These agents just got together: a chance to look up what they did. */
+  gather(ids: string[]): void;
+}
+
+/** Someone's speech bubble, for the view to draw. */
+export interface SpeechBubble {
+  id: string;
+  x: number;
+  y: number;
+  text: string;
+}
+
+/** Where a title tag goes (any settled agent). */
+export interface LabelAnchor {
+  id: string;
+  x: number;
+  y: number;
+  mood: Mood;
+  kind: WaitKind | null;
+}
 
 export type Hit =
   | { kind: "agent"; id: string }
@@ -99,7 +134,10 @@ export type Hit =
   | { kind: "pinboard" }
   | { kind: "npc"; who: NpcKind | "kid" }
   | { kind: "poke"; id: string; poke: PokeKind }
-  | { kind: "egg"; index: number };
+  | { kind: "egg"; index: number }
+  | { kind: "window"; index: number }
+  | { kind: "roomba" }
+  | { kind: "lights" };
 
 interface Agent extends Walker {
   id: string;
@@ -113,6 +151,44 @@ interface Agent extends Walker {
   blinkUntil: number;
   /** Next time a hobby makes a sound (piano, darts). */
   nextHobby: number;
+  /** In a get-together (its id), away from their own spot for a while. */
+  huddle: number | null;
+  /** Shuffling along after a mishap. */
+  slow: boolean;
+}
+
+type HuddleKind = "coffee" | "cooler" | "chat" | "couch" | "pingpong" | "darts";
+
+/** A few idle agents together: a coffee, a chat, a game. */
+interface Huddle {
+  id: number;
+  kind: HuddleKind;
+  members: string[];
+  spots: Spot[];
+  until: number;
+  nextLine: number;
+  lines: number;
+  maxLines: number;
+  topic: Topic | null;
+  lastSpeaker: string | null;
+}
+
+/** The server-room gag: poke at the cables, get zapped, lie down, shuffle off. */
+interface Mishap {
+  id: string;
+  phase: "go" | "fiddle" | "zap" | "down" | "leave";
+  until: number;
+  spot: Spot;
+}
+
+type JobKind = "pc" | "bulb" | "coffee" | "printer" | "vending" | "server";
+
+interface Job {
+  kind: JobKind;
+  facing: Facing;
+  desk?: number;
+  /** Ladder against the wall at this x (bulbs). */
+  ladderX?: number;
 }
 
 interface Npc extends Walker {
@@ -123,6 +199,10 @@ interface Npc extends Walker {
   /** Seconds left at the current stop. */
   pause: number;
   leaving: boolean;
+  /** The technician's job at each remaining stop, and the one at hand. */
+  jobs: (Job | null)[];
+  job: Job | null;
+  jobDur: number;
 }
 
 interface Kid extends Walker {
@@ -223,13 +303,19 @@ interface LiveEvent extends EventPlan {
   splash: Map<string, number>;
   /** When each walker joined the lantern parade. */
   orbit: Map<string, number>;
+  /** Chatter among the guests. */
+  nextTalk: number;
+  talkTopic: Topic | null;
+  lastSpeaker: string | null;
+  talkTurn: number;
 }
 
 export interface Env {
   /** Local time as fractional hours, 0–24. */
   hour: number;
   date: Date;
-  rainy: boolean;
+  /** The weather outside the windows. */
+  weather: WeatherKind;
   soundOn: boolean;
   /** Seconds since the last sound effect; drives speaker pulses. */
   soundPulse: number;
@@ -243,6 +329,7 @@ export interface Env {
 }
 
 const WALK_SPEED = 32; // px/s
+const SLOW_SPEED = 11;
 const NPC_SPEED = 24;
 const KID_SPEED = 40;
 
@@ -274,7 +361,8 @@ export class World {
   private stars: { x: number; y: number; p: number }[] = [];
   private dark: HTMLCanvasElement | null = null;
   private feedingUntil = 0;
-  private rand = rng(0x5eed);
+  // Seeded from the clock: a different day at the office every time you open it.
+  private rand = rng((Date.now() ^ 0x5eed) >>> 0);
   private anim = new Map<string, number>();
   private darts: { x: number; y: number; color: string }[] = [];
   private lampOn = true;
@@ -291,6 +379,31 @@ export class World {
   private nextEventAt = -1;
   private nextJanitor = -1;
   private nextGuard = -1;
+  private nextTech = -1;
+  /** Today (from the clock), and the day the team last had lunch together. */
+  private dayKey = "";
+  private lunchDay = "";
+  private lunchAt = -1;
+  private huddles: Huddle[] = [];
+  private huddleSeq = 0;
+  private nextHuddleAt = -1;
+  /** Neighbors chatting where they are, and replies on their way. */
+  private nextChatAt = -1;
+  private replies: { id: string; topic: Topic; at: number }[] = [];
+  private speech = new Map<string, { text: string; until: number }>();
+  private talk: Talk | null = null;
+  private mishap: Mishap | null = null;
+  private nextMishapAt = -1;
+  private flashUntil = 0;
+  private weather: WeatherKind = "clear";
+  private lightningAt = -99;
+  private nextLightning = -1;
+  private thunderAt = -1;
+  /** Things the technician comes to fix. */
+  private brokenDesk: number | null = null;
+  private brokenBulbX: number | null = null;
+  private brokenMachine: "coffee" | "printer" | "vending" | null = null;
+  private rackBroken = false;
   /** Bumped when an event starts or ends, so the view reassigns spots. */
   eventVersion = 0;
 
@@ -316,11 +429,22 @@ export class World {
   seenStates(): Record<string, SeenState> {
     const out: Record<string, SeenState> = {};
     for (const a of this.agents.values()) {
-      const spotId = a.target ?? a.spot?.id;
+      const spotId = this.homeOf(a);
       if (a.leaving || !spotId) continue;
       out[a.id] = { spotId, mood: a.thread.mood, waitKind: a.thread.waitKind };
     }
     return out;
+  }
+
+  /** The spot that's theirs: where they're headed, or back to after a get-together or mishap. */
+  private homeOf(a: Agent): string | null {
+    if (a.huddle !== null || this.mishap?.id === a.id) return a.thread.spotId;
+    return a.target ?? a.spot?.id ?? null;
+  }
+
+  /** Who supplies the small talk. */
+  setTalk(talk: Talk | null): void {
+    this.talk = talk;
   }
 
   /** True until the first threads arrive. */
@@ -368,9 +492,17 @@ export class World {
     this.roomba.active = false;
     this.roomba.x = dock.x;
     this.roomba.y = dock.y;
-    // Visitors and events don't survive a resize.
+    // Visitors, events and get-togethers don't survive a resize.
     this.npcs = [];
     this.kids = [];
+    this.huddles = [];
+    this.replies = [];
+    this.mishap = null;
+    this.speech.clear();
+    this.brokenDesk = null;
+    this.brokenBulbX = null;
+    this.brokenMachine = null;
+    this.rackBroken = false;
     if (this.event) {
       this.event = null;
       this.eventVersion++;
@@ -383,7 +515,9 @@ export class World {
     this.eggsFound.clear();
     this.dogToBed(true);
     for (const a of this.agents.values()) {
-      const spot = (a.target && L.byId.get(a.target)) || (a.spot && L.byId.get(a.spot.id));
+      a.huddle = null;
+      a.slow = false;
+      const spot = (a.target && L.byId.get(a.target)) || (a.spot && L.byId.get(a.spot.id)) || L.byId.get(a.thread.spotId);
       if (spot) this.place(a, spot);
       else {
         a.path = [];
@@ -422,7 +556,12 @@ export class World {
 
   private spotById(id: string | null | undefined): Spot | undefined {
     if (!id) return undefined;
-    return this.L?.byId.get(id) ?? this.event?.spots.find((s) => s.id === id);
+    return (
+      this.L?.byId.get(id) ??
+      this.event?.spots.find((s) => s.id === id) ??
+      this.huddles.flatMap((h) => h.spots).find((s) => s.id === id) ??
+      (this.mishap?.spot.id === id ? this.mishap.spot : undefined)
+    );
   }
 
   /** Layout spots plus any event spots, for assignment. */
@@ -447,6 +586,7 @@ export class World {
     const L = this.L;
     if (!L) return null;
     if (this.event) return this.event.kind;
+    for (const h of [...this.huddles]) this.endHuddle(h, false);
     const k = kind ?? pickEventKind(this.hour, L.games !== null, this.rand, this.seasons);
     const area = k === "darts" && L.games ? { x: L.games.x + 20, y: L.games.y + 24, w: Math.min(130, L.games.w - 50), h: 44 } : L.eventArea;
     const idle = [...this.agents.values()].filter((a) => !a.leaving && a.thread.mood === "idle").length;
@@ -465,12 +605,24 @@ export class World {
       cheerAt: 0,
       splash: new Map(),
       orbit: new Map(),
+      nextTalk: t + 8 + this.rand() * 4,
+      talkTopic: null,
+      lastSpeaker: null,
+      talkTurn: 0,
     };
+    if (k === "lunch") {
+      this.event.food = FOODS[Math.floor(this.rand() * FOODS.length)]!;
+      this.event.delivered = false;
+      // A few bring their own lunchbox.
+      this.event.lunchboxes = plan.spots.filter((sp, i) => hash(`${sp.id}-${Math.floor(t)}`) % 3 === 0 && i > 0).map((sp) => sp.id);
+      this.lunchDay = this.dayKey;
+    }
     this.eventVersion++;
     this.emit(EVENTS[k].start, ambient);
     const c = plan.center;
     this.burst(c.x, c.y - 20, "confetti", 18);
     if (k === "kids") this.spawnKids(Math.min(4, Math.max(2, Math.round(idle / 2))));
+    if (k === "lunch") this.spawnNpc("delivery");
     if (this.roomba.active) this.roomba.returning = true;
     if (this.dog.state !== "follow") this.dogTo("event");
     return k;
@@ -520,6 +672,12 @@ export class World {
           nextBlink: this.time + 1 + (hash(t.id) % 5),
           blinkUntil: 0,
           nextHobby: this.time + 4 + (hash(t.id) % 7),
+          huddle: null,
+          slow: false,
+          // Everyone walks a little differently: their own lane, corner cutting and pace.
+          lane: { x: ((hash(t.id) >> 2) % 11) - 5, y: ((hash(t.id) >> 6) % 9) - 4 },
+          cut: 7 + ((hash(t.id) >> 9) % 10),
+          sway: 1 + ((hash(t.id) >> 13) % 4),
         };
         this.agents.set(t.id, a);
         const was = lastSeen?.get(t.id);
@@ -547,6 +705,13 @@ export class World {
         if (!instant) this.onMoodChange(a, prevMood, t.mood);
       }
       a.leaving = false;
+      // Mid-mishap: they get up and go in their own time.
+      if (this.mishap?.id === a.id) continue;
+      if (a.huddle !== null) {
+        // Still idle: stay at the get-together; otherwise back to work.
+        if (t.mood === "idle" && !instant) continue;
+        this.leaveHuddle(a);
+      }
       if (spot && a.spot?.id !== spot.id && a.target !== spot.id) {
         if (instant) this.place(a, spot);
         else this.walkTo(a, spot);
@@ -558,6 +723,8 @@ export class World {
         this.agents.delete(a.id);
         continue;
       }
+      if (a.huddle !== null) this.leaveHuddle(a, false);
+      if (this.mishap?.id === a.id) this.mishap = null;
       a.leaving = true;
       this.emit("leave");
       a.path = route(a, L.net, L.entrancePath);
@@ -603,7 +770,13 @@ export class World {
     const L = this.L;
     if (!L) return;
     const idle = [...this.agents.values()].filter(
-      (a) => a.spot && a.thread.mood === "idle" && a.path.length === 0 && (a.spot.group === "break" || a.spot.group === "lounge"),
+      (a) =>
+        a.spot &&
+        a.huddle === null &&
+        this.mishap?.id !== a.id &&
+        a.thread.mood === "idle" &&
+        a.path.length === 0 &&
+        (a.spot.group === "break" || a.spot.group === "lounge"),
     );
     if (idle.length === 0) return;
     const a = idle[Math.floor(this.rand() * idle.length)]!;
@@ -619,21 +792,47 @@ export class World {
     const out = new Map<string, string>();
     for (const a of this.agents.values()) {
       if (a.leaving) continue;
-      const target = a.target ?? a.spot?.id;
+      const target = this.homeOf(a);
       if (target) out.set(a.id, target);
     }
     return out;
   }
 
-  /** Who sits in the waiting room, for the title tags above their heads. */
-  waitingOccupants(): { id: string; x: number; y: number; kind: WaitKind }[] {
-    const out: { id: string; x: number; y: number; kind: WaitKind }[] = [];
+  /** Everyone who's settled somewhere, for the title tags above their heads. */
+  labelAnchors(): LabelAnchor[] {
+    const out: LabelAnchor[] = [];
     for (const a of this.agents.values()) {
-      if (this.settled(a) && (a.spot?.kind === "review" || a.spot?.kind === "present") && a.thread.waitKind) {
-        out.push({ id: a.id, x: Math.round(a.x), y: Math.round(this.headTop(a)), kind: a.thread.waitKind });
-      }
+      if (a.leaving || !this.settled(a)) continue;
+      const lying = this.mishap?.id === a.id && this.mishap.phase === "down";
+      out.push({ id: a.id, x: Math.round(a.x), y: Math.round(lying ? a.y - 22 : this.headTop(a)), mood: a.thread.mood, kind: a.thread.waitKind });
     }
-    return out.sort((p, q) => p.y - q.y || p.x - q.x);
+    // Ones waiting on you claim the best spots first.
+    const rank = (l: LabelAnchor) => (l.kind && l.kind !== "drafting" ? 0 : 1);
+    return out.sort((p, q) => rank(p) - rank(q) || p.y - q.y || p.x - q.x);
+  }
+
+  /** Speech bubbles showing right now (agents and visitors). */
+  speechBubbles(): SpeechBubble[] {
+    const out: SpeechBubble[] = [];
+    for (const [id, s] of this.speech) {
+      if (s.until <= this.time) {
+        this.speech.delete(id);
+        continue;
+      }
+      const a = this.agents.get(id);
+      if (a) {
+        const lying = this.mishap?.id === id && this.mishap.phase === "down";
+        out.push({ id, x: Math.round(a.x), y: Math.round(lying ? a.y - 24 : this.headTop(a) - 2), text: s.text });
+        continue;
+      }
+      const n = this.npcs.find((m) => m.id === id);
+      if (n) out.push({ id, x: Math.round(n.x), y: Math.round(n.y - ANCHOR_Y + 1 - this.climbOf(n)), text: s.text });
+    }
+    return out;
+  }
+
+  private say(id: string, text: string, seconds: number): void {
+    this.speech.set(id, { text, until: this.time + seconds });
   }
 
   /** Threads whose title tag is showing: their in-scene bubble is skipped. */
@@ -652,12 +851,14 @@ export class World {
       if (x >= a.x - 8 && x <= a.x + 8 && y >= top - 2 && y <= this.drawY(a) + 1) return { kind: "agent", id: a.id };
     }
     for (const n of this.npcs) {
-      if (Math.abs(x - n.x) <= 8 && y >= n.y - ANCHOR_Y + 2 && y <= n.y + 1) return { kind: "npc", who: n.kind };
+      const ny = n.y - this.climbOf(n);
+      if (Math.abs(x - n.x) <= 8 && y >= ny - ANCHOR_Y + 2 && y <= ny + 1) return { kind: "npc", who: n.kind };
     }
     for (const k of this.kids) {
       if (Math.abs(x - k.x) <= 6 && y >= k.y - KID_H && y <= k.y + 1) return { kind: "npc", who: "kid" };
     }
     if (Math.abs(x - this.dog.x) < 10 && y > this.dog.y - 15 && y < this.dog.y + 2) return { kind: "dog" };
+    if (Math.abs(x - this.roomba.x) <= 8 && y >= this.roomba.y - 7 && y <= this.roomba.y + 2) return { kind: "roomba" };
     if (this.season === "easter") {
       for (const [i, p] of this.eggs.entries()) {
         if (!this.eggsFound.has(i) && Math.abs(x - p.x) <= 4 && y >= p.y - 8 && y <= p.y + 2) return { kind: "egg", index: i };
@@ -677,6 +878,8 @@ export class World {
       const p = L.pokeables[i]!;
       if (inRect(x, y, p.rect)) return { kind: "poke", id: p.id, poke: p.kind };
     }
+    for (const [i, win] of w.windows.entries()) if (inRect(x, y, win)) return { kind: "window", index: i };
+    if (y <= 6) return { kind: "lights" };
     const occupied = new Set([...this.agents.values()].map((a) => a.spot?.id ?? a.target));
     for (const d of L.desks) {
       if (occupied.has(d.spot.id)) continue;
@@ -724,6 +927,56 @@ export class World {
       this.particles.push({ kind: "food", x: t.x + 8 + this.rand() * (t.w - 16), y: t.y + 3, vx: 0, vy: 2 + this.rand() * 2, life: 0, max: 8, color: "#c98a4a" });
     }
     this.emit("bubble", false);
+  }
+
+  /** Open a window for a moment: the weather comes in, and you hear it. */
+  openWindow(index: number): void {
+    const L = this.L;
+    const win = L?.wall.windows[index];
+    if (!L || !win) return;
+    const t = this.time;
+    this.anim.set(`window-${index}`, t + 5);
+    const night = this.skyColors(this.hour).night > 0.5;
+    const wx = this.weather;
+    const sound: SoundName =
+      wx === "storm" ? "thunder" : wx === "rain" || wx === "drizzle" ? "rainfall" : wx === "snow" || wx === "cloudy" ? "wind" : wx === "fog" ? "foghorn" : night ? "crickets" : "birds";
+    this.emit(sound, false);
+    const seg = L.segments.find((sg) => win.x >= sg.x0 && win.x < sg.x1);
+    const sill = win.y + win.h + 1;
+    const floor = (seg?.depth ?? 64) + 14;
+    const month = new Date().getMonth();
+    for (let i = 0; i < 7; i++) {
+      const x = win.x + 6 + this.rand() * (win.w - 12);
+      const fall = Math.max(0.6, (floor - sill) / 22);
+      if (wx === "snow") this.particles.push({ kind: "snow", x, y: sill, vx: (this.rand() - 0.5) * 6, vy: 10 + this.rand() * 6, life: 0, max: fall * 1.6, color: "#ffffff" });
+      else if (wx === "rain" || wx === "drizzle" || wx === "storm") this.particles.push({ kind: "drop", x, y: sill, vx: 0, vy: 40, life: 0, max: 0.5 + this.rand() * 0.3, color: "#9fc8ff" });
+      else if (i < 3) {
+        const autumn = month >= 8 && month <= 10;
+        const color = autumn ? ["#e0913a", "#c95f2c", "#e8c14a"][i % 3]! : "#86e07f";
+        this.particles.push({ kind: "leaf", x, y: sill, vx: (this.rand() - 0.5) * 14, vy: 4, life: 0, max: 1.8, color, g: 14 });
+      }
+    }
+  }
+
+  /** Nudge the roomba: off it goes (or back home). */
+  bumpRoomba(): void {
+    const r = this.roomba;
+    this.emit("beep", false);
+    if (r.active) {
+      r.returning = true;
+      return;
+    }
+    r.active = true;
+    r.returning = false;
+    r.until = this.time + 35;
+    r.vx = this.rand() < 0.5 ? -12 : 12;
+    r.vy = -6;
+  }
+
+  /** The string lights do a little chase. */
+  twinkle(): void {
+    this.anim.set("lights", this.time + 6);
+    this.emit("twinkle", false);
   }
 
   /** Something in the office was clicked: make it do its thing. */
@@ -835,10 +1088,33 @@ export class World {
       case "server":
         this.anim.set("server", t + 3.5);
         this.emit("server", false);
+        // All that blinking makes someone idle curious…
+        if (this.startMishap()) {
+          const who = this.mishap ? this.agents.get(this.mishap.id) : undefined;
+          if (who) this.say(who.id, this.rand() < 0.5 ? "I'll take a look!" : "Ooh, blinky lights.", 2.4);
+        }
         for (let i = 0; i < 10; i++) {
           this.particles.push({ kind: "sparkle", x: r.x + this.rand() * r.w, y: r.y + 4 + this.rand() * (r.h - 10), vx: 0, vy: -6, life: 0, max: 0.6 + this.rand() * 0.6, color: this.rand() < 0.5 ? "#7fd1ff" : "#c39bff" });
         }
         break;
+      case "couch": {
+        this.anim.set("couch", t + 1.2);
+        this.emit("squeak", false);
+        for (let i = 0; i < 6; i++) {
+          this.particles.push({ kind: "powder", x: r.x + 6 + this.rand() * (r.w - 12), y: r.y + r.h - 8, vx: (this.rand() - 0.5) * 10, vy: -6 - this.rand() * 4, life: 0, max: 0.9, color: "#e8dcc8" });
+        }
+        break;
+      }
+      case "beanbag": {
+        this.anim.set(id, t + 0.8);
+        this.emit("squish", false);
+        for (let i = 0; i < 4; i++) {
+          this.particles.push({ kind: "powder", x: r.x + 4 + this.rand() * (r.w - 8), y: r.y + r.h - 4, vx: (this.rand() - 0.5) * 12, vy: -4, life: 0, max: 0.7, color: "#f0e6f5" });
+        }
+        const sleeper = [...this.agents.values()].find((a) => this.settled(a) && a.spot?.id === id);
+        if (sleeper) this.say(sleeper.id, this.rand() < 0.5 ? "Five more minutes…" : "Zzz… huh?", 2.4);
+        break;
+      }
       case "clock":
         break;
     }
@@ -852,7 +1128,7 @@ export class World {
     this.time += dt;
     const t = this.time;
     for (const a of [...this.agents.values()]) {
-      if (a.path.length > 0 && step(a, dt, WALK_SPEED)) {
+      if (a.path.length > 0 && step(a, dt, a.slow ? SLOW_SPEED : WALK_SPEED * (0.82 + ((a.seed >> 11) % 36) / 100))) {
         if (a.leaving) {
           this.agents.delete(a.id);
           this.doorOpenUntil = this.time + 1.2;
@@ -904,6 +1180,11 @@ export class World {
     this.updateKids(dt);
     this.updateEvent(dt);
     this.updateMachines(dt);
+    this.updateHuddles(dt);
+    this.updateNeighborChat();
+    this.updateMishap(dt);
+    this.updateWeather();
+    this.updateBroken(dt);
   }
 
   private onArrive(a: Agent, spot: Spot): void {
@@ -1235,6 +1516,12 @@ export class World {
       this.spawnNpc("guard");
       this.nextGuard = t + (night ? 420 + this.rand() * 480 : 900 + this.rand() * 900);
     }
+    // The technician does the rounds in working hours (or comes when the servers act up).
+    if (this.nextTech < 0) this.nextTech = t + 360 + this.rand() * 540;
+    if (t > this.nextTech && !this.npcs.some((n) => n.kind === "technician")) {
+      if ((h >= 7 && h < 20) || this.rackBroken) this.spawnNpc("technician");
+      this.nextTech = t + 1080 + this.rand() * 1080;
+    }
     for (const n of [...this.npcs]) {
       if (n.path.length > 0) {
         if (step(n, dt, NPC_SPEED)) {
@@ -1245,7 +1532,16 @@ export class World {
             continue;
           }
           if (n.kind === "janitor") n.pause = 5 + this.rand() * 4;
-          else {
+          else if (n.kind === "delivery") {
+            n.pause = 3.4;
+            this.deliver(n);
+          } else if (n.kind === "technician") {
+            n.job = n.jobs.shift() ?? null;
+            n.pause = n.jobDur = n.job ? (n.job.kind === "bulb" ? 9 : 7.5) : 0.3;
+            if (n.job) n.facing = n.job.facing;
+            if (n.job?.kind === "pc" && this.rand() < 0.5) this.say(n.id, "Have you tried turning it off and on again?", 3.5);
+            else if (n.job?.kind === "bulb" && this.rand() < 0.4) this.say(n.id, "How many techs does it take…", 3);
+          } else {
             n.pause = this.rand() < 0.5 ? 3 : 0.4;
             if (n.pause > 1) this.emit("walkie", true);
           }
@@ -1257,6 +1553,20 @@ export class World {
         if (n.kind === "janitor") {
           if (this.rand() < dt * 3) this.particles.push({ kind: "sparkle", x: n.x + 6 + this.rand() * 8, y: n.y - 2 - this.rand() * 4, vx: 0, vy: -3, life: 0, max: 0.6, color: "#d9f4ff" });
           if (this.rand() < dt * 0.06) this.emit("whistle", true);
+        } else if (n.kind === "technician") {
+          const j = n.job;
+          if (j) {
+            const busy = j.kind !== "bulb" || this.climbOf(n) > 8;
+            if (busy && this.rand() < dt * 0.9) this.emit(this.rand() < 0.55 ? "wrench" : "drill", true);
+            if (busy && this.rand() < dt * 3) {
+              const hy = n.y - 18 - this.climbOf(n) - (j.kind === "bulb" ? 10 : 0);
+              this.particles.push({ kind: "sparkle", x: n.x + (this.rand() - 0.5) * 10, y: hy, vx: 0, vy: -4, life: 0, max: 0.3, color: "#ffe066" });
+            }
+            if (n.pause <= 0) {
+              this.finishJob(n, j);
+              n.job = null;
+            }
+          }
         } else {
           n.facing = Math.floor(n.pause * 1.2) % 2 ? "left" : "right";
         }
@@ -1286,8 +1596,31 @@ export class World {
       stops: [],
       pause: 0,
       leaving: false,
+      jobs: [],
+      job: null,
+      jobDur: 0,
+      lane: { x: Math.round((this.rand() - 0.5) * 8), y: Math.round((this.rand() - 0.5) * 6) },
+      cut: 8 + Math.floor(this.rand() * 8),
+      sway: 1 + Math.floor(this.rand() * 3),
     };
-    if (kind === "janitor") {
+    if (kind === "delivery") {
+      const stop = this.deliveryStop();
+      if (!stop) return;
+      n.stops = [stop];
+    } else if (kind === "technician") {
+      const plan = this.technicianJobs();
+      if (plan.length === 0) return;
+      n.stops = plan.map((p) => p.stop);
+      n.jobs = plan.map((p) => p.job);
+      for (const { job } of plan) {
+        if (job.kind === "pc") this.brokenDesk = job.desk ?? null;
+        else if (job.kind === "bulb") {
+          const bulbs = this.bulbXs();
+          const lx = job.ladderX ?? 0;
+          this.brokenBulbX = bulbs.length > 0 ? bulbs.reduce((b, x) => (Math.abs(x - lx) < Math.abs(b - lx) ? x : b)) : null;
+        } else if (job.kind === "coffee" || job.kind === "printer" || job.kind === "vending") this.brokenMachine = job.kind;
+      }
+    } else if (kind === "janitor") {
       const pool = L.spots.filter((s) => s.group !== "desk" || this.rand() < 0.15);
       const picks = new Set<Spot>();
       while (picks.size < Math.min(4, pool.length)) picks.add(pool[Math.floor(this.rand() * pool.length)]!);
@@ -1402,6 +1735,17 @@ export class World {
     if (this.nextEventAt < 0) this.nextEventAt = t + 600 + this.rand() * 900;
     const ev = this.event;
     if (!ev) {
+      // Lunch together once a day, some time after noon.
+      if (this.lunchDay !== this.dayKey && this.hour >= 12 && this.hour < 13.5) {
+        if (this.lunchAt < 0) this.lunchAt = t + 20 + this.rand() * 120;
+        if (t > this.lunchAt) {
+          const idle = [...this.agents.values()].filter((a) => this.settled(a) && a.thread.mood === "idle").length;
+          this.lunchAt = -1;
+          if (idle >= 2) this.startEvent("lunch", true);
+          else this.lunchDay = this.dayKey;
+          return;
+        }
+      }
       if (t > this.nextEventAt) {
         const idle = [...this.agents.values()].filter((a) => this.settled(a) && a.thread.mood === "idle").length;
         if (idle >= 2) this.startEvent(undefined, true);
@@ -1434,11 +1778,66 @@ export class World {
       this.burst(ev.center.x + (this.rand() - 0.5) * 40, ev.center.y - 26, "confetti", 6);
     }
     this.festivalFx(ev, dt);
+    this.eventChatter(ev);
     if (ev.kind === "holiday" && this.rand() < 0.25) {
       // A little indoor snow around the tree.
       this.particles.push({ kind: "snow", x: ev.area.x + this.rand() * ev.area.w, y: ev.area.y - 4, vx: 0, vy: 7 + this.rand() * 4, life: 0, max: Math.max(3, ev.area.h / 9), color: "#ffffff" });
     }
     void L;
+  }
+
+  /** Guests at an event chat now and then (more at lunch). */
+  private eventChatter(ev: LiveEvent): void {
+    const t = this.time;
+    if (t < ev.nextTalk || ev.kind === "lanterns" || ev.kind === "maifest" || ev.kind === "karaoke" || ev.kind === "yoga") return;
+    const guests = this.eventPeople().filter((a) => this.settled(a) && !this.speech.has(a.id));
+    ev.nextTalk = t + (ev.kind === "lunch" ? 3.5 : 6) + this.rand() * 5;
+    if (guests.length < 2) return;
+    const others = guests.filter((a) => a.id !== ev.lastSpeaker);
+    const speaker = others[Math.floor(this.rand() * others.length)] ?? guests[0]!;
+    let text: string | null = null;
+    if (ev.kind === "lunch" && ev.food && (ev.talkTurn % 2 === 0 || !ev.talkTopic) && this.rand() < 0.55) {
+      text = lunchLine(ev.food, (ev.lunchboxes ?? []).includes(speaker.spot!.id), ev.delivered === true, this.rand);
+      ev.talkTopic = null;
+    } else if (ev.talkTurn % 2 === 1 && ev.talkTopic && this.talk) {
+      text = this.talk.reply(speaker.id, ev.talkTopic);
+      ev.talkTopic = null;
+    } else if (this.talk) {
+      const line = this.talk.open(speaker.id);
+      text = line?.text ?? null;
+      ev.talkTopic = line?.topic ?? null;
+      if (line) this.talk.gather(guests.map((a) => a.id).slice(0, 6));
+    }
+    ev.talkTurn++;
+    if (!text) return;
+    this.say(speaker.id, text, 3.4 + Math.min(3, text.length / 30));
+    ev.lastSpeaker = speaker.id;
+  }
+
+  /** Where the delivery person hands over the food: the end of the lunch table. */
+  private deliveryStop(): Point[] | null {
+    const ev = this.event;
+    if (!ev || ev.kind !== "lunch") return null;
+    const via = ev.spots[0]?.path;
+    if (!via || via.length < 2) return null;
+    const table = lunchTable(ev);
+    const x = table.x + table.w + 8;
+    const y = table.y + 14;
+    return [...via.slice(0, -2), { x, y: via[via.length - 2]!.y }, { x, y }];
+  }
+
+  /** The food arrives: on the table it goes, and everyone digs in. */
+  private deliver(n: Npc): void {
+    const ev = this.event;
+    if (!ev || ev.kind !== "lunch" || ev.delivered) return;
+    ev.delivered = true;
+    n.facing = "left";
+    this.say(n.id, deliveryLine(ev.food ?? "pizza", this.rand), 2.8);
+    this.emit("dingdong", true);
+    this.burst(ev.center.x, ev.center.y - 10, "sparkle", 8);
+    const guest = this.eventPeople().find((a) => this.settled(a));
+    if (guest) window.setTimeout(() => this.say(guest.id, this.rand() < 0.5 ? "Food's here!" : "Finally!", 2.2), 900);
+    ev.nextTalk = this.time + 3.5;
   }
 
   /** Lantern walkers circle the St. Martin's fire. */
@@ -1720,8 +2119,8 @@ export class World {
     let r: Agent | undefined;
     for (const a of this.agents.values()) {
       if (a.path.length > 0 || !a.spot) continue;
-      if (a.spot.id === "pingpong-l") l = a;
-      if (a.spot.id === "pingpong-r") r = a;
+      if (a.spot.id.endsWith("pingpong-l")) l = a;
+      if (a.spot.id.endsWith("pingpong-r")) r = a;
     }
     return { l, r };
   }
@@ -1738,6 +2137,514 @@ export class World {
     } else if (l || r) {
       this.ballT += dt / 0.7;
     }
+  }
+
+  // ------------------------------------------------------------------ get-togethers
+
+  /** Idle agents free to join something: settled in the kitchen or lounge. */
+  private freeIdle(): Agent[] {
+    return [...this.agents.values()].filter(
+      (a) =>
+        !a.leaving &&
+        this.settled(a) &&
+        a.thread.mood === "idle" &&
+        a.huddle === null &&
+        this.mishap?.id !== a.id &&
+        (a.spot!.group === "break" || a.spot!.group === "lounge"),
+    );
+  }
+
+  private shuffled<T>(list: T[]): T[] {
+    const out = [...list];
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(this.rand() * (i + 1));
+      [out[i], out[j]] = [out[j]!, out[i]!];
+    }
+    return out;
+  }
+
+  /** Get a few idle agents together (a random kind of get-together unless given). */
+  startHuddle(kind?: HuddleKind): boolean {
+    const L = this.L;
+    if (!L || this.event) return false;
+    const pool = this.shuffled(this.freeIdle());
+    if (pool.length < 2) return false;
+    const taken = new Set(this.currentSpots().values());
+    for (const h of this.huddles) for (const sp of h.spots) taken.add(sp.id.replace(/^huddle-\d+-/, ""));
+    const free = (id: string) => L.byId.has(id) && !taken.has(id);
+    const couch = L.spots.filter((sp) => sp.kind === "couch" && !taken.has(sp.id)).sort((p, q) => p.x - q.x);
+    const options: [HuddleKind, number][] = [];
+    if (L.byId.has("coffee")) options.push(["coffee", 3]);
+    if (L.byId.has("cooler")) options.push(["cooler", 2]);
+    options.push(["chat", 2]);
+    if (free("pingpong-l") && free("pingpong-r")) options.push(["pingpong", 2]);
+    if (free("darts")) options.push(["darts", 1.5]);
+    if (couch.length >= 2) options.push(["couch", 1]);
+    let k = kind && options.some(([o]) => o === kind) ? kind : undefined;
+    if (!k) {
+      let roll = this.rand() * options.reduce((n, [, w]) => n + w, 0);
+      for (const [o, w] of options) {
+        roll -= w;
+        if (roll <= 0) {
+          k = o;
+          break;
+        }
+      }
+      k ??= "chat";
+    }
+    const two = k === "pingpong" || k === "darts" || k === "cooler";
+    const size = two ? 2 : pool.length >= 3 && this.rand() < 0.45 ? 3 : 2;
+    const id = ++this.huddleSeq;
+    const spots = this.huddleSpots(k, id, size, couch);
+    if (!spots || spots.length < 2) return false;
+    const members = pool.slice(0, spots.length);
+    const t = this.time;
+    const dur = { coffee: [40, 25], cooler: [30, 20], chat: [35, 25], couch: [60, 30], pingpong: [50, 30], darts: [45, 25] }[k];
+    // Most get-togethers come with a chat (always when asked for one).
+    const talky = k !== "pingpong" && k !== "darts" && (kind !== undefined || this.rand() < 0.9);
+    const h: Huddle = {
+      id,
+      kind: k,
+      members: members.map((a) => a.id),
+      spots,
+      until: t + dur[0]! + this.rand() * dur[1]!,
+      nextLine: Infinity,
+      lines: 0,
+      maxLines: talky ? 4 + Math.floor(this.rand() * 4) : 0,
+      topic: null,
+      lastSpeaker: null,
+    };
+    this.huddles.push(h);
+    members.forEach((a, i) => {
+      a.huddle = id;
+      this.walkTo(a, spots[i]!);
+    });
+    if (h.maxLines > 0) this.talk?.gather(h.members);
+    return true;
+  }
+
+  /** Where the get-together happens: spots made up for the occasion. */
+  private huddleSpots(kind: HuddleKind, id: number, n: number, couch: Spot[]): Spot[] | null {
+    const L = this.L!;
+    const tag = (suffix: string) => `huddle-${id}-${suffix}`;
+    const near = (base: Spot, suffix: string, dx: number, dy: number, facing: Facing, pose: Spot["pose"], activity: string): Spot => {
+      const x = base.x + dx;
+      const y = base.y + dy;
+      return { id: tag(suffix), kind: "huddle", group: "lounge", x, y, facing, pose, activity, path: [...base.path.slice(0, -1), { x, y }] };
+    };
+    switch (kind) {
+      case "coffee": {
+        const c = L.byId.get("coffee");
+        if (!c) return null;
+        const at: [number, Facing][] = [
+          [-9, "right"],
+          [9, "left"],
+          [25, "left"],
+        ];
+        return at.slice(0, n).map(([dx, f], i) => near(c, `${i}`, dx, 2, f, "cup", "coffee with a colleague"));
+      }
+      case "cooler": {
+        const c = L.byId.get("cooler");
+        if (!c) return null;
+        return [near(c, "0", -2, 0, "right", "cup", "water cooler talk"), near(c, "1", 14, 0, "left", "cup", "water cooler talk")];
+      }
+      case "chat": {
+        const hy = L.net.halls[Math.floor(this.rand() * L.net.halls.length)]!;
+        const avoid = [L.entrance.x, ...L.net.aisles];
+        let x = 0;
+        for (let tries = 0; tries < 12; tries++) {
+          x = Math.round(L.W * (0.15 + this.rand() * 0.7));
+          if (avoid.every((v) => Math.abs(v - x) > 22)) break;
+        }
+        const at: [number, number, Facing][] = [
+          [-9, 2, "right"],
+          [9, 2, "left"],
+          [0, -6, "front"],
+        ];
+        return at.slice(0, n).map(([dx, dy, f], i) => ({
+          id: tag(`${i}`),
+          kind: "huddle" as const,
+          group: "lounge" as const,
+          x: x + dx,
+          y: hy + dy,
+          facing: f,
+          pose: "stand" as const,
+          activity: "chatting in the hallway",
+          path: [{ x: x + dx, y: hy, c: true }, { x: x + dx, y: hy + dy }],
+        }));
+      }
+      case "couch":
+        return couch.slice(0, n).map((sp, i) => ({ ...sp, id: tag(`${i}`), activity: "hanging out on the couch" }));
+      case "pingpong": {
+        const l = L.byId.get("pingpong-l");
+        const r = L.byId.get("pingpong-r");
+        if (!l || !r) return null;
+        return [
+          { ...l, id: tag("pingpong-l"), activity: "a ping-pong match" },
+          { ...r, id: tag("pingpong-r"), activity: "a ping-pong match" },
+        ];
+      }
+      case "darts": {
+        const d = L.byId.get("darts");
+        if (!d) return null;
+        const dx = d.facing === "right" ? -16 : 16;
+        return [{ ...d, id: tag("darts"), activity: "a game of darts" }, near(d, "watch", dx, 4, d.facing, "stand", "watching the darts")];
+      }
+    }
+  }
+
+  private updateHuddles(dt: number): void {
+    const t = this.time;
+    if (this.nextHuddleAt < 0) this.nextHuddleAt = t + 6 + this.rand() * 10;
+    if (t > this.nextHuddleAt) {
+      this.nextHuddleAt = t + 25 + this.rand() * 35;
+      if (!this.event && this.huddles.length < 3) this.startHuddle();
+    }
+    for (const h of [...this.huddles]) {
+      const members = h.members.map((id) => this.agents.get(id)).filter((a): a is Agent => a !== undefined && a.huddle === h.id);
+      if (members.length < 2 || t > h.until) {
+        this.endHuddle(h);
+        continue;
+      }
+      const prefix = `huddle-${h.id}-`;
+      if (!members.every((a) => this.settled(a) && a.spot!.id.startsWith(prefix))) continue;
+      if (h.nextLine === Infinity) h.nextLine = t + 2 + this.rand() * 2;
+      if (t < h.nextLine) continue;
+      if (h.kind === "pingpong" || h.kind === "darts") {
+        const who = members[Math.floor(this.rand() * members.length)]!;
+        const lines = GAME_LINES[h.kind];
+        this.say(who.id, lines[Math.floor(this.rand() * lines.length)]!, 2.2);
+        h.nextLine = t + 7 + this.rand() * 8;
+        continue;
+      }
+      if (h.lines >= h.maxLines || !this.talk) {
+        h.nextLine = h.until + 1;
+        continue;
+      }
+      if (h.lines % 2 === 0) {
+        const others = members.filter((a) => a.id !== h.lastSpeaker);
+        const speaker = others[Math.floor(this.rand() * others.length)] ?? members[0]!;
+        const line = this.talk.open(speaker.id);
+        if (!line) {
+          h.lines = h.maxLines;
+          continue;
+        }
+        this.say(speaker.id, line.text, 4 + Math.min(3, line.text.length / 30));
+        h.topic = line.topic;
+        h.lastSpeaker = speaker.id;
+        h.nextLine = t + 4.6 + Math.min(3, line.text.length / 30);
+      } else {
+        const speaker = members.find((a) => a.id !== h.lastSpeaker) ?? members[0]!;
+        const text = h.topic ? this.talk.reply(speaker.id, h.topic) : null;
+        if (text) this.say(speaker.id, text, 3.4);
+        h.lastSpeaker = speaker.id;
+        h.nextLine = t + 4 + this.rand() * 5;
+      }
+      h.lines++;
+    }
+    void dt;
+  }
+
+  /** Idle neighbors (on the couch, at the counter) chat without getting up. */
+  private updateNeighborChat(): void {
+    const t = this.time;
+    for (const r of [...this.replies]) {
+      if (t < r.at) continue;
+      this.replies = this.replies.filter((x) => x !== r);
+      const a = this.agents.get(r.id);
+      if (!a || !this.settled(a) || a.thread.mood !== "idle" || this.speech.has(a.id)) continue;
+      const text = this.talk?.reply(a.id, r.topic);
+      if (text) this.say(a.id, text, 3.2);
+    }
+    if (this.nextChatAt < 0) this.nextChatAt = t + 5 + this.rand() * 8;
+    if (t < this.nextChatAt || !this.talk || this.event) return;
+    this.nextChatAt = t + 14 + this.rand() * 16;
+    const pool = this.shuffled(this.freeIdle().filter((a) => !this.speech.has(a.id)));
+    for (const a of pool) {
+      const b = pool.find((o) => o !== a && Math.hypot(o.x - a.x, o.y - a.y) < 80);
+      if (!b) continue;
+      this.talk.gather([a.id, b.id]);
+      const line = this.talk.open(a.id);
+      if (!line) return;
+      const dur = 4 + Math.min(3, line.text.length / 30);
+      this.say(a.id, line.text, dur);
+      this.replies.push({ id: b.id, topic: line.topic, at: t + dur + 0.6 });
+      return;
+    }
+  }
+
+  /** Everyone heads back to their own spot. */
+  private endHuddle(h: Huddle, walk = true): void {
+    this.huddles = this.huddles.filter((x) => x !== h);
+    for (const id of h.members) {
+      const a = this.agents.get(id);
+      if (!a || a.huddle !== h.id) continue;
+      a.huddle = null;
+      const home = walk ? this.L?.byId.get(a.thread.spotId) : undefined;
+      if (home) this.walkTo(a, home);
+    }
+  }
+
+  private leaveHuddle(a: Agent, walk = false): void {
+    const h = this.huddles.find((x) => x.id === a.huddle);
+    a.huddle = null;
+    if (walk) {
+      const home = this.L?.byId.get(a.thread.spotId);
+      if (home) this.walkTo(a, home);
+    }
+    if (!h) return;
+    h.members = h.members.filter((id) => id !== a.id);
+    if (h.members.length < 2) this.endHuddle(h);
+  }
+
+  // ------------------------------------------------------------------ the server-room gag
+
+  /** Standing at the racks, reached through the nearest aisle or the cooler corner. */
+  private serverSpot(id: string, activity: string): Spot | null {
+    const L = this.L!;
+    const r = L.server;
+    if (!r) return null;
+    const sy = r.y + r.h - 3;
+    const cx = r.x + r.w / 2;
+    const outside = (x: number) => x < r.x - 2 || x > r.x + r.w + 2;
+    const ways: Point[] = [];
+    for (const ax of L.net.aisles) if (outside(ax)) for (const hy of L.net.halls) ways.push({ x: ax, y: hy });
+    const cooler = L.byId.get("cooler");
+    if (cooler && outside(cooler.x)) ways.push({ x: cooler.x, y: cooler.path[0]!.y });
+    if (ways.length === 0) return null;
+    const cost = (p: Point) => Math.abs(p.x - cx) + Math.abs(p.y - sy) * 0.6;
+    const way = ways.reduce((b, p) => (cost(p) < cost(b) ? p : b));
+    const x = way.x < r.x ? r.x + 14 : r.x + r.w - 14;
+    return { id, kind: "huddle", group: "lounge", x, y: sy, facing: "back", pose: "stand", activity, path: [{ x: way.x, y: way.y, c: true }, { x: way.x, y: sy }, { x, y: sy }] };
+  }
+
+  /** Send someone idle to mess with the server cables (a random idle agent unless given). */
+  startMishap(id?: string): boolean {
+    if (!this.L?.server || this.mishap || this.event) return false;
+    const pool = this.freeIdle();
+    const a = (id ? pool.find((x) => x.id === id) : undefined) ?? pool[Math.floor(this.rand() * pool.length)];
+    const spot = this.serverSpot("gag-server", "poking at the server cables");
+    if (!a || !spot) return false;
+    this.mishap = { id: a.id, phase: "go", until: 0, spot };
+    this.walkTo(a, spot);
+    return true;
+  }
+
+  private updateMishap(dt: number): void {
+    const t = this.time;
+    if (this.nextMishapAt < 0) this.nextMishapAt = t + 300 + this.rand() * 420;
+    if (!this.mishap && t > this.nextMishapAt) {
+      this.nextMishapAt = t + 720 + this.rand() * 900;
+      this.startMishap();
+    }
+    const m = this.mishap;
+    if (!m) return;
+    const a = this.agents.get(m.id);
+    if (!a || a.leaving) {
+      this.mishap = null;
+      return;
+    }
+    const hands = { x: a.x, y: a.y - 16 };
+    switch (m.phase) {
+      case "go":
+        if (this.settled(a) && a.spot === m.spot) {
+          m.phase = "fiddle";
+          m.until = t + 3.6;
+          if (this.rand() < 0.5) this.say(a.id, this.rand() < 0.5 ? "What does this cable do?" : "Just a quick fix…", 2.6);
+        }
+        break;
+      case "fiddle":
+        if (this.rand() < dt * 3) this.particles.push({ kind: "sparkle", x: hands.x + (this.rand() - 0.5) * 8, y: hands.y - 4, vx: 0, vy: -4, life: 0, max: 0.35, color: "#ffe066" });
+        if (t > m.until) {
+          m.phase = "zap";
+          m.until = t + 1.7;
+          this.flashUntil = t + 0.4;
+          this.emit("zap", true);
+          this.say(a.id, ["BZZZT!", "OUCH!!", "YEOWCH!"][Math.floor(this.rand() * 3)]!, 2);
+          for (let i = 0; i < 12; i++) {
+            const ang = (i / 12) * Math.PI * 2;
+            this.particles.push({ kind: "sparkle", x: a.x, y: a.y - 14, vx: Math.cos(ang) * 30, vy: Math.sin(ang) * 30, life: 0, max: 0.5, color: i % 2 ? "#9fe8ff" : "#ffffff" });
+          }
+        }
+        break;
+      case "zap":
+        if (t > m.until) {
+          m.phase = "down";
+          m.until = t + 6.5;
+          this.rackBroken = true;
+          if (this.rand() < 0.7) this.say(a.id, ["Ow…", "Ow… pretty stars…", "I see stars…", "Five more minutes…"][Math.floor(this.rand() * 4)]!, 3.2);
+        }
+        break;
+      case "down":
+        if (this.rand() < dt * 1.6) this.particles.push({ kind: "powder", x: a.x + (this.rand() - 0.5) * 16, y: a.y - 8, vx: 0, vy: -8, life: 0, max: 1.4, color: "#8a8a92" });
+        if (t > m.until) {
+          m.phase = "leave";
+          a.slow = true;
+          const lines = ["I'm okay!", "Note to self: don't touch that.", "Who needs eyebrows anyway…", "Totally meant to do that."];
+          this.say(a.id, lines[Math.floor(this.rand() * lines.length)]!, 3);
+          const home = this.L!.byId.get(a.thread.spotId);
+          if (home) this.walkTo(a, home);
+          else {
+            a.slow = false;
+            this.mishap = null;
+          }
+          // Someone should look at that rack.
+          if (!this.npcs.some((n) => n.kind === "technician")) this.nextTech = Math.min(this.nextTech, t + 20);
+        }
+        break;
+      case "leave":
+        if (this.rand() < dt * 0.8) this.particles.push({ kind: "powder", x: a.x, y: a.y - 26, vx: 0, vy: -6, life: 0, max: 1, color: "#9a9aa2" });
+        if (a.path.length === 0) {
+          a.slow = false;
+          this.mishap = null;
+        }
+        break;
+    }
+  }
+
+  // ------------------------------------------------------------------ weather & broken things
+
+  private updateWeather(): void {
+    const t = this.time;
+    if (this.weather !== "storm") {
+      this.nextLightning = -1;
+      return;
+    }
+    if (this.nextLightning < 0) this.nextLightning = t + 4 + this.rand() * 6;
+    if (t > this.nextLightning) {
+      this.lightningAt = t;
+      this.thunderAt = t + 0.7 + this.rand() * 1.6;
+      this.nextLightning = t + 10 + this.rand() * 18;
+    }
+    if (this.thunderAt > 0 && t > this.thunderAt) {
+      this.thunderAt = -1;
+      this.emit("thunder", true);
+    }
+  }
+
+  /** Little signs that something needs fixing. */
+  private updateBroken(dt: number): void {
+    const L = this.L!;
+    if (this.brokenMachine) {
+      const p = L.pokeables.find((q) => q.id === (this.brokenMachine === "coffee" ? "coffee" : this.brokenMachine));
+      if (p && this.rand() < dt * 1.5) {
+        this.particles.push({ kind: "powder", x: p.rect.x + p.rect.w / 2 + (this.rand() - 0.5) * 6, y: p.rect.y + 4, vx: 0, vy: -7, life: 0, max: 1.3, color: "#8a8a92" });
+      }
+    }
+    if (this.rackBroken && L.server && this.rand() < dt * 0.9) {
+      const r = L.server;
+      this.particles.push({ kind: "sparkle", x: r.x + 8 + this.rand() * (r.w - 16), y: r.y + r.h - 24 + this.rand() * 10, vx: 0, vy: -3, life: 0, max: 0.3, color: "#ffe066" });
+    }
+  }
+
+  /** Every string-light bulb's x, left to right. */
+  private bulbXs(): number[] {
+    const out: number[] = [];
+    for (const seg of this.L!.segments) {
+      for (let x0 = seg.x0 + 6; x0 < seg.x1 - 6; x0 += 100) {
+        const x1 = Math.min(seg.x1 - 6, x0 + 100);
+        if (x1 - x0 < 30) continue;
+        for (let x = x0; x < x1; x++) if ((x - x0) % 10 === 5) out.push(x);
+      }
+    }
+    return out;
+  }
+
+  // ------------------------------------------------------------------ the technician
+
+  /** Call the technician now (debug), with a server job if the rack is broken. */
+  callTechnician(): boolean {
+    if (!this.L || this.npcs.some((n) => n.kind === "technician")) return false;
+    this.spawnNpc("technician");
+    return true;
+  }
+
+  /** Pick a few things to fix and say where to stand for each. */
+  private technicianJobs(): { job: Job; stop: Point[] }[] {
+    const L = this.L!;
+    const out: { job: Job; stop: Point[] }[] = [];
+    if (this.rackBroken) {
+      const sp = this.serverSpot("tech-server", "fixing the server rack");
+      if (sp) out.push({ job: { kind: "server", facing: "back" }, stop: sp.path });
+    }
+    const options: { job: Job; stop: Point[] }[] = [];
+    const used = new Set([...this.agents.values()].map((a) => a.target ?? a.spot?.id));
+    const desks = L.desks.filter((d) => !used.has(d.spot.id));
+    if (desks.length > 0) {
+      const d = desks[Math.floor(this.rand() * desks.length)]!;
+      const dx = d.side === "north" ? 12 : -12;
+      const x = d.spot.x + dx;
+      options.push({ job: { kind: "pc", facing: d.side === "north" ? "front" : "back", desk: d.index }, stop: [...d.spot.path.slice(0, -1), { x, y: d.spot.y }] });
+    }
+    // A bulb in the string lights, reached with a ladder from an aisle by the wall.
+    const top = Math.min(...L.net.halls);
+    const aisles = L.net.aisles.filter((x) => Math.abs(x - L.entrance.x) > 18);
+    const ax = aisles.length > 0 ? aisles[Math.floor(this.rand() * aisles.length)]! : L.entrance.x + 16;
+    const seg = L.segments.find((sg) => ax >= sg.x0 && ax < sg.x1);
+    if (seg && ax < L.W - 12) {
+      options.push({ job: { kind: "bulb", facing: "back", ladderX: ax }, stop: [{ x: ax, y: top, c: true }, { x: ax, y: seg.depth + 10 }] });
+    }
+    const machines: { job: Job; stop: Point[] }[] = [];
+    const coffee = L.byId.get("coffee");
+    if (coffee) machines.push({ job: { kind: "coffee", facing: "back" }, stop: coffee.path });
+    const vending = L.byId.get("vending");
+    if (vending) machines.push({ job: { kind: "vending", facing: vending.facing }, stop: vending.path });
+    const cooler = L.byId.get("cooler");
+    if (cooler && L.pokeables.some((p) => p.id === "printer")) {
+      const px = cooler.x + 29;
+      machines.push({ job: { kind: "printer", facing: "back" }, stop: [{ x: px, y: cooler.path[0]!.y, c: true }, { x: px, y: cooler.y }] });
+    }
+    if (machines.length > 0) options.push(machines[Math.floor(this.rand() * machines.length)]!);
+    out.push(...this.shuffled(options).slice(0, Math.max(1, 3 - out.length - (this.rand() < 0.5 ? 1 : 0))));
+    return out;
+  }
+
+  /** The technician is up the ladder this many pixels. */
+  private climbOf(n: Npc): number {
+    if (n.kind !== "technician" || n.job?.kind !== "bulb" || n.path.length > 0 || n.pause <= 0) return 0;
+    const done = n.jobDur - n.pause;
+    const k = Math.max(0, Math.min(1, done / 1.2, n.pause / 1.2));
+    const seg = this.L!.segments.find((sg) => n.x >= sg.x0 && n.x < sg.x1);
+    return Math.round(k * Math.max(0, (seg?.depth ?? 64) - 26));
+  }
+
+  private climbMax(n: Npc): number {
+    const seg = this.L!.segments.find((sg) => n.x >= sg.x0 && n.x < sg.x1);
+    return Math.max(0, (seg?.depth ?? 64) - 26);
+  }
+
+  private finishJob(n: Npc, j: Job): void {
+    const t = this.time;
+    switch (j.kind) {
+      case "pc":
+        this.brokenDesk = null;
+        break;
+      case "bulb":
+        this.brokenBulbX = null;
+        break;
+      case "coffee":
+        this.brokenMachine = null;
+        this.anim.set("coffee", t + 3);
+        this.emit("brew", true);
+        break;
+      case "printer":
+        this.brokenMachine = null;
+        this.anim.set("printer", t + 2.4);
+        this.emit("print", true);
+        break;
+      case "vending":
+        this.brokenMachine = null;
+        this.anim.set("vending", t + 1.4);
+        break;
+      case "server":
+        this.rackBroken = false;
+        this.anim.set("server", t + 2.5);
+        break;
+    }
+    const lines = ["Fixed!", "Good as new.", "There we go.", "That should hold.", "Next!"];
+    this.say(n.id, lines[Math.floor(this.rand() * lines.length)]!, 2.4);
+    this.emit("fixed", true);
+    this.burst(n.x, n.y - 30 - this.climbOf(n), "sparkle", 6);
   }
 
   // ------------------------------------------------------------------ particles
@@ -1794,11 +2701,24 @@ export class World {
   private poseOf(a: Agent): { pose: CharPose; expr: Expression; facing: Facing; seated?: boolean } {
     const t = this.time;
     const blink = t < a.blinkUntil;
+    const m = this.mishap?.id === a.id ? this.mishap : null;
     if (!this.settled(a)) {
-      const frame = Math.floor(a.walked / 4) % 4;
-      return { pose: `walk${frame}` as CharPose, expr: blink ? "blink" : "open", facing: a.facing };
+      const frame = Math.floor(a.walked / (a.slow ? 3 : 4)) % 4;
+      return { pose: `walk${frame}` as CharPose, expr: m ? "worried" : blink ? "blink" : "open", facing: a.facing };
     }
     const s = a.spot!;
+    if (m && s === m.spot) {
+      if (m.phase === "zap") return { pose: "cheer", expr: "surprised", facing: "front" };
+      if (m.phase === "down") return { pose: "stand", expr: "closed", facing: "front" };
+      return { pose: Math.floor(t * 4) % 2 ? "draw0" : "draw1", expr: "focus", facing: "back" };
+    }
+    // Talking at a get-together: hands going, mouth moving.
+    if (s.kind === "huddle" && this.speech.has(a.id)) {
+      const gesture = Math.floor(t * 1.4 + (a.seed % 3)) % 4 === 0;
+      const mouth: Expression = Math.floor(t * 7) % 2 ? "open" : "happy";
+      if (s.pose === "cup") return { pose: "cup", expr: mouth, facing: s.facing };
+      return { pose: gesture ? "raise" : "stand", expr: mouth, facing: s.facing };
+    }
     const mood = a.thread.mood;
     // The waiting room: seated, facing you.
     if (s.kind === "review") {
@@ -1887,7 +2807,7 @@ export class World {
       case "cup":
         return { pose: "cup", expr: blink ? "blink" : "happy", facing: s.facing };
       case "paddle": {
-        const swing = Math.floor(this.ballT * 2 + (s.id === "pingpong-r" ? 1 : 0)) % 2;
+        const swing = Math.floor(this.ballT * 2 + (s.id.endsWith("pingpong-r") ? 1 : 0)) % 2;
         return { pose: swing ? "paddle1" : "paddle0", expr: "focus", facing: s.facing };
       }
       default:
@@ -1895,7 +2815,7 @@ export class World {
     }
   }
 
-  private eventPose(a: Agent, s: Spot, blink: boolean): { pose: CharPose; expr: Expression; facing: Facing } {
+  private eventPose(a: Agent, s: Spot, blink: boolean): { pose: CharPose; expr: Expression; facing: Facing; seated?: boolean } {
     const ev = this.event;
     const t = this.time;
     const facing = s.facing;
@@ -1911,8 +2831,15 @@ export class World {
       }
       case "birthday":
         return t - ev.startedAt < 9 ? { pose: Math.floor(ph * 2) % 2 ? "cheer" : "stand", expr, facing } : { pose: a.seed % 2 ? "cup" : "stand", expr, facing };
+      case "lunch": {
+        const own = (ev.lunchboxes ?? []).includes(s.id);
+        const eating = own || ev.delivered === true;
+        const talking = this.speech.has(a.id);
+        const bite = eating && !talking && Math.floor(ph / 1.6) % 3 !== 2;
+        if (facing === "back") return { pose: bite && Math.floor(ph * 2) % 2 ? "type0" : "sit-back", expr, facing, seated: true };
+        return { pose: bite ? "cup" : "stand", expr: talking ? (Math.floor(t * 7) % 2 ? "open" : "happy") : expr, facing, seated: true };
+      }
       case "baby-shower":
-      case "pizza":
       case "ice-cream":
         return { pose: Math.floor(ph / 4) % 3 === 2 ? "stand" : "cup", expr, facing };
       case "karaoke":
@@ -1981,11 +2908,14 @@ export class World {
     this.hour = env.hour;
     this.season = env.season;
     this.seasons = env.seasons;
+    this.weather = env.weather;
+    this.dayKey = env.date.toDateString();
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, L.W, L.H);
     this.drawSky(ctx, env);
     ctx.drawImage(this.bg, 0, 0);
     this.drawSunbeam(ctx, env);
+    this.drawOpenWindows(ctx);
     this.drawStringLights(ctx, env, false);
     this.drawClock(ctx, env.date);
     this.drawCalendar(ctx, env.date);
@@ -2036,13 +2966,20 @@ export class World {
       const chair = chairCanvas(who?.thread.chairTone ?? "green", d.side);
       const scr = screenFor(style, d.side, d.index, atDesk.get(d.index)?.thread.visionPro === true);
       const seated = atDesk.get(d.index);
+      const plant = hash(`desk-plant-${d.index}`) % 3 === 0 ? hash(`plant-kind-${d.index}`) : -1;
       items.push({ z: d.y + 26, draw: () => ctx.drawImage(desk, d.x, d.y) });
       items.push({
         z: d.y + 26.5,
         draw: () => {
           ctx.drawImage(scr.canvas, d.pcX + scr.dx, d.pcY + scr.dy);
           for (const r of scr.screens) {
-            this.drawScreen(ctx, { x: d.pcX + scr.dx + r.x, y: d.pcY + scr.dy + r.y, w: r.w, h: r.h }, seated);
+            const box = { x: d.pcX + scr.dx + r.x, y: d.pcY + scr.dy + r.y, w: r.w, h: r.h };
+            if (this.brokenDesk === d.index) this.drawBrokenScreen(ctx, box, d.index);
+            else this.drawScreen(ctx, box, seated);
+          }
+          if (plant >= 0) {
+            if (d.side === "north") this.drawDeskPlant(ctx, d.x + 40, d.y + 9, plant);
+            else this.drawDeskPlant(ctx, d.x + 8, d.y + 9, plant);
           }
         },
       });
@@ -2066,6 +3003,13 @@ export class World {
     this.drawBeachBall(ctx);
     this.drawLighting(ctx, env, atDesk);
     this.drawStringLights(ctx, env, true);
+    this.drawZap(ctx);
+    // Lightning outside lights up the room for an instant.
+    const bolt = this.time - this.lightningAt;
+    if (bolt >= 0 && bolt < 0.18) {
+      ctx.fillStyle = `rgba(235,240,255,${(0.16 * (0.18 - bolt)) / 0.18})`;
+      ctx.fillRect(0, 0, L.W, L.H);
+    }
     for (const a of this.agents.values()) this.drawBubble(ctx, a);
     this.drawHover(ctx, env);
   }
@@ -2329,10 +3273,18 @@ export class World {
 
   private drawAgent(ctx: CanvasRenderingContext2D, a: Agent): void {
     const { pose, expr, facing, seated: onChair } = this.poseOf(a);
-    const sprite = charSprite({ look: a.thread.look, facing, pose, expr, emblem: a.thread.emblem, seated: onChair });
+    let sprite = charSprite({ look: a.thread.look, facing, pose, expr, emblem: a.thread.emblem, seated: onChair });
     let y = this.drawY(a);
     const s = a.spot;
     const settled = this.settled(a);
+    const m = settled && this.mishap?.id === a.id && s === this.mishap.spot ? this.mishap : null;
+    if (m?.phase === "down") {
+      this.drawLying(ctx, a, sprite);
+      return;
+    }
+    // Zapped: flickering between an x-ray and themselves.
+    if (m?.phase === "zap" && Math.floor(this.time / 0.07) % 2 === 0) sprite = this.xray(sprite);
+    if (settled && s?.kind === "couch" && (this.anim.get("couch") ?? 0) > this.time) y -= Math.floor(this.time * 10) % 2;
     if (settled && s?.kind === "arcade") y += Math.floor(this.time * 3) % 2 ? 0 : -1;
     if (settled && s?.kind === "couch" && Math.floor(this.time / 7 + (a.seed % 5)) % 6 === 0) y += Math.floor(this.time * 6) % 2 ? -1 : 0;
     if (settled && s?.kind === "review" && a.thread.mood === "needs-you") y -= Math.floor(this.time * 2 + (a.seed % 3)) % 6 === 0 ? 1 : 0;
@@ -2348,6 +3300,9 @@ export class World {
       ctx.fillRect(Math.round(a.x + 2), Math.round(y - ANCHOR_Y + 15), 2, 2);
     }
     if (settled && s?.kind === "desk" && a.thread.visionPro) this.drawVisionPro(ctx, a, y, facing);
+    if (settled && s?.kind === "event" && this.event?.kind === "lunch" && pose === "cup" && facing === "front") {
+      this.drawFoodInHand(ctx, Math.round(a.x) + 1, Math.round(y) - 13, (this.event.lunchboxes ?? []).includes(s.id) ? null : (this.event.food ?? "pizza"));
+    }
     if (settled && s?.kind === "event" && this.event) {
       const k = this.event.kind;
       if (k === "lanterns") drawCarriedLantern(ctx, a.x, y, facing, a.seed, this.time, true);
@@ -2366,6 +3321,190 @@ export class World {
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(hx + 1, hy - 6, 1, 1);
     }
+  }
+
+  /** A bite of lunch, over the mug of the "cup" pose (null: a sandwich from home). */
+  private drawFoodInHand(ctx: CanvasRenderingContext2D, x: number, y: number, food: string | null): void {
+    ctx.fillStyle = OUTLINE;
+    ctx.fillRect(x - 1, y - 1, 6, 5);
+    switch (food) {
+      case "pizza":
+        ctx.fillStyle = "#f2b24e";
+        ctx.fillRect(x, y, 4, 3);
+        ctx.fillStyle = "#d9482b";
+        ctx.fillRect(x + 1, y + 1, 1, 1);
+        ctx.fillRect(x + 3, y, 1, 1);
+        ctx.fillStyle = "#c98a4a";
+        ctx.fillRect(x, y, 1, 3);
+        break;
+      case "sushi":
+        ctx.fillStyle = "#fbfaf5";
+        ctx.fillRect(x, y + 1, 4, 2);
+        ctx.fillStyle = "#ff8a5c";
+        ctx.fillRect(x, y, 4, 1);
+        ctx.fillStyle = "#8a5a34";
+        ctx.fillRect(x + 4, y - 3, 1, 4);
+        break;
+      case "burgers":
+        ctx.fillStyle = "#d9a050";
+        ctx.fillRect(x, y, 4, 1);
+        ctx.fillStyle = "#57b86f";
+        ctx.fillRect(x, y + 1, 4, 1);
+        ctx.fillStyle = "#7a4a2a";
+        ctx.fillRect(x, y + 2, 4, 1);
+        break;
+      case "tacos":
+        ctx.fillStyle = "#f2c14e";
+        ctx.fillRect(x, y, 4, 3);
+        ctx.fillStyle = "#57b86f";
+        ctx.fillRect(x + 1, y, 2, 1);
+        ctx.fillStyle = "#e5484d";
+        ctx.fillRect(x + 2, y + 1, 1, 1);
+        break;
+      case "ramen":
+        ctx.fillStyle = "#e5484d";
+        ctx.fillRect(x, y + 1, 4, 2);
+        ctx.fillStyle = "#f0d9a8";
+        ctx.fillRect(x, y, 4, 1);
+        ctx.fillStyle = "#8a5a34";
+        ctx.fillRect(x + 3, y - 3, 1, 3);
+        break;
+      default:
+        // A sandwich from home.
+        ctx.fillStyle = "#f0d9a8";
+        ctx.fillRect(x, y, 4, 3);
+        ctx.fillStyle = "#86e07f";
+        ctx.fillRect(x, y + 1, 4, 1);
+    }
+  }
+
+  private xrays = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
+
+  /** A cartoon x-ray: a blue silhouette with the skeleton showing. */
+  private xray(sprite: HTMLCanvasElement): HTMLCanvasElement {
+    const hit = this.xrays.get(sprite);
+    if (hit) return hit;
+    const c = document.createElement("canvas");
+    c.width = sprite.width;
+    c.height = sprite.height;
+    const x = c.getContext("2d")!;
+    x.drawImage(sprite, 0, 0);
+    x.globalCompositeOperation = "source-in";
+    x.fillStyle = "#2f55d4";
+    x.fillRect(0, 0, c.width, c.height);
+    x.globalCompositeOperation = "source-over";
+    x.drawImage(skeletonSprite(), 0, 0);
+    this.xrays.set(sprite, c);
+    return c;
+  }
+
+  /** Flat on the floor after the zap, stars circling. */
+  private drawLying(ctx: CanvasRenderingContext2D, a: Agent, sprite: HTMLCanvasElement): void {
+    // On the floor just in front of the racks, above the room's glass front.
+    const x = Math.round(a.x);
+    const y = Math.round(a.y - 13);
+    ctx.fillStyle = "rgba(40,20,30,0.18)";
+    ctx.fillRect(x - 13, y + 7, 26, 2);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-Math.PI / 2);
+    ctx.drawImage(sprite, -10, -14);
+    ctx.restore();
+    // Head is on the left: stars go round above it.
+    const hx = x - 8;
+    const hy = y - 9;
+    const t = this.time;
+    for (let i = 0; i < 3; i++) {
+      const ang = t * 4 + (i * Math.PI * 2) / 3;
+      const sx = Math.round(hx + Math.cos(ang) * 7);
+      const sy = Math.round(hy + Math.sin(ang) * 2.5);
+      ctx.fillStyle = OUTLINE;
+      ctx.fillRect(sx - 1, sy - 1, 3, 3);
+      ctx.fillStyle = "#ffe066";
+      ctx.fillRect(sx - 1, sy, 3, 1);
+      ctx.fillRect(sx, sy - 1, 1, 3);
+    }
+  }
+
+  /** A little potted plant on some desks. */
+  private drawDeskPlant(ctx: CanvasRenderingContext2D, x: number, y: number, kind: number): void {
+    ctx.fillStyle = OUTLINE;
+    ctx.fillRect(x - 3, y - 4, 7, 5);
+    ctx.fillStyle = ["#c96f4a", "#e8e2d4", "#6f9fd8"][kind % 3]!;
+    ctx.fillRect(x - 2, y - 3, 5, 3);
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.fillRect(x - 2, y - 3, 5, 1);
+    const leaf = ["#3f9a5a", "#57b86f", "#86e07f"];
+    if (kind % 3 === 0) {
+      // Succulent rosette
+      ctx.fillStyle = leaf[1]!;
+      ctx.fillRect(x - 2, y - 6, 5, 2);
+      ctx.fillRect(x - 1, y - 7, 3, 1);
+      ctx.fillStyle = leaf[2]!;
+      ctx.fillRect(x, y - 7, 1, 2);
+    } else if (kind % 3 === 1) {
+      // Little fern
+      ctx.fillStyle = leaf[0]!;
+      for (const [dx, dy] of [[-3, -6], [-2, -7], [-1, -9], [0, -8], [1, -9], [2, -7], [3, -6], [0, -6], [-1, -5], [1, -5]] as const) ctx.fillRect(x + dx, y + dy, 1, 1);
+      ctx.fillStyle = leaf[2]!;
+      ctx.fillRect(x, y - 10, 1, 2);
+    } else {
+      // Flowering
+      ctx.fillStyle = leaf[1]!;
+      ctx.fillRect(x - 1, y - 7, 3, 3);
+      ctx.fillRect(x, y - 9, 1, 2);
+      ctx.fillStyle = "#ff8fb1";
+      ctx.fillRect(x - 2, y - 9, 2, 2);
+      ctx.fillRect(x + 1, y - 10, 2, 2);
+    }
+  }
+
+  /** An aluminium ladder from the floor up the wall. */
+  private drawLadder(ctx: CanvasRenderingContext2D, x: number, floor: number, top: number): void {
+    ctx.fillStyle = "#6b7280";
+    ctx.fillRect(x - 5, top, 1, floor - top);
+    ctx.fillRect(x + 4, top, 1, floor - top);
+    ctx.fillStyle = "#c9ced6";
+    ctx.fillRect(x - 4, top, 1, floor - top);
+    ctx.fillRect(x + 5, top, 1, floor - top);
+    for (let ry = floor - 4; ry > top + 1; ry -= 5) {
+      ctx.fillStyle = "#9aa1ab";
+      ctx.fillRect(x - 3, ry, 7, 1);
+    }
+  }
+
+  private drawDeliveryBag(ctx: CanvasRenderingContext2D, x: number, y: number, food: string): void {
+    if (food === "pizza") {
+      // A stack of pizza boxes.
+      for (let i = 0; i < 3; i++) {
+        ctx.fillStyle = OUTLINE;
+        ctx.fillRect(x - 7, y - 17 - i * 3, 14, 4);
+        ctx.fillStyle = "#e9d3a8";
+        ctx.fillRect(x - 6, y - 16 - i * 3, 12, 2);
+        ctx.fillStyle = "#e5484d";
+        ctx.fillRect(x - 1, y - 16 - i * 3, 2, 1);
+      }
+      return;
+    }
+    // An insulated delivery bag.
+    ctx.fillStyle = OUTLINE;
+    ctx.fillRect(x - 7, y - 20, 14, 10);
+    ctx.fillStyle = food === "sushi" ? "#e5484d" : food === "ramen" ? "#3e8ed0" : "#30a46c";
+    ctx.fillRect(x - 6, y - 19, 12, 8);
+    ctx.fillStyle = "#fbfaf5";
+    ctx.fillRect(x - 3, y - 16, 6, 2);
+  }
+
+  private drawToolbox(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    ctx.fillStyle = OUTLINE;
+    ctx.fillRect(x - 5, y - 6, 10, 6);
+    ctx.fillRect(x - 2, y - 8, 4, 2);
+    ctx.fillStyle = "#e5484d";
+    ctx.fillRect(x - 4, y - 5, 8, 4);
+    ctx.fillStyle = "#ff8a8d";
+    ctx.fillRect(x - 4, y - 5, 8, 1);
+    ctx.fillStyle = "#c9ced6";
+    ctx.fillRect(x - 1, y - 7, 2, 1);
   }
 
   /** Blinking drive lights, GPU fans and a cool glow in the server room. */
@@ -2489,11 +3628,42 @@ export class World {
       pose = Math.floor(t * 3) % 2 ? "draw0" : "draw1";
       facing = "left";
     }
-    const sprite = charSprite({ look: n.look, facing, pose, expr: Math.floor(t * 10) % 37 === 0 ? "blink" : "open", emblem: n.kind === "guard" ? "badge" : "broom" });
-    ctx.fillStyle = "rgba(40,20,30,0.18)";
-    ctx.fillRect(Math.round(n.x - 5), Math.round(n.y - 1), 10, 2);
+    const climb = this.climbOf(n);
+    if (n.kind === "technician" && !walking && n.job) {
+      facing = n.job.facing;
+      const up = n.job.kind === "bulb" && climb > 0 && climb < this.climbMax(n);
+      const atTop = n.job.kind === "bulb" && climb >= this.climbMax(n);
+      pose = up
+        ? (`walk${Math.floor(t * 6) % 4}` as CharPose)
+        : atTop
+          ? Math.floor(t * 2) % 2
+            ? "raise"
+            : "cheer"
+          : n.job.kind === "pc"
+            ? Math.floor(t * 5) % 2
+              ? "type1"
+              : "type0"
+            : Math.floor(t * 3) % 2
+              ? "draw0"
+              : "draw1";
+    }
+    const emblem = n.kind === "guard" ? "badge" : n.kind === "technician" ? "wrench" : n.kind === "delivery" ? "food" : "broom";
+    const sprite = charSprite({ look: n.look, facing, pose, expr: Math.floor(t * 10) % 37 === 0 ? "blink" : "open", emblem });
     const x = Math.round(n.x);
     const y = Math.round(n.y);
+    if (n.kind === "technician") {
+      if (!walking && n.job?.kind === "bulb") {
+        const seg = this.L!.segments.find((sg) => n.x >= sg.x0 && n.x < sg.x1);
+        this.drawLadder(ctx, x, y, Math.max(6, (seg?.depth ?? 64) - 52));
+      }
+      if (!walking && n.job) this.drawToolbox(ctx, x + (n.job.facing === "left" ? -11 : 11), y + (n.job.kind === "bulb" ? 0 : 1));
+    }
+    ctx.fillStyle = "rgba(40,20,30,0.18)";
+    ctx.fillRect(Math.round(n.x - 5), Math.round(n.y - 1), 10, 2);
+    if (climb > 0) {
+      ctx.drawImage(sprite, x - ANCHOR_X, y - climb - ANCHOR_Y);
+      return;
+    }
     if (n.kind === "janitor") {
       // Wet-floor sign and bucket while mopping.
       if (!walking) {
@@ -2519,6 +3689,22 @@ export class World {
       ctx.fillRect(x - 7, y - 1, 2, 1);
     }
     ctx.drawImage(sprite, x - ANCHOR_X, y - ANCHOR_Y);
+    if (n.kind === "delivery") {
+      // The order, carried in front until it's on the table.
+      const ev = this.event;
+      if (ev?.kind === "lunch" && !ev.delivered) this.drawDeliveryBag(ctx, x, y, ev.food ?? "pizza");
+      return;
+    }
+    if (n.kind === "technician") {
+      // Carrying the ladder between jobs.
+      if (walking && n.jobs.some((j) => j?.kind === "bulb")) {
+        ctx.fillStyle = "#9aa1ab";
+        ctx.fillRect(x - 13, y - 19, 26, 1);
+        ctx.fillRect(x - 13, y - 16, 26, 1);
+        for (let lx = x - 12; lx < x + 13; lx += 5) ctx.fillRect(lx, y - 18, 1, 2);
+      } else if (walking) this.drawToolbox(ctx, x + (facing === "left" ? -6 : 6), y - 7);
+      return;
+    }
     if (n.kind === "janitor") {
       const sway = walking ? 0 : Math.round(Math.sin(t * 6) * 2);
       const hx = facing === "right" ? x + 6 : x - 6;
@@ -2681,6 +3867,74 @@ export class World {
       }
       default:
         break;
+    }
+  }
+
+  /** A crashed computer: a blue screen, then a progress bar while it's fixed. */
+  private drawBrokenScreen(ctx: CanvasRenderingContext2D, r: Rect, index: number): void {
+    const { x, y, w, h } = r;
+    const fixing = this.npcs.find((n) => n.kind === "technician" && n.job?.kind === "pc" && n.job.desk === index && n.path.length === 0 && n.pause > 0);
+    ctx.fillStyle = "#2b62d9";
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = "#ffffff";
+    if (fixing) {
+      const k = 1 - fixing.pause / fixing.jobDur;
+      ctx.fillRect(x + 1, y + Math.floor(h / 2), Math.max(1, Math.round((w - 2) * k)), 1);
+      return;
+    }
+    // :(
+    const cx = x + Math.floor(w / 2);
+    const cy = y + Math.floor(h / 2);
+    ctx.fillRect(cx - 2, cy - 2, 1, 1);
+    ctx.fillRect(cx + 1, cy - 2, 1, 1);
+    ctx.fillRect(cx - 2, cy + 1, 4, 1);
+    if (Math.floor(this.time * 2) % 2) ctx.fillRect(cx - 3, cy + 2, 1, 1);
+  }
+
+  /** A breeze through a window you opened. */
+  private drawOpenWindows(ctx: CanvasRenderingContext2D): void {
+    const t = this.time;
+    for (const [i, win] of this.L!.wall.windows.entries()) {
+      const left = (this.anim.get(`window-${i}`) ?? 0) - t;
+      if (left <= 0) continue;
+      const k = Math.min(1, left / 1.5, (5 - left) * 3);
+      // The lower pane slid up.
+      ctx.fillStyle = `rgba(250,246,236,${0.85 * k})`;
+      ctx.fillRect(win.x + 1, win.y + Math.floor(win.h / 2) - 1, win.w - 2, 2);
+      ctx.fillStyle = `rgba(255,255,255,${0.5 * k})`;
+      for (let j = 0; j < 3; j++) {
+        const p = (t * 0.6 + j / 3) % 1;
+        const wx = win.x + 8 + j * 12 + Math.round(Math.sin(t * 3 + j) * 2);
+        const wy = win.y + win.h + 2 + Math.round(p * 20);
+        ctx.globalAlpha = (1 - p) * k;
+        ctx.fillRect(wx, wy, 4, 1);
+        ctx.fillRect(wx + 3, wy + 1, 3, 1);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  /** The zap: a white flash over everything and arcs around whoever touched the cables. */
+  private drawZap(ctx: CanvasRenderingContext2D): void {
+    const L = this.L!;
+    const t = this.time;
+    if (t < this.flashUntil) {
+      ctx.fillStyle = `rgba(230,244,255,${0.55 * ((this.flashUntil - t) / 0.4)})`;
+      ctx.fillRect(0, 0, L.W, L.H);
+    }
+    const m = this.mishap;
+    if (!m || m.phase !== "zap") return;
+    const a = this.agents.get(m.id);
+    if (!a) return;
+    ctx.fillStyle = Math.floor(t * 20) % 2 ? "#ffffff" : "#9fe8ff";
+    for (let arc = 0; arc < 3; arc++) {
+      let x = a.x + (this.rand() - 0.5) * 6;
+      let y = a.y - 26;
+      for (let i = 0; i < 7; i++) {
+        x += (this.rand() - 0.5) * 8;
+        y += 3 + this.rand() * 2;
+        ctx.fillRect(Math.round(x + (arc - 1) * 7), Math.round(y), 1, 2);
+      }
     }
   }
 
@@ -3098,7 +4352,16 @@ export class World {
         ctx.fillRect(s.x, s.y, 1, 1);
       }
     }
-    if (index === 0) {
+    const wx = env.weather;
+    const overcast = wx !== "clear" && wx !== "partly";
+    if (overcast) {
+      // Grey it over.
+      const heavy = wx === "storm" ? 0.72 : wx === "rain" ? 0.62 : 0.5;
+      const tint = wx === "storm" ? "62,70,92" : wx === "rain" ? "104,114,134" : wx === "snow" ? "176,186,200" : "150,158,172";
+      ctx.fillStyle = sky.night > 0.5 ? "rgba(30,32,48,0.5)" : `rgba(${tint},${heavy})`;
+      ctx.fillRect(x, y, w, h);
+    }
+    if (index === 0 && !overcast) {
       const dayK = (env.hour - 6) / 13;
       if (dayK > 0 && dayK < 1 && sky.night < 0.7) {
         const sx = x + 8 + dayK * (w - 16);
@@ -3118,12 +4381,15 @@ export class World {
       }
     }
     const cloud = mix(sky.night > 0.5 ? "#3a3d6a" : "#ffffff", sky.bottom, 0.15);
-    for (let i = 0; i < 3; i++) {
-      const cx = x + ((t * (1.2 + i * 0.5) + i * 40 + index * 23) % (w + 30)) - 15;
-      const cy = y + 6 + i * 7;
-      ctx.fillStyle = env.rainy ? mix(cloud, "#7a8094", 0.6) : cloud;
-      ctx.fillRect(Math.round(cx), cy, 12, 3);
-      ctx.fillRect(Math.round(cx + 3), cy - 2, 6, 2);
+    const clouds = wx === "clear" ? 2 : wx === "partly" ? 3 : 5;
+    const dark = wx === "rain" || wx === "storm" ? 0.7 : overcast ? 0.45 : 0;
+    for (let i = 0; i < clouds; i++) {
+      const cx = x + ((t * (1.2 + (i % 3) * 0.5) + i * 40 + index * 23) % (w + 30)) - 15;
+      const cy = y + 5 + (i % 3) * 7 + (i >= 3 ? 3 : 0);
+      const big = overcast ? 4 : 0;
+      ctx.fillStyle = dark > 0 ? mix(cloud, "#6f7588", dark) : cloud;
+      ctx.fillRect(Math.round(cx - big), cy, 12 + big * 2, 3 + (big ? 1 : 0));
+      ctx.fillRect(Math.round(cx + 3 - big / 2), cy - 2, 6 + big, 2);
     }
     const city = mix("#4a5f7a", sky.top, 0.35);
     const lit = sky.night > 0.45;
@@ -3142,7 +4408,7 @@ export class World {
         }
       }
     }
-    if (sky.night < 0.3 && index === 0) {
+    if (sky.night < 0.3 && index === 0 && (wx === "clear" || wx === "partly" || wx === "cloudy")) {
       const bp = (t * 9) % 260;
       if (bp < w + 10) {
         const bx = x + bp - 5;
@@ -3155,17 +4421,50 @@ export class World {
       }
     }
     if (this.season) paintSeasonSky(ctx, this.season, win, index, t, sky.night);
-    if (env.rainy && this.season !== "holidays") {
-      ctx.fillStyle = "rgba(200,225,255,0.65)";
-      for (let i = 0; i < Math.round(w / 2.5); i++) {
-        ctx.fillRect(x + ((i * 17 + Math.floor(t * 30)) % w), y + ((i * 11 + Math.floor(t * 70)) % h), 1, 2);
+    if (wx === "fog") {
+      ctx.fillStyle = sky.night > 0.5 ? "rgba(120,124,140,0.55)" : "rgba(226,230,236,0.62)";
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = sky.night > 0.5 ? "rgba(150,154,170,0.35)" : "rgba(245,247,250,0.5)";
+      for (let i = 0; i < 3; i++) ctx.fillRect(x + ((Math.floor(t * 2) + i * 17) % (w + 20)) - 20, y + 8 + i * 9, 26, 3);
+    }
+    if ((wx === "rain" || wx === "drizzle" || wx === "storm") && this.season !== "holidays") {
+      ctx.fillStyle = "rgba(220,236,255,0.9)";
+      const n = wx === "drizzle" ? w / 6 : wx === "storm" ? w / 1.8 : w / 2.5;
+      const slant = wx === "storm" ? 1 : 0;
+      for (let i = 0; i < Math.round(n); i++) {
+        const rx = x + ((i * 17 + Math.floor(t * 30)) % w);
+        const ry = y + ((i * 11 + Math.floor(t * (wx === "drizzle" ? 45 : 70))) % h);
+        ctx.fillRect(rx, ry, 1, wx === "drizzle" ? 1 : 2);
+        if (slant) ctx.fillRect(rx - 1, ry + 2, 1, 1);
+      }
+    }
+    if (wx === "snow" && this.season !== "holidays" && this.season !== "snowday") {
+      ctx.fillStyle = "#ffffff";
+      for (let i = 0; i < Math.round(w / 3); i++) {
+        const fx = x + ((i * 13 + Math.round(Math.sin(t * 0.8 + i) * 2)) % w + w) % w;
+        const fy = y + ((i * 7 + Math.floor(t * 9)) % h);
+        ctx.fillRect(fx, fy, 1, 1);
+      }
+    }
+    // Lightning
+    const bolt = t - this.lightningAt;
+    if (wx === "storm" && bolt >= 0 && bolt < 0.22) {
+      ctx.fillStyle = `rgba(255,255,255,${0.75 * (1 - bolt / 0.22)})`;
+      ctx.fillRect(x, y, w, h);
+      if (index === 0) {
+        ctx.fillStyle = "#fffbe0";
+        let bx = x + w * 0.6;
+        for (let by = y; by < y + h - 8; by += 3) {
+          bx += hash(`bolt${Math.floor(this.lightningAt)}-${by}`) % 3 - 1;
+          ctx.fillRect(Math.round(bx), by, 1, 3);
+        }
       }
     }
   }
 
   private drawSunbeam(ctx: CanvasRenderingContext2D, env: Env): void {
     const sky = this.skyColors(env.hour);
-    if (sky.night > 0.5 || env.rainy) return;
+    if (sky.night > 0.5 || (env.weather !== "clear" && env.weather !== "partly")) return;
     const L = this.L!;
     const strength = (1 - sky.night) * 0.13;
     for (const win of L.wall.windows) {
@@ -3190,7 +4489,9 @@ export class World {
   }
 
   private drawStringLights(ctx: CanvasRenderingContext2D, env: Env, glowPass: boolean): void {
-    const night = this.skyColors(env.hour).night;
+    const night0 = this.skyColors(env.hour).night;
+    const party = (this.anim.get("lights") ?? 0) > this.time;
+    const night = party ? Math.max(night0, 0.7) : night0;
     const colors = ["#ffd27a", "#ff9fb2", "#9fd8ff", "#b6f5a0"];
     let n = 0;
     for (const seg of this.L!.segments) {
@@ -3206,8 +4507,9 @@ export class World {
           }
           if ((x - x0) % 10 === 5) {
             const c = colors[n++ % colors.length]!;
-            const on = night > 0.3;
-            const tw = 0.65 + 0.35 * Math.sin(this.time * 1.3 + n * 1.7);
+            const dead = this.brokenBulbX === x && Math.floor(this.time * 9) % 7 !== 0;
+            const on = night > 0.3 && !dead;
+            const tw = party ? ((n + Math.floor(this.time * 8)) % 4 === 0 ? 1 : 0.3) : 0.65 + 0.35 * Math.sin(this.time * 1.3 + n * 1.7);
             if (glowPass) {
               if (!on) continue;
               const g = ctx.createRadialGradient(x + 0.5, y + 2.5, 0, x + 0.5, y + 2.5, 6);
@@ -3218,7 +4520,7 @@ export class World {
               ctx.fillStyle = c;
               ctx.fillRect(x, y + 1, 1, 2);
             } else {
-              ctx.fillStyle = on ? c : mix(c, "#6b5a5a", 0.45);
+              ctx.fillStyle = dead ? "#5a5050" : on ? c : mix(c, "#6b5a5a", 0.45);
               ctx.fillRect(x, y + 1, 1, 2);
             }
           }
@@ -3332,7 +4634,8 @@ export class World {
   private drawLighting(ctx: CanvasRenderingContext2D, env: Env, desks: Map<number, Agent>): void {
     const L = this.L!;
     const sky = this.skyColors(env.hour);
-    const darkness = sky.night * 0.5 + (env.rainy ? 0.08 : 0);
+    const gloom = env.weather === "storm" ? 0.13 : env.weather === "rain" || env.weather === "fog" || env.weather === "snow" ? 0.08 : env.weather === "clear" || env.weather === "partly" ? 0 : 0.05;
+    const darkness = sky.night * 0.5 + gloom;
     if (darkness < 0.02) return;
     const d = this.dark!;
     const dc = d.getContext("2d")!;
@@ -3384,6 +4687,11 @@ export class World {
       }
     }
     if (L.server) lights.push([L.server.x + L.server.w / 2, L.server.y + L.server.h / 2, Math.max(36, L.server.w * 0.6), 0.9, "#7fb8ff", 0.24]);
+    const zapped = this.mishap?.phase === "zap" ? this.agents.get(this.mishap.id) : undefined;
+    if (zapped) lights.push([zapped.x, zapped.y - 14, 46, 1, "#bfeaff", 0.45]);
+    for (const n of this.npcs) {
+      if (n.kind === "technician" && this.climbOf(n) > 0) lights.push([n.x, n.y - this.climbOf(n) - 20, 20, 0.8, "#fff3c0", 0.12]);
+    }
     const espresso = L.pokeables.find((q) => q.id === "coffee");
     if (espresso) lights.push([espresso.rect.x + 13, espresso.rect.y + 10, 12, 0.7, "#5ad18a", 0.12]);
     if (this.season) lights.push(...seasonLights(L, this.season));

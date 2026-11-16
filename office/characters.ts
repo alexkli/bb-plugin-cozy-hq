@@ -122,11 +122,13 @@ export const EMBLEMS: Record<string, string[]> = {
   tie: ["..#..", ".###.", "..#..", ".###.", ".###."],
   badge: [".###.", "#####", "##.##", "#####", ".###."],
   broom: ["....#", "...#.", "..#..", "####.", "####."],
+  wrench: ["#.#..", "###..", ".##..", "..##.", "...##"],
+  food: ["..#..", ".###.", "#####", ".....", "#####"],
   kid: ["#...#", ".#.#.", "..#..", ".#.#.", "#...#"],
 };
 
 /** Looks for the people who aren't threads: you, the guard, the cleaner. */
-export function npcLook(kind: "boss" | "guard" | "janitor"): Look {
+export function npcLook(kind: "boss" | "guard" | "janitor" | "technician" | "delivery"): Look {
   switch (kind) {
     case "boss":
       return { key: "npc-boss", skin: "#f1c7a4", hair: "#4a2f22", hairStyle: "crop", shirt: "#2f3a5a", pants: "#2a2a34", accessory: "glasses", accent: "#e5484d" };
@@ -134,7 +136,41 @@ export function npcLook(kind: "boss" | "guard" | "janitor"): Look {
       return { key: "npc-guard", skin: "#c98a5e", hair: "#2b1d16", hairStyle: "cap", shirt: "#3a4a6b", pants: "#2a2f40", accessory: "none", accent: "#2a2f40" };
     case "janitor":
       return { key: "npc-janitor", skin: "#e7b08a", hair: "#6b4128", hairStyle: "cap", shirt: "#3e8e78", pants: "#2f6b5a", accessory: "none", accent: "#f2c14e" };
+    case "delivery":
+      // Cap and a bright courier jacket.
+      return { key: "npc-delivery", skin: "#b9805a", hair: "#e5484d", hairStyle: "cap", shirt: "#e5484d", pants: "#2a2f40", accessory: "none", accent: "#ffcf4a" };
+    case "technician":
+      // Hard hat and overalls.
+      return { key: "npc-technician", skin: "#d9a07a", hair: "#ffc83d", hairStyle: "cap", shirt: "#ff8a3d", pants: "#2f4f8f", accessory: "none", accent: "#ffc83d" };
   }
+}
+
+/**
+ * A cartoon skeleton in the 20×28 character grid, arms up (the "cheer"
+ * pose): drawn over a blue silhouette for the x-ray flash.
+ */
+export function skeletonSprite(): HTMLCanvasElement {
+  return cache.get("skeleton", () => {
+    const g = new Grid(CHAR_W, CHAR_H);
+    const bone = "#f4f6ff";
+    const dim = "#c9d2f0";
+    const hole = "#101634";
+    // Skull and jaw
+    g.rect(7, 4, 6, 1, bone).rect(6, 5, 8, 5, bone).rect(7, 10, 6, 1, bone).rect(8, 11, 4, 1, dim);
+    g.rect(7, 6, 2, 2, hole).rect(11, 6, 2, 2, hole).set(10, 8, hole);
+    g.set(8, 10, hole).set(10, 10, hole).set(12, 10, hole);
+    // Spine, ribs, pelvis
+    g.rect(9, 12, 2, 9, dim);
+    g.rect(6, 14, 8, 1, bone).rect(6, 16, 8, 1, bone).rect(7, 18, 6, 1, bone);
+    g.rect(6, 20, 8, 1, bone).set(6, 21, bone).set(13, 21, bone);
+    // Legs and feet
+    g.rect(6, 22, 1, 4, bone).rect(12, 22, 1, 4, bone);
+    g.rect(5, 26, 3, 1, bone).rect(11, 26, 3, 1, bone);
+    // Arms up
+    g.set(5, 14, bone).set(4, 14, bone).set(3, 13, bone).rect(2, 9, 1, 4, bone).rect(1, 8, 3, 1, dim);
+    g.set(14, 14, bone).set(15, 14, bone).set(16, 13, bone).rect(17, 9, 1, 4, bone).rect(16, 8, 3, 1, dim);
+    return g;
+  });
 }
 
 /** Sprite canvas size; feet baseline sits at row ANCHOR_Y. */

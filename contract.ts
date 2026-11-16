@@ -49,6 +49,21 @@ export type InboxItem = z.infer<typeof inboxItemSchema>;
 
 export const interactionKindSchema = z.enum(["question", "plan", "approval"]);
 
+/** The weather outside, simplified for the office windows. */
+export const weatherKindSchema = z.enum(["clear", "partly", "cloudy", "fog", "drizzle", "rain", "snow", "storm"]);
+export type WeatherKind = z.infer<typeof weatherKindSchema>;
+
+export const weatherSchema = z.object({
+  enabled: z.boolean(),
+  /** Where the weather is for, e.g. "Basel". */
+  place: z.string().nullable(),
+  kind: weatherKindSchema.nullable(),
+  tempC: z.number().nullable(),
+  isDay: z.boolean().nullable(),
+  updatedAt: z.number(),
+});
+export type Weather = z.infer<typeof weatherSchema>;
+
 export const rpcContract = defineRpcContract({
   threadInfo: {
     input: z.object({
@@ -71,6 +86,14 @@ export const rpcContract = defineRpcContract({
   news: {
     input: z.null(),
     output: z.object({ enabled: z.boolean(), stories: z.array(storySchema), updatedAt: z.number() }),
+  },
+  weather: {
+    input: z.null(),
+    output: weatherSchema,
+  },
+  recap: {
+    input: z.object({ threadIds: z.array(z.string()).max(6) }),
+    output: z.object({ enabled: z.boolean(), recaps: z.record(z.string(), z.string()) }),
   },
   inbox: {
     input: z.null(),
