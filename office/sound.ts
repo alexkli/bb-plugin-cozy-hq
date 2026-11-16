@@ -72,8 +72,17 @@ export type SoundName =
 /** Quiet background sounds play softer than event sounds. */
 const AMBIENT = new Set<SoundName>(["pingpong", "bubble", "coffee", "roomba", "purr", "door", "marker", "toss", "giggle", "whistle", "walkie", "wrench", "drill", "fixed"]);
 
+/** Building blocks a theme's sound recipes use. */
+export interface Synth {
+  tone(freq: number, start: number, dur: number, type: OscillatorType, vol: number, slideTo?: number): void;
+  noise(start: number, dur: number, vol: number, filterHz: number): void;
+  swell(start: number, dur: number, vol: number, fromHz: number, toHz: number, q?: number, type?: BiquadFilterType): void;
+}
+
 export class Sound {
   private ctx: AudioContext | null = null;
+  /** Extra sounds from the scenery, by name. */
+  private recipes = new Map<string, (k: Synth) => void>();
   private master: GainNode | null = null;
   private volume = 0.5;
   private enabled = true;
@@ -115,19 +124,24 @@ export class Sound {
    * Play a sound. `ambient` marks background life (softer, muted by the
    * ambient toggle); it defaults to the sound's usual role. Clicks pass false.
    */
-  play(name: SoundName, ambient?: boolean): void {
+  /** Sounds the current scenery brings along (replaces the previous set). */
+  setRecipes(recipes: Record<string, (k: Synth) => void> | undefined): void {
+    this.recipes = new Map(Object.entries(recipes ?? {}));
+  }
+
+  play(name: SoundName | (string & {}), ambient?: boolean): void {
     if (!this.enabled || this.volume <= 0) return;
-    const background = ambient ?? AMBIENT.has(name);
+    const background = ambient ?? AMBIENT.has(name as SoundName);
     if (!this.ambient && background) return;
     const ctx = this.ctx;
     const out = this.master;
     if (!ctx || !out || ctx.state !== "running") return;
     const now = ctx.currentTime;
     // Rate limit each sound so bursts don't pile up.
-    const prev = this.lastPlayed.get(name) ?? -1;
+    const prev = this.lastPlayed.get(name as SoundName) ?? -1;
     const minGap = name === "pingpong" ? 0.3 : name === "click" ? 0.03 : 0.25;
     if (now - prev < minGap) return;
-    this.lastPlayed.set(name, now);
+    this.lastPlayed.set(name as SoundName, now);
     this.lastAt = performance.now();
     const amb = background ? 0.35 : 1;
 
@@ -189,7 +203,12 @@ export class Sound {
       src.start(now + start);
     };
 
-    switch (name) {
+    const custom = this.recipes.get(name);
+    if (custom) {
+      custom({ tone, noise, swell });
+      return;
+    }
+    switch (name as SoundName) {
       case "birds":
         // A breezy day: a couple of birds and the city far off.
         swell(0, 2.4, 0.03, 300, 380, 0.5, "lowpass");

@@ -29,6 +29,8 @@ import { chairCanvas, deskCanvas, screenFor, type ChairTone } from "./desks.ts";
 import { hash, mix, rng } from "./pixel.ts";
 import { drawPixelText, pixelTextWidth } from "./pixelfont.ts";
 import type { SoundName } from "./sound.ts";
+import { CLASSIC } from "./themes/classic.ts";
+import type { Light, PaintInfo, Theme, VisitorKind } from "./theme.ts";
 import {
   drawAccessory,
   drawCarriedLantern,
@@ -85,7 +87,7 @@ export interface SeenState {
 }
 
 /** Sound callback; `ambient` marks background life rather than a reaction to a click. */
-export type Emit = (sound: SoundName, ambient?: boolean) => void;
+export type Emit = (sound: SoundName | (string & {}), ambient?: boolean) => void;
 
 export type NpcKind = "guard" | "janitor" | "technician" | "delivery";
 
@@ -408,6 +410,9 @@ export class World {
   eventVersion = 0;
 
   private layoutKey = "";
+  /** How the office looks (the scenery), and sprites dressed by it. */
+  private theme: Theme = CLASSIC;
+  private themed = new Map<string, unknown>();
 
   constructor(emit: Emit) {
     this.emit = emit;
@@ -442,6 +447,55 @@ export class World {
     return a.target ?? a.spot?.id ?? null;
   }
 
+  /** Dress the office as another place; everyone stays where they are. */
+  setTheme(theme: Theme): void {
+    if (theme === this.theme) return;
+    this.theme = theme;
+    this.themed.clear();
+    const L = this.L;
+    if (!L) return;
+    this.bg = paintBackground(L, theme);
+    this.props = buildProps(L, theme);
+  }
+
+  get scenery(): Theme {
+    return this.theme;
+  }
+
+  /** A sprite dressed by the theme, built once per theme. */
+  private dressed<T>(key: string, build: () => T): T {
+    let v = this.themed.get(key) as T | undefined;
+    if (v === undefined) {
+      v = build();
+      this.themed.set(key, v);
+    }
+    return v;
+  }
+
+  /** A look in the scenery's outfit (cached; the key keeps sprite caches apart). */
+  private lookOf(base: Look, id: string): Look {
+    const fn = this.theme.look;
+    if (!fn) return base;
+    return this.dressed(`look|${id}|${base.key}`, () => {
+      const l = fn(base, id);
+      return l.key === base.key ? { ...l, key: `${base.key}|${this.theme.id}` } : l;
+    });
+  }
+
+  private npcLookOf(kind: VisitorKind): Look {
+    const base = npcLook(kind);
+    const fn = this.theme.npc;
+    if (!fn) return base;
+    return this.dressed(`npc|${kind}`, () => {
+      const l = fn(kind, base);
+      return l.key === base.key ? { ...l, key: `${base.key}|${this.theme.id}` } : l;
+    });
+  }
+
+  private paintInfo(env: Env): PaintInfo {
+    return { t: this.time, hour: env.hour, night: this.skyColors(env.hour).night, weather: env.weather, date: env.date, season: this.season };
+  }
+
   /** Who supplies the small talk. */
   setTalk(talk: Talk | null): void {
     this.talk = talk;
@@ -459,8 +513,8 @@ export class World {
     this.layoutKey = key;
     const first = this.L === null;
     this.L = L;
-    this.bg = paintBackground(L);
-    this.props = buildProps(L);
+    this.bg = paintBackground(L, this.theme);
+    this.props = buildProps(L, this.theme);
     this.dark = document.createElement("canvas");
     this.dark.width = L.W;
     this.dark.height = L.H;
@@ -675,9 +729,9 @@ export class World {
           huddle: null,
           slow: false,
           // Everyone walks a little differently: their own lane, corner cutting and pace.
-          lane: { x: ((hash(t.id) >> 2) % 11) - 5, y: ((hash(t.id) >> 6) % 9) - 4 },
-          cut: 7 + ((hash(t.id) >> 9) % 10),
-          sway: 1 + ((hash(t.id) >> 13) % 4),
+          lane: { x: ((hash(t.id) >>> 2) % 11) - 5, y: ((hash(t.id) >>> 6) % 9) - 4 },
+          cut: 7 + ((hash(t.id) >>> 9) % 10),
+          sway: 1 + ((hash(t.id) >>> 13) % 4),
         };
         this.agents.set(t.id, a);
         const was = lastSeen?.get(t.id);
@@ -938,8 +992,9 @@ export class World {
     this.anim.set(`window-${index}`, t + 5);
     const night = this.skyColors(this.hour).night > 0.5;
     const wx = this.weather;
-    const sound: SoundName =
+    const classic: SoundName =
       wx === "storm" ? "thunder" : wx === "rain" || wx === "drizzle" ? "rainfall" : wx === "snow" || wx === "cloudy" ? "wind" : wx === "fog" ? "foghorn" : night ? "crickets" : "birds";
+    const sound = this.theme.outdoor?.(wx, night) ?? classic;
     this.emit(sound, false);
     const seg = L.segments.find((sg) => win.x >= sg.x0 && win.x < sg.x1);
     const sill = win.y + win.h + 1;
@@ -1128,7 +1183,7 @@ export class World {
     this.time += dt;
     const t = this.time;
     for (const a of [...this.agents.values()]) {
-      if (a.path.length > 0 && step(a, dt, a.slow ? SLOW_SPEED : WALK_SPEED * (0.82 + ((a.seed >> 11) % 36) / 100))) {
+      if (a.path.length > 0 && step(a, dt, a.slow ? SLOW_SPEED : WALK_SPEED * (0.82 + ((a.seed >>> 11) % 36) / 100))) {
         if (a.leaving) {
           this.agents.delete(a.id);
           this.doorOpenUntil = this.time + 1.2;
@@ -1143,7 +1198,7 @@ export class World {
       }
       if (t > a.nextBlink) {
         a.blinkUntil = t + 0.14;
-        a.nextBlink = t + 2.5 + ((a.seed >> 3) % 40) / 10 + this.rand() * 2;
+        a.nextBlink = t + 2.5 + ((a.seed >>> 3) % 40) / 10 + this.rand() * 2;
       }
       if (a.spot && a.path.length === 0) this.agentLife(a, dt);
       if (a.thread.mood === "error" && a.path.length === 0 && this.rand() < dt * 5) {
@@ -1288,7 +1343,7 @@ export class World {
     }
     if (byHand && this.wipeUntil > t) return;
     const kinds: Stroke["kind"][] = ["box", "box", "arrow", "line", "note", "check", "circle", "line"];
-    const colors = ["#3e8ed0", "#e5484d", "#30a46c", "#3a3046"];
+    const colors = this.theme.boardInk ?? ["#3e8ed0", "#e5484d", "#30a46c", "#3a3046"];
     const kind = kinds[Math.floor(this.rand() * kinds.length)]!;
     const iw = b.w - 10;
     const ih = 30 - 10;
@@ -1586,7 +1641,7 @@ export class World {
     const n: Npc = {
       id: `${kind}-${Math.floor(this.time)}`,
       kind,
-      look: npcLook(kind),
+      look: this.npcLookOf(kind),
       x: L.entrance.x,
       y: L.entrance.y,
       path: [],
@@ -2914,6 +2969,8 @@ export class World {
     ctx.clearRect(0, 0, L.W, L.H);
     this.drawSky(ctx, env);
     ctx.drawImage(this.bg, 0, 0);
+    const info = this.paintInfo(env);
+    this.theme.underlay?.(ctx, L, info);
     this.drawSunbeam(ctx, env);
     this.drawOpenWindows(ctx);
     this.drawStringLights(ctx, env, false);
@@ -2962,9 +3019,12 @@ export class World {
     for (const d of L.desks) {
       const who = owner.get(d.spot.id);
       const style: DeskStyle = who?.thread.deskStyle ?? "default";
-      const desk = deskCanvas(style);
-      const chair = chairCanvas(who?.thread.chairTone ?? "green", d.side);
-      const scr = screenFor(style, d.side, d.index, atDesk.get(d.index)?.thread.visionPro === true);
+      const th = this.theme;
+      const desk = this.dressed(`desk|${style}`, () => th.desk?.(style, () => deskCanvas(style)) ?? deskCanvas(style));
+      const tone = who?.thread.chairTone ?? "green";
+      const chair = this.dressed(`chair|${tone}|${d.side}`, () => th.chair?.(tone, d.side, () => chairCanvas(tone, d.side)) ?? chairCanvas(tone, d.side));
+      const vision = atDesk.get(d.index)?.thread.visionPro === true;
+      const scr = this.dressed(`screen|${style}|${d.side}|${d.index % 9}|${vision}`, () => th.screen?.(style, d.side, d.index, vision, () => screenFor(style, d.side, d.index, vision)) ?? screenFor(style, d.side, d.index, vision));
       const seated = atDesk.get(d.index);
       const plant = hash(`desk-plant-${d.index}`) % 3 === 0 ? hash(`plant-kind-${d.index}`) : -1;
       items.push({ z: d.y + 26, draw: () => ctx.drawImage(desk, d.x, d.y) });
@@ -2990,6 +3050,7 @@ export class World {
     for (const n of this.npcs) items.push({ z: n.y + 0.5, draw: () => this.drawNpc(ctx, n) });
     for (const k of this.kids) items.push({ z: k.y + 0.4, draw: () => this.drawKid(ctx, k) });
     if (this.event) items.push(...eventDecor(ctx, this.event, this.time));
+    if (this.theme.decor) items.push(...this.theme.decor(ctx, L, info));
     const r = this.roomba;
     items.push({ z: r.y + 0.2, draw: () => ctx.drawImage(roombaSprite(), Math.round(r.x - 8), Math.round(r.y - 6)) });
     items.push({ z: this.cat.y + (this.cat.state === "ride" ? 3.5 : 0.3), draw: () => this.drawCat(ctx) });
@@ -3003,6 +3064,7 @@ export class World {
     this.drawBeachBall(ctx);
     this.drawLighting(ctx, env, atDesk);
     this.drawStringLights(ctx, env, true);
+    this.theme.overlay?.(ctx, L, info);
     this.drawZap(ctx);
     // Lightning outside lights up the room for an instant.
     const bolt = this.time - this.lightningAt;
@@ -3273,7 +3335,7 @@ export class World {
 
   private drawAgent(ctx: CanvasRenderingContext2D, a: Agent): void {
     const { pose, expr, facing, seated: onChair } = this.poseOf(a);
-    let sprite = charSprite({ look: a.thread.look, facing, pose, expr, emblem: a.thread.emblem, seated: onChair });
+    let sprite = charSprite({ look: this.lookOf(a.thread.look, a.id), facing, pose, expr, emblem: a.thread.emblem, seated: onChair });
     let y = this.drawY(a);
     const s = a.spot;
     const settled = this.settled(a);
@@ -3295,6 +3357,10 @@ export class World {
       ctx.fillRect(Math.round(a.x - 5), Math.round(a.y - 1), 10, 2);
     }
     ctx.drawImage(sprite, Math.round(a.x - ANCHOR_X), Math.round(y - ANCHOR_Y));
+    if (this.theme.dress && m?.phase !== "zap") {
+      const seatedNow = onChair === true || (settled && s !== null && SEATED_KINDS.has(s.kind));
+      this.theme.dress(ctx, { x: Math.round(a.x - ANCHOR_X), y: Math.round(y - ANCHOR_Y), facing, pose, seed: a.seed, seated: seatedNow, look: this.lookOf(a.thread.look, a.id) }, this.time);
+    }
     if (a.thread.isPinned) {
       ctx.fillStyle = "#ffd84a";
       ctx.fillRect(Math.round(a.x + 2), Math.round(y - ANCHOR_Y + 15), 2, 2);
@@ -3593,7 +3659,7 @@ export class World {
       ctx.fillStyle = "#7fd1ff";
       ctx.fillRect(px, py, w, 1);
       ctx.fillStyle = "#9fb6d6";
-      for (let row = 2; row < h - 1; row += 2) ctx.fillRect(px + 2, py + row, Math.max(2, ((a.seed >> row) % (w - 4)) + 2), 1);
+      for (let row = 2; row < h - 1; row += 2) ctx.fillRect(px + 2, py + row, Math.max(2, ((a.seed >>> row) % (w - 4)) + 2), 1);
       ctx.globalAlpha = 1;
     });
   }
@@ -3615,7 +3681,7 @@ export class World {
       pose = Math.floor(t * 5) % 2 ? "type1" : "type0";
       expr = Math.floor(t / 4) % 4 === 0 ? "open" : "focus";
     }
-    const sprite = charSprite({ look: npcLook("boss"), facing: "front", pose, expr, emblem: "tie" });
+    const sprite = charSprite({ look: this.npcLookOf("boss"), facing: "front", pose, expr, emblem: "tie" });
     ctx.drawImage(sprite, Math.round(x - ANCHOR_X), Math.round(y - ANCHOR_Y));
   }
 
@@ -3968,17 +4034,18 @@ export class World {
         }
         return;
       default: {
-        ctx.fillStyle = "#1f2a3c";
+        const sc = this.theme.screenColors;
+        ctx.fillStyle = sc?.bg ?? "#1f2a3c";
         ctx.fillRect(x, y, w, h);
-        const colors = ["#60c677", "#9ff0b0", "#7fd1ff", "#ffd479", "#c39bff"];
+        const colors = sc?.code ?? ["#60c677", "#9ff0b0", "#7fd1ff", "#ffd479", "#c39bff"];
         const scroll = Math.floor(t * 3 + (a.seed % 11));
         const rows = Math.max(1, Math.floor((h - 1) / 2));
         for (let row = 0; row < rows; row++) {
           const n = scroll + row;
           const rr = hash(`${a.id}:${n}`);
           const indent = (rr % 3) * (w > 12 ? 2 : 1);
-          const len = 2 + ((rr >> 4) % Math.max(1, w - 3 - indent));
-          ctx.fillStyle = colors[(rr >> 9) % colors.length]!;
+          const len = 2 + ((rr >>> 4) % Math.max(1, w - 3 - indent));
+          ctx.fillStyle = colors[(rr >>> 9) % colors.length]!;
           ctx.fillRect(x + 1 + indent, y + 1 + row * 2, Math.min(len, w - 2 - indent), 1);
         }
       }
@@ -4303,6 +4370,11 @@ export class World {
   // ------------------------------------------------------------------ scenery
 
   private skyColors(hour: number): { top: string; bottom: string; night: number } {
+    const classic = this.classicSky(hour);
+    return this.theme.sky ? this.theme.sky(hour, classic) : classic;
+  }
+
+  private classicSky(hour: number): { top: string; bottom: string; night: number } {
     const keys: [number, string, string, number][] = [
       [0, "#0d1030", "#1f2350", 1],
       [5, "#1a1f4a", "#3b3a6b", 0.9],
@@ -4391,6 +4463,17 @@ export class World {
       ctx.fillRect(Math.round(cx - big), cy, 12 + big * 2, 3 + (big ? 1 : 0));
       ctx.fillRect(Math.round(cx + 3 - big / 2), cy - 2, 6 + big, 2);
     }
+    if (this.theme.outside) {
+      this.theme.outside(ctx, win, index, { t, hour: env.hour, night: sky.night, weather: env.weather, date: env.date, season: this.season, sky, windows: this.L!.wall.windows });
+    } else this.paintCity(ctx, env, sky, win, index);
+    this.paintWeather(ctx, env, sky, win, index);
+  }
+
+  /** The classic view: a city skyline and a bird. */
+  private paintCity(ctx: CanvasRenderingContext2D, env: Env, sky: { top: string; bottom: string; night: number }, win: Rect, index: number): void {
+    const { x, y, w, h } = win;
+    const t = this.time;
+    const wx = env.weather;
     const city = mix("#4a5f7a", sky.top, 0.35);
     const lit = sky.night > 0.45;
     for (let bx = 0; bx < w; bx += 8) {
@@ -4420,6 +4503,13 @@ export class World {
         ctx.fillRect(Math.round(bx + 2), Math.round(by + flap), 1, 1);
       }
     }
+  }
+
+  /** Festival skies and the weather, in front of the view. */
+  private paintWeather(ctx: CanvasRenderingContext2D, env: Env, sky: { top: string; bottom: string; night: number }, win: Rect, index: number): void {
+    const { x, y, w, h } = win;
+    const t = this.time;
+    const wx = env.weather;
     if (this.season) paintSeasonSky(ctx, this.season, win, index, t, sky.night);
     if (wx === "fog") {
       ctx.fillStyle = sky.night > 0.5 ? "rgba(120,124,140,0.55)" : "rgba(226,230,236,0.62)";
@@ -4464,7 +4554,7 @@ export class World {
 
   private drawSunbeam(ctx: CanvasRenderingContext2D, env: Env): void {
     const sky = this.skyColors(env.hour);
-    if (sky.night > 0.5 || (env.weather !== "clear" && env.weather !== "partly")) return;
+    if (sky.night > 0.5 || (env.weather !== "clear" && env.weather !== "partly") || this.theme.lighting?.sunbeam === false) return;
     const L = this.L!;
     const strength = (1 - sky.night) * 0.13;
     for (const win of L.wall.windows) {
@@ -4491,6 +4581,10 @@ export class World {
   private drawStringLights(ctx: CanvasRenderingContext2D, env: Env, glowPass: boolean): void {
     const night0 = this.skyColors(env.hour).night;
     const party = (this.anim.get("lights") ?? 0) > this.time;
+    if (this.theme.wallLights) {
+      this.theme.wallLights(ctx, this.L!, { ...this.paintInfo(env), party, brokenBulbX: this.brokenBulbX }, glowPass);
+      return;
+    }
     const night = party ? Math.max(night0, 0.7) : night0;
     const colors = ["#ffd27a", "#ff9fb2", "#9fd8ff", "#b6f5a0"];
     let n = 0;
@@ -4565,7 +4659,7 @@ export class World {
 
   private drawSpeakers(ctx: CanvasRenderingContext2D, env: Env): void {
     const t = this.time;
-    const sprite = speakerSprite();
+    const sprite = this.dressed("speaker", () => this.theme.speaker?.(speakerSprite) ?? speakerSprite());
     for (const s of this.L!.speakers) {
       ctx.drawImage(sprite, s.x - 1, s.y - 1);
       const cx = s.x + Math.floor(s.w / 2);
@@ -4635,13 +4729,15 @@ export class World {
     const L = this.L!;
     const sky = this.skyColors(env.hour);
     const gloom = env.weather === "storm" ? 0.13 : env.weather === "rain" || env.weather === "fog" || env.weather === "snow" ? 0.08 : env.weather === "clear" || env.weather === "partly" ? 0 : 0.05;
-    const darkness = sky.night * 0.5 + gloom;
+    const classic = sky.night * 0.5 + gloom;
+    const lit = this.theme.lighting;
+    const darkness = lit?.darkness ? lit.darkness(sky.night, env.weather, classic) : classic;
     if (darkness < 0.02) return;
     const d = this.dark!;
     const dc = d.getContext("2d")!;
     dc.globalCompositeOperation = "source-over";
     dc.clearRect(0, 0, L.W, L.H);
-    dc.fillStyle = `rgba(16,14,44,${darkness})`;
+    dc.fillStyle = `rgba(${lit?.tint ?? "16,14,44"},${darkness})`;
     dc.fillRect(0, 0, L.W, L.H);
     dc.globalCompositeOperation = "destination-out";
     const hole = (x: number, y: number, r: number, k: number) => {
@@ -4651,7 +4747,6 @@ export class World {
       dc.fillStyle = g;
       dc.fillRect(x - r, y - r, r * 2, r * 2);
     };
-    type Light = [number, number, number, number, string, number];
     const flicker = 0.85 + Math.sin(this.time * 7) * 0.05 + Math.sin(this.time * 2.3) * 0.08;
     const tv = L.tv;
     const lights: Light[] = [
@@ -4701,6 +4796,7 @@ export class World {
         for (const a of this.eventPeople()) lights.push([a.x + (a.facing === "left" ? -12 : 12), a.y - 17, 18, 0.9, "#ffcf8a", 0.22]);
       }
     }
+    if (lit?.lights) lights.push(...lit.lights(L, this.paintInfo(env)));
     for (const [x, y, r, k] of lights) if (r > 0) hole(x, y, r, k);
     ctx.drawImage(d, 0, 0);
     ctx.save();

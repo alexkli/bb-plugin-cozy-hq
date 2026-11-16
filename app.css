@@ -765,6 +765,61 @@
 .chq-tag.is-read { font-weight: 500; background: #f6f1e7; }
 .chq-tag.is-read span { opacity: 0.85; }
 
+/* The scenery picker, next to the name tags switch. */
+.chq-scenery-btn {
+  position: absolute;
+  top: 8px;
+  right: 86px;
+  z-index: 9;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px 0 6px;
+  border: 1px solid #2a1e2e;
+  border-radius: 11px;
+  background: rgba(255, 250, 240, 0.82);
+  color: #2a1e2e;
+  font: 700 10px/1 var(--chq-mono);
+  cursor: pointer;
+  box-shadow: 1px 1px 0 rgba(42, 30, 46, 0.35);
+  opacity: 0.8;
+}
+.chq-scenery-btn:hover, .chq-scenery-btn.is-on { opacity: 1; background: #fffaf0; }
+.chq-scenery-pop {
+  position: absolute;
+  top: 36px;
+  right: 10px;
+  z-index: 12;
+  display: grid;
+  gap: 4px;
+  width: 270px;
+  padding: 6px;
+  border: 1px solid #2a1e2e;
+  border-radius: 8px;
+  background: #fffaf0;
+  box-shadow: 3px 3px 0 rgba(42, 30, 46, 0.3);
+}
+.chq-scenery-item {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 6px;
+  align-items: center;
+  padding: 5px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #2a1e2e;
+  text-align: left;
+  cursor: pointer;
+}
+.chq-scenery-item:hover { background: #f3ead8; }
+.chq-scenery-item.is-current { border-color: #2a1e2e; background: #fff3c4; }
+.chq-scenery-item i { grid-row: span 2; font-style: normal; font-size: 18px; text-align: center; }
+.chq-scenery-item b { font: 700 11px/1.2 var(--chq-mono); }
+.chq-scenery-item span { font: 400 10px/1.25 var(--chq-mono); opacity: 0.75; }
+
 /* The name tag switch, top right of the office. */
 .chq-labels-btn {
   position: absolute;

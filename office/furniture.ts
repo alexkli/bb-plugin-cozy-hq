@@ -8,6 +8,7 @@
 import { Grid, parseColor, shade, SpriteCache } from "./pixel.ts";
 import { OUTLINE } from "./characters.ts";
 import type { Layout, PropKind, PropPlacement, Rect } from "./layout.ts";
+import type { BackgroundSteps, Theme } from "./theme.ts";
 import { PIXEL_AGENTS } from "./pixelAgents.generated.ts";
 
 const cache = new SpriteCache();
@@ -851,69 +852,64 @@ function carpet(ctx: CanvasRenderingContext2D, r: Rect, edge: string, base: stri
   }
 }
 
-/** Bake the walls, floors and wall-mounted fixtures. Window panes stay transparent. */
-export function paintBackground(L: Layout): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = L.W;
-  canvas.height = L.H;
-  const ctx = canvas.getContext("2d")!;
-  ctx.imageSmoothingEnabled = false;
-  const W = L.W;
-  const H = L.H;
-
-  // Floor planks everywhere first.
-  for (let row = 0; row * 8 < H; row++) {
-    const y = row * 8;
-    rect(ctx, 0, y, W, 8, row % 2 ? "#c99a66" : "#c39260");
-    rect(ctx, 0, y + 7, W, 1, "#a87a4a");
-    const off = (row * 37) % 56;
-    for (let x = -off; x < W; x += 56) {
-      rect(ctx, x, y, 1, 7, "#a87a4a");
-      if ((x + row * 13) % 3 === 0) rect(ctx, x + 22, y + 3, 2, 1, "#b2834f");
+/** The classic office backdrop, step by step (themes replace any of these). */
+export const CLASSIC_BACKGROUND: BackgroundSteps = {
+  floor(ctx, L) {
+    // Floor planks everywhere first.
+    for (let row = 0; row * 8 < L.H; row++) {
+      const y = row * 8;
+      rect(ctx, 0, y, L.W, 8, row % 2 ? "#c99a66" : "#c39260");
+      rect(ctx, 0, y + 7, L.W, 1, "#a87a4a");
+      const off = (row * 37) % 56;
+      for (let x = -off; x < L.W; x += 56) {
+        rect(ctx, x, y, 1, 7, "#a87a4a");
+        if ((x + row * 13) % 3 === 0) rect(ctx, x + 22, y + 3, 2, 1, "#b2834f");
+      }
     }
-  }
-
-  // The back wall, in segments of different depth and wallpaper.
-  L.segments.forEach((sg, i) => {
-    const wp = WALLPAPERS[i % WALLPAPERS.length]!;
-    const d = sg.depth;
-    rect(ctx, sg.x0, 0, sg.x1 - sg.x0, d, wp.base);
-    for (let x = sg.x0 + (i * 4) % 10; x < sg.x1; x += 10) rect(ctx, x, 0, 3, d - 16, wp.stripe);
-    rect(ctx, sg.x0, 0, sg.x1 - sg.x0, 2, shade(wp.base, -0.12));
-    rect(ctx, sg.x0, d - 16, sg.x1 - sg.x0, 14, "#b88257");
-    rect(ctx, sg.x0, d - 16, sg.x1 - sg.x0, 2, "#d19a6c");
-    rect(ctx, sg.x0, d - 14, sg.x1 - sg.x0, 1, "#9c6a42");
-    for (let x = sg.x0 + 8; x < sg.x1 - 8; x += 26) {
-      rect(ctx, x, d - 12, Math.min(20, sg.x1 - 8 - x), 8, "#ad774c");
-      rect(ctx, x, d - 12, Math.min(20, sg.x1 - 8 - x), 1, "#9a6942");
+  },
+  wall(ctx, L) {
+    // The back wall, in segments of different depth and wallpaper.
+    L.segments.forEach((sg, i) => {
+      const wp = WALLPAPERS[i % WALLPAPERS.length]!;
+      const d = sg.depth;
+      rect(ctx, sg.x0, 0, sg.x1 - sg.x0, d, wp.base);
+      for (let x = sg.x0 + (i * 4) % 10; x < sg.x1; x += 10) rect(ctx, x, 0, 3, d - 16, wp.stripe);
+      rect(ctx, sg.x0, 0, sg.x1 - sg.x0, 2, shade(wp.base, -0.12));
+      rect(ctx, sg.x0, d - 16, sg.x1 - sg.x0, 14, "#b88257");
+      rect(ctx, sg.x0, d - 16, sg.x1 - sg.x0, 2, "#d19a6c");
+      rect(ctx, sg.x0, d - 14, sg.x1 - sg.x0, 1, "#9c6a42");
+      for (let x = sg.x0 + 8; x < sg.x1 - 8; x += 26) {
+        rect(ctx, x, d - 12, Math.min(20, sg.x1 - 8 - x), 8, "#ad774c");
+        rect(ctx, x, d - 12, Math.min(20, sg.x1 - 8 - x), 1, "#9a6942");
+      }
+      rect(ctx, sg.x0, d - 2, sg.x1 - sg.x0, 2, "#7a5130");
+      ctx.fillStyle = "rgba(60,30,20,0.18)";
+      ctx.fillRect(sg.x0, d, sg.x1 - sg.x0, 3);
+    });
+    // Pillars where the wall steps in or out.
+    for (const px of L.wall.pillars) {
+      const left = L.segments.find((s) => s.x1 === px);
+      const right = L.segments.find((s) => s.x0 === px);
+      const d = Math.max(left?.depth ?? 64, right?.depth ?? 64);
+      rect(ctx, px - 5, 0, 10, d + 4, "#e2d3bb");
+      rect(ctx, px - 5, 0, 2, d + 4, "#f3e8d6");
+      rect(ctx, px + 3, 0, 2, d + 4, "#c9b89c");
+      rect(ctx, px - 6, d - 2, 12, 6, "#b88257");
+      rect(ctx, px - 6, d + 3, 12, 1, "#7a5130");
     }
-    rect(ctx, sg.x0, d - 2, sg.x1 - sg.x0, 2, "#7a5130");
-    ctx.fillStyle = "rgba(60,30,20,0.18)";
-    ctx.fillRect(sg.x0, d, sg.x1 - sg.x0, 3);
-  });
-  // Pillars where the wall steps in or out.
-  for (const px of L.wall.pillars) {
-    const left = L.segments.find((s) => s.x1 === px);
-    const right = L.segments.find((s) => s.x0 === px);
-    const d = Math.max(left?.depth ?? 64, right?.depth ?? 64);
-    rect(ctx, px - 5, 0, 10, d + 4, "#e2d3bb");
-    rect(ctx, px - 5, 0, 2, d + 4, "#f3e8d6");
-    rect(ctx, px + 3, 0, 2, d + 4, "#c9b89c");
-    rect(ctx, px - 6, d - 2, 12, 6, "#b88257");
-    rect(ctx, px - 6, d + 3, 12, 1, "#7a5130");
-  }
-
-  // Room floors.
-  const podCarpets = [
-    ["#7a8aa6", "#8c9cb8", "#9aaac4"],
-    ["#7f9a78", "#93ad8c", "#a1bb99"],
-    ["#a38b77", "#b8a08c", "#c6ae99"],
-  ];
-  L.pods.forEach((pod, i) => {
-    const [edge, base, hi] = podCarpets[i % podCarpets.length]!;
-    carpet(ctx, { x: pod.x - 4, y: pod.y + 2, w: pod.w + 8, h: pod.h - 2 }, edge!, base!, hi!);
-  });
-  for (const room of L.rooms) {
+  },
+  pods(ctx, L) {
+    const podCarpets = [
+      ["#7a8aa6", "#8c9cb8", "#9aaac4"],
+      ["#7f9a78", "#93ad8c", "#a1bb99"],
+      ["#a38b77", "#b8a08c", "#c6ae99"],
+    ];
+    L.pods.forEach((pod, i) => {
+      const [edge, base, hi] = podCarpets[i % podCarpets.length]!;
+      carpet(ctx, { x: pod.x - 4, y: pod.y + 2, w: pod.w + 8, h: pod.h - 2 }, edge!, base!, hi!);
+    });
+  },
+  room(ctx, room, L) {
     const r = room.rect;
     switch (room.kind) {
       case "meeting":
@@ -983,7 +979,9 @@ export function paintBackground(L: Layout): HTMLCanvasElement {
       default:
         break;
     }
-    // Room walls: glass for the meeting room, wood-framed for your office.
+  },
+  roomWalls(ctx, room, L) {
+    const r = room.rect;
     if (room.walls) {
       const frame = room.walls === "wood" ? "#7a4e2c" : "#8fa3b5";
       const pane = room.walls === "wood" ? "#e9dcc6" : "#cfe6f5";
@@ -1003,10 +1001,8 @@ export function paintBackground(L: Layout): HTMLCanvasElement {
         }
       }
     }
-  }
-
-  // Windows (panes cleared so the sky shows through)
-  for (const win of L.wall.windows) {
+  },
+  window(ctx, win) {
     const { x, y, w, h } = win;
     const g = new Grid(w + 2, h + 6);
     g.rect(1, 1, w, h, "#f4eee2");
@@ -1024,13 +1020,10 @@ export function paintBackground(L: Layout): HTMLCanvasElement {
         g.set(i, j, null);
       }
     }
-    ctx.clearRect(x + 4, y + 3, w - 7, h - 5);
     paintPixels(ctx, g, x - 1, y - 1);
-  }
-
-  // Pinboard
-  {
-    const { x, y, w, h } = L.wall.pinboard;
+  },
+  pinboard(ctx, r) {
+    const { x, y, w, h } = r;
     const g = new Grid(w + 2, h + 2);
     g.rect(1, 1, w, h, "#a4703f");
     g.rect(1, 1, w, 1, "#c08a55");
@@ -1038,28 +1031,24 @@ export function paintBackground(L: Layout): HTMLCanvasElement {
     for (let i = 0; i < 260; i++) g.set(4 + ((i * 37) % (w - 6)), 4 + ((i * 53 + (i >> 3)) % (h - 6)), i % 3 ? "#b8875a" : "#d9ad78");
     g.outline(OUTLINE);
     paintPixels(ctx, g, x - 1, y - 1);
-  }
-
-  // Calendar + status board frames (contents are live)
-  {
-    const c = L.wall.calendar;
+  },
+  calendar(ctx, c) {
     const g = new Grid(c.w + 2, c.h + 2);
     g.rect(1, 1, c.w, c.h, "#fbfaf5");
     g.rect(1, 1, c.w, 7, "#e5484d");
     g.rect(1, c.h - 1, c.w, 2, "#e2dccf");
     g.outline(OUTLINE);
     paintPixels(ctx, g, c.x - 1, c.y - 1);
-    const s = L.wall.status;
+  },
+  status(ctx, s) {
     const b = new Grid(s.w + 2, s.h + 2);
     b.rrect(1, 1, s.w, s.h, "#2c2836", 1);
     b.rect(2, 2, s.w - 2, s.h - 2, "#1a1722");
     b.outline(OUTLINE);
     paintPixels(ctx, b, s.x - 1, s.y - 1);
-  }
-
-  // Door with a "+" sign
-  {
-    const d = L.wall.door;
+  },
+  door(ctx, d) {
+    // A door with a "+" sign: a new thread.
     const g = new Grid(d.w + 6, d.h + 4);
     g.rect(0, 2, d.w + 6, d.h + 2, "#8a5a34");
     g.rect(3, 4, d.w, d.h, "#c48a52");
@@ -1074,11 +1063,9 @@ export function paintBackground(L: Layout): HTMLCanvasElement {
     sg.rect(6, 2, 2, 5, "#bff5cf").rect(4, 4, 6, 1, "#bff5cf");
     sg.outline(OUTLINE);
     paintPixels(ctx, sg, d.x + d.w / 2 - 7, Math.max(1, d.y - 12));
-  }
-
-  // Legend sticky note
-  {
-    const n = L.wall.legendNote;
+  },
+  legend(ctx, n) {
+    // The "?" sticky note.
     const g = new Grid(n.w + 2, n.h + 2);
     g.rect(1, 1, n.w, n.h, "#fff3a3");
     g.rect(1, 1, n.w, 2, "#f5dc6a");
@@ -1087,13 +1074,12 @@ export function paintBackground(L: Layout): HTMLCanvasElement {
     g.outline(OUTLINE);
     paintPixels(ctx, g, n.x - 1, n.y - 1);
     rect(ctx, n.x + Math.floor(n.w / 2), n.y, 2, 2, "#e5484d");
-  }
-
-  for (const p of L.wall.paintings) ctx.drawImage(pa(p.sprite), p.x, p.y);
-
-  // Clock face
-  {
-    const { x, y, r } = L.wall.clock;
+  },
+  painting(ctx, p) {
+    ctx.drawImage(pa(p.sprite), p.x, p.y);
+  },
+  clock(ctx, k) {
+    const { x, y, r } = k;
     const g = new Grid(r * 2 + 5, r * 2 + 5);
     const c = r + 2;
     g.ellipse(c, c, r, r, "#4b3d5c");
@@ -1104,11 +1090,42 @@ export function paintBackground(L: Layout): HTMLCanvasElement {
     }
     g.outline(OUTLINE);
     paintPixels(ctx, g, x - c, y - c);
+  },
+};
+
+/** Bake the walls, floors and wall-mounted fixtures. Window panes stay transparent. */
+export function paintBackground(L: Layout, theme?: Theme): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = L.W;
+  canvas.height = L.H;
+  const ctx = canvas.getContext("2d")!;
+  ctx.imageSmoothingEnabled = false;
+  const steps: BackgroundSteps = { ...CLASSIC_BACKGROUND, ...theme?.background };
+  steps.floor(ctx, L);
+  steps.wall(ctx, L);
+  steps.pods(ctx, L);
+  for (const room of L.rooms) {
+    steps.room(ctx, room, L);
+    if (room.walls) steps.roomWalls(ctx, room, L);
   }
+  // Windows: the glass is cleared so the sky shows through, then the frame.
+  for (const win of L.wall.windows) {
+    ctx.clearRect(win.x + 4, win.y + 3, win.w - 7, win.h - 5);
+    steps.window(ctx, win, L);
+  }
+  steps.pinboard(ctx, L.wall.pinboard);
+  steps.calendar(ctx, L.wall.calendar);
+  steps.status(ctx, L.wall.status);
+  steps.door(ctx, L.wall.door);
+  steps.legend(ctx, L.wall.legendNote);
+  for (const p of L.wall.paintings) steps.painting(ctx, p);
+  steps.clock(ctx, L.wall.clock);
+  ctx.imageSmoothingEnabled = false;
   return canvas;
 }
 
-function canvasFor(p: PropPlacement, L: Layout): HTMLCanvasElement {
+/** The classic sprite for a placed prop. */
+export function classicProp(p: PropPlacement, L: Layout): HTMLCanvasElement {
   switch (p.kind) {
     case "meeting-chair-back":
     case "guest-chair":
@@ -1120,7 +1137,8 @@ function canvasFor(p: PropPlacement, L: Layout): HTMLCanvasElement {
     case "meeting-table":
       return meetingTableSprite();
     case "glass-front": {
-      const room = L.rooms.find((r) => r.walls && r.rect.x === p.x && r.rect.w === p.w);
+      // The room whose front edge this is (rooms can share x and width, so match the bottom too).
+      const room = L.rooms.find((r) => r.walls && r.rect.x === p.x && r.rect.w === p.w && r.rect.y + r.rect.h - 10 === p.y);
       const gap = room?.doorSide === "bottom" && room.doorX !== undefined ? room.doorX - room.rect.x : -1;
       return wallFrontSprite(p.w ?? 100, gap, room?.walls === "wood");
     }
@@ -1215,19 +1233,20 @@ function canvasFor(p: PropPlacement, L: Layout): HTMLCanvasElement {
   }
 }
 
-/** Turn the layout's placements into drawable, depth-sorted props. */
-export function buildProps(L: Layout): Prop[] {
+/** Turn the layout's placements into drawable, depth-sorted props, dressed by the theme. */
+export function buildProps(L: Layout, theme?: Theme): Prop[] {
   const props: Prop[] = L.props.map((p) => ({
     id: p.id,
     kind: p.kind,
-    canvas: canvasFor(p, L),
+    canvas: theme?.prop?.(p, L, () => classicProp(p, L)) ?? classicProp(p, L),
     x: p.x,
     y: p.y,
     z: p.z,
     variant: p.variant,
   }));
   for (const pl of L.plants) {
-    props.push({ id: `plant-${pl.x}-${pl.y}`, kind: "plant", canvas: pa(pl.sprite), x: pl.x, y: pl.y, z: pl.z });
+    const canvas = theme?.plant?.(pl.sprite, () => pa(pl.sprite)) ?? pa(pl.sprite);
+    props.push({ id: `plant-${pl.x}-${pl.y}`, kind: "plant", canvas, x: pl.x, y: pl.y, z: pl.z });
   }
   return props;
 }

@@ -58,6 +58,26 @@ bubbles: small talk, a tech headline, or what the thread actually did last.
 After noon they have lunch together at a long table: a delivery brings pizza,
 sushi, burgers, tacos or ramen, and a few bring their own lunchbox.
 
+## Sceneries
+
+The **Scenery** button (top right) dresses the office as another place. The
+people, rooms, events and everything that happens stay the same; the look,
+the sounds and the words change:
+
+![The same corner of the office in all seven sceneries](docs/sceneries.png)
+
+| Scenery | |
+| --- | --- |
+| 🏢 Classic office | Wooden floors, a cozy lounge and a city view |
+| 🌃 Neon City | A cyberpunk loft in a rainy megacity |
+| 🌲 Redwood Camp | Glamping among the redwoods |
+| 🏄 Surf Villa | A beach villa with surf vibes |
+| 🏙️ Sky Loft | The top floor of a New York skyscraper |
+| 🗄️ Dusty Annex | A shabby, forgotten office where nothing quite works |
+| 🏫 School | An elementary and middle school |
+
+Your pick is kept per browser; the buddy dresses to match.
+
 ## What else is going on
 
 - **The wall is a home screen**: a pinboard with every enabled provider's
@@ -188,6 +208,8 @@ localStorage["bb-plugin:cozy-hq:debug"] = '{"hour":20,"sample":true,"event":"lan
   `lunarnewyear`, `valentines`, `carnival`, `stpatricks`, `holi`, `easter`,
   `spring`, `summer`, `oktoberfest`, `halloween`, `diwali`, `laternenfest`,
   `thanksgiving`, `holidays`), or `none`.
+- `scenery` shows a scenery whatever you picked (`classic`, `neon`,
+  `redwoods`, `beach`, `skyline`, `annex`, `school`).
 - `expose` puts the world on `window.__cozyHq`.
 
 Only the view changes. Remove the key to go back to normal.
@@ -207,6 +229,8 @@ Only the view changes. Remove the key to go back to normal.
 | `office/OfficeView.tsx`, `app.css` | Panel UI, TV, pinboard, tags, sound controls |
 | `office/Buddy.tsx` | The office buddy overlay |
 | `office/sample.ts` | Made-up data for screenshots |
+| `office/theme.ts`, `office/themekit.ts`, `office/themes/` | Sceneries: the hooks, the drawing kit and one file per scenery ([how to write one](office/themes/README.md)) |
+| `preview/` | A standalone preview with made-up data (`npm run preview`, then open `preview/index.html?scenery=neon`) |
 
 ## Credits
 

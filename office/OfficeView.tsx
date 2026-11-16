@@ -32,6 +32,8 @@ import { hash } from "./pixel.ts";
 import { Sound, type SoundName } from "./sound.ts";
 import { World, type Hit, type LabelAnchor, type SeenState, type SpeechBubble, type Talk, type WorldThread } from "./world.ts";
 import { chairToneFor } from "./desks.ts";
+import { relabel, type Theme, type ThemeLabels } from "./theme.ts";
+import { THEMES, themeById } from "./themes/index.ts";
 
 export const TOPIC_EMOJI: Record<Topic, string> = {
   game: "🎮",
@@ -119,6 +121,8 @@ interface DebugPrefs {
   weather?: string;
   /** Set something off now: "shock" (the server-room gag), "technician", "huddle" or a kind of get-together. */
   gag?: string;
+  /** Show this scenery whatever you picked ("neon", "redwoods", "beach", "skyline", "annex", "school", "classic"). */
+  scenery?: string;
   demo?: boolean;
   /** Keep this office event running (e.g. "party"). */
   event?: string;
@@ -570,6 +574,7 @@ export function OfficeView(input: OfficeProps) {
     let eventVersion = world.eventVersion;
     let forcedAt = -Infinity;
     let gagAt = -Infinity;
+    let gagTry = -Infinity;
     const frame = (ts: number) => {
       raf = requestAnimationFrame(frame);
       const dt = Math.min(0.1, (ts - last) / 1000);
@@ -593,12 +598,18 @@ export function OfficeView(input: OfficeProps) {
         world.startEvent(dbgEvent as EventKind);
       }
       const gag = debugRef.current.gag;
-      if (gag && ts - gagAt > 45_000) {
-        gagAt = ts;
-        if (gag === "shock") world.startMishap();
-        else if (gag === "technician") world.callTechnician();
-        else if (gag === "lunch") world.startEvent("lunch");
-        else world.startHuddle(gag === "huddle" ? undefined : (gag as Parameters<World["startHuddle"]>[0]));
+      // A gag goes off as soon as it can (someone idle and settled), then every 45 s.
+      if (gag && ts - gagAt > 45_000 && ts - gagTry > 1_000) {
+        gagTry = ts;
+        const ok =
+          gag === "shock"
+            ? world.startMishap()
+            : gag === "technician"
+              ? world.callTechnician()
+              : gag === "lunch"
+                ? world.startEvent("lunch") !== null
+                : world.startHuddle(gag === "huddle" ? undefined : (gag as Parameters<World["startHuddle"]>[0]));
+        if (ok) gagAt = ts;
       }
       if (world.eventVersion !== eventVersion) {
         // An office event started or ended: idle agents head over or back.
@@ -681,6 +692,7 @@ export function OfficeView(input: OfficeProps) {
     sound.unlock();
     const hit = world.hitTest(toNative(e).x, toNative(e).y);
     setSoundOpen(false);
+    setSceneryOpen(false);
     if (!hit) {
       setLegendOpen(false);
       return;
@@ -756,6 +768,16 @@ export function OfficeView(input: OfficeProps) {
     }
   };
 
+  // The scenery: the same office dressed as another place.
+  const [sceneryId, setSceneryId] = useState(() => readJson(`${storageKey}:scenery`, { id: "classic" }).id);
+  useEffect(() => writeJson(`${storageKey}:scenery`, { id: sceneryId }), [sceneryId, storageKey]);
+  const theme = themeById(debug.scenery ?? sceneryId);
+  const [sceneryOpen, setSceneryOpen] = useState(false);
+  useEffect(() => {
+    world.setTheme(theme);
+    sound.setRecipes(theme.sounds);
+  }, [theme, world, sound]);
+
   // Name tags over everyone's head, when you want them.
   const [labelsOn, setLabelsOn] = useState(() => readJson(`${storageKey}:labels`, { on: false }).on);
   useEffect(() => writeJson(`${storageKey}:labels`, { on: labelsOn }), [labelsOn, storageKey]);
@@ -826,7 +848,7 @@ export function OfficeView(input: OfficeProps) {
             </div>
             <div className={`chq-tip-mood chq-mood-${mood}`}>
               {wait ? WAIT_LABEL[wait] : moodLabel(mood)}
-              {mood === "idle" && activity ? ` · ${activity}` : ""} · {when}
+              {mood === "idle" && activity ? ` · ${relabel(theme, activity)}` : ""} · {when}
               {when === "just now" ? "" : " ago"}
             </div>
           </>
@@ -848,7 +870,7 @@ export function OfficeView(input: OfficeProps) {
             <div className="chq-tip-hint">
               {greeting(now.getHours())} · {now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
             </div>
-            <div className="chq-tip-hint chq-tip-sub">{officeEvent ? `${officeEvent.title} in progress` : "Click for an office event"}</div>
+            <div className="chq-tip-hint chq-tip-sub">{relabel(theme, officeEvent ? `${officeEvent.title} in progress` : "Click for an office event")}</div>
           </>
         );
       case "clock":
@@ -859,7 +881,7 @@ export function OfficeView(input: OfficeProps) {
           </>
         );
       case "dog":
-        return <div className="chq-tip-hint">Biscuit, the office dog · pet</div>;
+        return <div className="chq-tip-hint">{theme.labels?.npc?.dog ?? relabel(theme, "Biscuit, the office dog · pet")}</div>;
       case "egg": {
         const left = world.eggsLeft();
         return <div className="chq-tip-hint">An Easter egg! {left === 1 ? "The last one" : `${left} hidden around the office`}</div>;
@@ -867,7 +889,9 @@ export function OfficeView(input: OfficeProps) {
       case "npc":
         return (
           <div className="chq-tip-hint">
-            {hover.who === "guard"
+            {theme.labels?.npc?.[hover.who]
+              ? theme.labels.npc[hover.who]
+              : hover.who === "guard"
               ? "Night guard on their rounds"
               : hover.who === "janitor"
                 ? "Cleaning crew · mind the wet floor"
@@ -879,7 +903,7 @@ export function OfficeView(input: OfficeProps) {
           </div>
         );
       case "poke":
-        return <div className="chq-tip-hint">{pokeTip(hover.poke, waiting, counts)}</div>;
+        return <div className="chq-tip-hint">{relabel(theme, theme.labels?.poke?.[hover.poke] ?? pokeTip(hover.poke, waiting, counts))}</div>;
       case "status":
         return (
           <div className="chq-tip-hint">
@@ -887,7 +911,7 @@ export function OfficeView(input: OfficeProps) {
           </div>
         );
       case "cat":
-        return <div className="chq-tip-hint">Pixel, the office cat · pet</div>;
+        return <div className="chq-tip-hint">{theme.labels?.npc?.cat ?? relabel(theme, "Pixel, the office cat · pet")}</div>;
       case "tv":
         return <div className="chq-tip-hint">Change the channel</div>;
       case "speaker":
@@ -904,9 +928,9 @@ export function OfficeView(input: OfficeProps) {
       case "roomba":
         return <div className="chq-tip-hint">The roomba · send it off (or home)</div>;
       case "lights":
-        return <div className="chq-tip-hint">String lights · make them twinkle</div>;
+        return <div className="chq-tip-hint">{relabel(theme, "String lights · make them twinkle")}</div>;
     }
-  }, [hover, byId, world, prefs, overflow, waiting, now, counts, officeEvent, weatherLine]);
+  }, [hover, byId, world, prefs, overflow, waiting, now, counts, officeEvent, weatherLine, theme]);
 
   const W = (layout?.W ?? MIN_W_WIDE) * scale;
   const H = (layout?.H ?? MIN_H_WIDE) * scale;
@@ -943,10 +967,11 @@ export function OfficeView(input: OfficeProps) {
               />
               <Tv
                 style={box(layout.tvScreen)}
-                special={officeEvent ? { tag: "TODAY", text: officeEvent.tv } : null}
+                special={officeEvent ? { tag: "TODAY", text: relabel(theme, officeEvent.tv) } : null}
                 now={now}
                 weather={tvWeather}
                 weatherLine={weatherLine}
+                labels={theme.labels}
                 festival={festival}
                 channel={channel}
                 tick={tvTick}
@@ -985,6 +1010,7 @@ export function OfficeView(input: OfficeProps) {
               ) : null}
               {legendOpen ? (
                 <LegendNotes
+                  theme={theme}
                   style={{ left: layout.wall.legendNote.x * scale, top: (layout.wall.legendNote.y + layout.wall.legendNote.h + 4) * scale }}
                   onClose={() => setLegendOpen(false)}
                 />
@@ -993,6 +1019,22 @@ export function OfficeView(input: OfficeProps) {
           ) : null}
           <NameTags tags={tags} width={W} height={H} onOpen={props.onOpenThread} />
           <Speech bubbles={speech} scale={scale} width={W} />
+          {layout ? (
+            <SceneryPicker
+              current={theme}
+              open={sceneryOpen}
+              onToggle={() => {
+                sound.unlock();
+                play("click");
+                setSceneryOpen((o) => !o);
+              }}
+              onPick={(id) => {
+                setSceneryId(id);
+                setSceneryOpen(false);
+                play("chime");
+              }}
+            />
+          ) : null}
           {layout ? (
             <button
               type="button"
@@ -1029,6 +1071,38 @@ export function OfficeView(input: OfficeProps) {
         </div>
       </div>
     </div>
+  );
+}
+
+// -------------------------------------------------------------- scenery picker
+
+/** Top right: dress the office as another place. */
+function SceneryPicker(props: { current: Theme; open: boolean; onToggle: () => void; onPick: (id: string) => void }) {
+  return (
+    <>
+      <button type="button" className={`chq-scenery-btn${props.open ? " is-on" : ""}`} aria-expanded={props.open} title="Scenery: dress the office as another place" onClick={props.onToggle}>
+        <span aria-hidden>{props.current.icon}</span>
+        <span>Scenery</span>
+      </button>
+      {props.open ? (
+        <div className="chq-scenery-pop" role="menu" aria-label="Scenery">
+          {THEMES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="menuitemradio"
+              aria-checked={t.id === props.current.id}
+              className={`chq-scenery-item${t.id === props.current.id ? " is-current" : ""}`}
+              onClick={() => props.onPick(t.id)}
+            >
+              <i aria-hidden>{t.icon}</i>
+              <b>{t.name}</b>
+              <span>{t.blurb}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -1194,7 +1268,7 @@ const LEGEND: { title: string; text: string; color: string; icon: string }[] = [
   { title: "Beanbag", text: "Idle 8 hours+", color: "#cdeefd", icon: "z" },
 ];
 
-function LegendNotes(props: { style: CSSProperties; onClose: () => void }) {
+function LegendNotes(props: { style: CSSProperties; theme: Theme; onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -1217,8 +1291,8 @@ function LegendNotes(props: { style: CSSProperties; onClose: () => void }) {
           <span className="chq-legend-icon" aria-hidden>
             {n.icon}
           </span>
-          <b>{n.title}</b>
-          <span>{n.text}</span>
+          <b>{relabel(props.theme, n.title)}</b>
+          <span>{relabel(props.theme, n.text)}</span>
         </div>
       ))}
     </div>
@@ -1369,6 +1443,7 @@ function Tv(props: {
   weather: TvWeather;
   /** "Rainy · 14°C · Basel" */
   weatherLine: string;
+  labels?: ThemeLabels;
   festival: string | null;
   onNext: () => void;
   onOpenUrl: (url: string) => void;
@@ -1413,7 +1488,7 @@ function Tv(props: {
     ];
     body = (
       <>
-        {top("HQ NEWS", "", <span className="chq-tv-live">● LIVE</span>)}
+        {top(props.labels?.tvNews ?? "HQ NEWS", "", <span className="chq-tv-live">● LIVE</span>)}
         <div className="chq-tv-body">
           <button
             type="button"
@@ -1451,7 +1526,7 @@ function Tv(props: {
     const date = props.now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
     body = (
       <>
-        {top("HQ WEATHER", "weather", null, false)}
+        {top(props.labels?.tvWeather ?? "HQ WEATHER", "weather", null, false)}
         <div className="chq-tv-weather">
           <div className="chq-tv-sky">
             <span className="chq-tv-icon">{WEATHER_ICON[props.weather]}</span>

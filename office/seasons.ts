@@ -1075,8 +1075,8 @@ export function drawAccessory(ctx: Ctx, kind: string, ax: number, y: number, see
       for (let i = 0; i < Math.min(14, splash * 2 + 1); i++) {
         const h = (seed * 31 + i * 17) >>> 0;
         const sx = x - 6 + (h % 11);
-        const sy = top + 2 + ((h >> 4) % 19);
-        px(ctx, sx, sy, 2, 2, colors[(h >> 8) % colors.length]!);
+        const sy = top + 2 + ((h >>> 4) % 19);
+        px(ctx, sx, sy, 2, 2, colors[(h >>> 8) % colors.length]!);
       }
       break;
     }

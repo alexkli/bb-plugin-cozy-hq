@@ -6,6 +6,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { charSprite, lookFor, CHAR_W, CHAR_H, type CharPose, type Expression } from "./characters.ts";
 import { moodOf, topicOf, visibleThreads, waitKindOf, WAIT_LABEL, type ThreadLike } from "./model.ts";
+import { themeById } from "./themes/index.ts";
+
+/** The scenery picked in the office (the buddy dresses the same). */
+function readScenery(storageKey: string): string {
+  try {
+    const raw = window.localStorage.getItem(`${storageKey}:scenery`);
+    return raw ? String((JSON.parse(raw) as { id?: unknown }).id ?? "classic") : "classic";
+  } catch {
+    return "classic";
+  }
+}
 
 export interface BuddyThread extends ThreadLike {
   projectHue: number;
@@ -65,10 +76,14 @@ export function Buddy(props: Props) {
   const visible = useMemo(() => visibleThreads(props.threads) as BuddyThread[], [props.threads]);
   const lookAt = `${props.storageKey}:look`;
   const [lastLook, setLastLook] = useState(() => readLook(lookAt));
+  const [scenery, setScenery] = useState(() => readScenery(props.storageKey));
   useEffect(() => {
-    const id = window.setInterval(() => setLastLook(readLook(lookAt)), 4_000);
+    const id = window.setInterval(() => {
+      setLastLook(readLook(lookAt));
+      setScenery(readScenery(props.storageKey));
+    }, 4_000);
     return () => window.clearInterval(id);
-  }, [lookAt]);
+  }, [lookAt, props.storageKey]);
   const fresh = useMemo(() => freshSince(visible, lastLook), [visible, lastLook]);
   // Show off the ones with news; otherwise anyone.
   const order = fresh.length > 0 ? fresh : visible;
@@ -105,7 +120,10 @@ export function Buddy(props: Props) {
     const canvas = canvasRef.current;
     if (!canvas || !current || props.hidden) return;
     const ctx = canvas.getContext("2d")!;
-    const look = lookFor(current.id, current.projectHue);
+    const base = lookFor(current.id, current.projectHue);
+    const theme = themeById(scenery);
+    const dressed = theme.look ? theme.look(base, current.id) : base;
+    const look = dressed.key === base.key && theme.look ? { ...dressed, key: `${base.key}|${theme.id}` } : dressed;
     const emblem = topicOf(current.displayTitle);
     const mood = moodOf(current);
     const waiting = badge !== null;
@@ -171,7 +189,7 @@ export function Buddy(props: Props) {
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [current, props.hidden, badge?.text, badge?.color]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [current, props.hidden, badge?.text, badge?.color, scenery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (props.hidden || !current) return null;
   const kind = waitKindOf(current);
