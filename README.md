@@ -60,9 +60,9 @@ sushi, burgers, tacos or ramen, and a few bring their own lunchbox.
 
 ## Sceneries
 
-The **Scenery** button (top right) dresses the office as another place. The
-people, rooms, events and everything that happens stay the same; the look,
-the sounds and the words change:
+Pick a scenery in the settings (the gear at the top right) to dress the
+office as another place. The people, rooms, events and everything that
+happens stay the same; the look, the sounds and the words change:
 
 ![The same corner of the office in all seven sceneries](docs/sceneries.png)
 
@@ -141,8 +141,10 @@ Your pick is kept per browser; the buddy dresses to match.
 
 ## Settings
 
-Sound is in the office itself: click either speaker next to the TV for on/off,
-volume and ambient sounds. Everything else:
+The gear at the top right of the office (or either speaker next to the TV)
+opens the settings: sound on/off, volume and ambient sounds, the scenery and
+the office buddy. Next to it, **Names** puts a name tag over everyone.
+Everything else:
 
 ```sh
 bb plugin config cozy-hq                    # show

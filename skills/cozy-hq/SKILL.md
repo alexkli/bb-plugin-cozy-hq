@@ -77,7 +77,7 @@ drizzle, rain, snow, thunderstorms with lightning), from Open-Meteo for your
 approximate location; click a window to open it and hear outside (birds,
 crickets at night, rain, wind, thunder, a foghorn in fog).
 
-The **Scenery** button (top right) dresses the same office as another place:
+The settings (the gear at the top right) pick a scenery that dresses the same office as another place:
 Classic office, Neon City (cyberpunk), Redwood Camp (glamping in the
 redwoods), Surf Villa (a beach villa), Sky Loft (a New York penthouse),
 Dusty Annex (a shabby back office) or School. Only the look, sounds and
@@ -105,9 +105,10 @@ weather.
   INBOX (newest items from the Work Dashboard plugin, if installed). Click the
   TV to switch channels; click a headline to open it.
 - The TV announces a running office event on the HQ NEWS channel.
-- Click either speaker next to the TV for the sound controls: on/off, volume
-  and ambient sounds (background life such as agents brewing coffee). Sound
-  preferences are kept per browser.
+- The gear at the top right (or either speaker next to the TV) opens the
+  settings: sound on/off, volume and ambient sounds (background life such as
+  agents brewing coffee), the scenery and the office buddy. These are kept
+  per browser. The **Names** button next to the gear toggles name tags.
 
 ## Settings
 

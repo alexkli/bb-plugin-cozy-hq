@@ -250,7 +250,7 @@ export function OfficeView(input: OfficeProps) {
   const [prefs, setPrefs] = useState<SoundPrefs>(() =>
     readJson<SoundPrefs>(`${storageKey}:sound`, { on: true, volume: 0.5, ambient: true }),
   );
-  const [soundOpen, setSoundOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
   const [fit, setFit] = useState<Fit | null>(null);
   const [layout, setLayout] = useState<Layout | null>(null);
@@ -691,8 +691,7 @@ export function OfficeView(input: OfficeProps) {
   const onClick = (e: React.MouseEvent) => {
     sound.unlock();
     const hit = world.hitTest(toNative(e).x, toNative(e).y);
-    setSoundOpen(false);
-    setSceneryOpen(false);
+    setSettingsOpen(false);
     if (!hit) {
       setLegendOpen(false);
       return;
@@ -751,7 +750,7 @@ export function OfficeView(input: OfficeProps) {
         }
         break;
       case "speaker":
-        setSoundOpen(true);
+        setSettingsOpen(true);
         play("click");
         break;
       case "tv":
@@ -772,7 +771,6 @@ export function OfficeView(input: OfficeProps) {
   const [sceneryId, setSceneryId] = useState(() => readJson(`${storageKey}:scenery`, { id: "classic" }).id);
   useEffect(() => writeJson(`${storageKey}:scenery`, { id: sceneryId }), [sceneryId, storageKey]);
   const theme = themeById(debug.scenery ?? sceneryId);
-  const [sceneryOpen, setSceneryOpen] = useState(false);
   useEffect(() => {
     world.setTheme(theme);
     sound.setRecipes(theme.sounds);
@@ -915,7 +913,7 @@ export function OfficeView(input: OfficeProps) {
       case "tv":
         return <div className="chq-tip-hint">Change the channel</div>;
       case "speaker":
-        return <div className="chq-tip-hint">Sound {prefs.on ? `${Math.round(prefs.volume * 100)}%` : "off"}</div>;
+        return <div className="chq-tip-hint">Sound {prefs.on ? `${Math.round(prefs.volume * 100)}%` : "off"} · settings</div>;
       case "pinboard":
         return <div className="chq-tip-hint">Provider usage · refresh</div>;
       case "window":
@@ -988,13 +986,14 @@ export function OfficeView(input: OfficeProps) {
                 onOpenUrl={props.onOpenUrl}
                 onOpenThread={props.onOpenThread}
               />
-              {soundOpen ? (
-                <SoundPanel
-                  style={{
-                    left: Math.min((layout.speakers[1]!.x + layout.speakers[1]!.w + 4) * scale, W - 200),
-                    top: layout.speakers[1]!.y * scale,
-                  }}
+              {settingsOpen ? (
+                <SettingsPanel
                   prefs={prefs}
+                  scenery={theme}
+                  onScenery={(id) => {
+                    setSceneryId(id);
+                    play("chime");
+                  }}
                   onChange={(next) => {
                     sound.unlock();
                     setPrefs(next);
@@ -1005,7 +1004,7 @@ export function OfficeView(input: OfficeProps) {
                   }}
                   buddyOn={props.buddyOn}
                   onBuddy={props.onBuddy}
-                  onClose={() => setSoundOpen(false)}
+                  onClose={() => setSettingsOpen(false)}
                 />
               ) : null}
               {legendOpen ? (
@@ -1019,22 +1018,6 @@ export function OfficeView(input: OfficeProps) {
           ) : null}
           <NameTags tags={tags} width={W} height={H} onOpen={props.onOpenThread} />
           <Speech bubbles={speech} scale={scale} width={W} />
-          {layout ? (
-            <SceneryPicker
-              current={theme}
-              open={sceneryOpen}
-              onToggle={() => {
-                sound.unlock();
-                play("click");
-                setSceneryOpen((o) => !o);
-              }}
-              onPick={(id) => {
-                setSceneryId(id);
-                setSceneryOpen(false);
-                play("chime");
-              }}
-            />
-          ) : null}
           {layout ? (
             <button
               type="button"
@@ -1054,6 +1037,31 @@ export function OfficeView(input: OfficeProps) {
               <span>Names</span>
             </button>
           ) : null}
+          {layout ? (
+            <button
+              type="button"
+              className={`chq-gear-btn${settingsOpen ? " is-on" : ""}`}
+              aria-expanded={settingsOpen}
+              aria-label="Settings"
+              title="Settings: sound, scenery, buddy"
+              onClick={() => {
+                sound.unlock();
+                play("click");
+                setSettingsOpen((o) => !o);
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden>
+                <path
+                  d="M6.6 1h2.8l.4 1.9 1.3.6 1.7-1 2 2-1 1.7.5 1.3 1.9.4v2.8l-1.9.4-.5 1.3 1 1.7-2 2-1.7-1-1.3.5-.4 1.9H6.6l-.4-1.9-1.3-.5-1.7 1-2-2 1-1.7-.5-1.3L0 9.4V6.6l1.9-.4.5-1.3-1-1.7 2-2 1.7 1 1.3-.6z"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinejoin="round"
+                />
+                <circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              </svg>
+            </button>
+          ) : null}
           {tooltip && tipPos ? (
             <div
               className={`chq-tip${tipPos.y * scale < 96 ? " is-below" : ""}`}
@@ -1071,38 +1079,6 @@ export function OfficeView(input: OfficeProps) {
         </div>
       </div>
     </div>
-  );
-}
-
-// -------------------------------------------------------------- scenery picker
-
-/** Top right: dress the office as another place. */
-function SceneryPicker(props: { current: Theme; open: boolean; onToggle: () => void; onPick: (id: string) => void }) {
-  return (
-    <>
-      <button type="button" className={`chq-scenery-btn${props.open ? " is-on" : ""}`} aria-expanded={props.open} title="Scenery: dress the office as another place" onClick={props.onToggle}>
-        <span aria-hidden>{props.current.icon}</span>
-        <span>Scenery</span>
-      </button>
-      {props.open ? (
-        <div className="chq-scenery-pop" role="menu" aria-label="Scenery">
-          {THEMES.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="menuitemradio"
-              aria-checked={t.id === props.current.id}
-              className={`chq-scenery-item${t.id === props.current.id ? " is-current" : ""}`}
-              onClick={() => props.onPick(t.id)}
-            >
-              <i aria-hidden>{t.icon}</i>
-              <b>{t.name}</b>
-              <span>{t.blurb}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </>
   );
 }
 
@@ -1617,9 +1593,11 @@ function Tv(props: {
 
 // -------------------------------------------------------------- sound
 
-function SoundPanel(props: {
-  style: CSSProperties;
+/** Top right, behind the gear (and the speakers): sound, scenery and the buddy. */
+function SettingsPanel(props: {
   prefs: SoundPrefs;
+  scenery: Theme;
+  onScenery: (id: string) => void;
   onChange: (p: SoundPrefs) => void;
   onTest: () => void;
   onClose: () => void;
@@ -1640,7 +1618,14 @@ function SoundPanel(props: {
     return () => window.removeEventListener("keydown", onKey);
   }, [props]);
   return (
-    <div className="chq-sound" style={props.style} ref={ref} role="dialog" aria-label="Sound">
+    <div className="chq-sound chq-settings" ref={ref} role="dialog" aria-label="Settings">
+      <div className="chq-settings-head">
+        <b>Settings</b>
+        <button type="button" className="chq-sound-x" aria-label="Close" onClick={props.onClose}>
+          ×
+        </button>
+      </div>
+      <div className="chq-settings-label">Sound</div>
       <div className="chq-sound-row">
         <button
           type="button"
@@ -1649,9 +1634,6 @@ function SoundPanel(props: {
           onClick={() => props.onChange({ ...prefs, on: !prefs.on })}
         >
           {prefs.on ? "🔊 Sound on" : "🔇 Sound off"}
-        </button>
-        <button type="button" className="chq-sound-x" aria-label="Close" onClick={props.onClose}>
-          ×
         </button>
       </div>
       <label className="chq-sound-vol">
@@ -1681,6 +1663,23 @@ function SoundPanel(props: {
       <button type="button" className="chq-sound-test" disabled={!prefs.on} onClick={props.onTest}>
         ♪ Play a test sound
       </button>
+      <div className="chq-settings-label">Scenery</div>
+      <div className="chq-scenery-list" role="radiogroup" aria-label="Scenery">
+        {THEMES.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="radio"
+            aria-checked={t.id === props.scenery.id}
+            className={`chq-scenery-item${t.id === props.scenery.id ? " is-current" : ""}`}
+            onClick={() => props.onScenery(t.id)}
+          >
+            <i aria-hidden>{t.icon}</i>
+            <b>{t.name}</b>
+            <span>{t.blurb}</span>
+          </button>
+        ))}
+      </div>
       <label className="chq-sound-amb chq-buddy-opt">
         <input type="checkbox" checked={props.buddyOn} onChange={(e) => props.onBuddy(e.target.checked)} />
         <span>Office buddy</span>

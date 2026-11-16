@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-cozy-hq",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A cozy pixel-art office where every bb thread is a little worker: busy ones at desks, planners at the whiteboard, threads that need you in the waiting room. A full-panel home screen with provider usage, an office TV, festivals through the year and sound.",
   "keywords": [
     "bb-plugin",

@@ -765,41 +765,54 @@
 .chq-tag.is-read { font-weight: 500; background: #f6f1e7; }
 .chq-tag.is-read span { opacity: 0.85; }
 
-/* The scenery picker, next to the name tags switch. */
-.chq-scenery-btn {
+/* The settings gear, top right (the panel opens below it). */
+.chq-gear-btn {
   position: absolute;
   top: 8px;
-  right: 86px;
+  right: 10px;
   z-index: 9;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
   height: 22px;
-  padding: 0 8px 0 6px;
+  padding: 0;
   border: 1px solid #2a1e2e;
   border-radius: 11px;
   background: rgba(255, 250, 240, 0.82);
   color: #2a1e2e;
-  font: 700 10px/1 var(--chq-mono);
   cursor: pointer;
   box-shadow: 1px 1px 0 rgba(42, 30, 46, 0.35);
-  opacity: 0.8;
+  opacity: 0.85;
 }
-.chq-scenery-btn:hover, .chq-scenery-btn.is-on { opacity: 1; background: #fffaf0; }
-.chq-scenery-pop {
-  position: absolute;
+.chq-gear-btn:hover { opacity: 1; background: #fffaf0; }
+.chq-gear-btn.is-on { background: #2a1e2e; color: #fffaf0; opacity: 1; }
+.chq-gear-btn svg { transition: transform 300ms ease; }
+.chq-gear-btn:hover svg, .chq-gear-btn.is-on svg { transform: rotate(45deg); }
+.chq-sound.chq-settings {
   top: 36px;
   right: 10px;
-  z-index: 12;
-  display: grid;
-  gap: 4px;
-  width: 270px;
-  padding: 6px;
-  border: 1px solid #2a1e2e;
-  border-radius: 8px;
-  background: #fffaf0;
-  box-shadow: 3px 3px 0 rgba(42, 30, 46, 0.3);
+  width: 280px;
+  max-height: calc(100% - 46px);
+  overflow-y: auto;
+  transform: none;
+  animation: chq-drop-down 140ms ease-out;
 }
+@keyframes chq-drop-down {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+.chq-settings-head { display: flex; align-items: center; justify-content: space-between; }
+.chq-settings-head b { font: 700 13px/1 var(--chq-mono); }
+.chq-settings-label {
+  margin: 12px 0 6px;
+  padding-top: 8px;
+  border-top: 1px dashed #c9bda9;
+  font: 700 10px/1 var(--chq-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.chq-settings-head + .chq-settings-label { margin-top: 6px; padding-top: 0; border-top: 0; }
+.chq-scenery-list { display: grid; gap: 2px; }
 .chq-scenery-item {
   display: grid;
   grid-template-columns: 26px 1fr;
@@ -824,7 +837,7 @@
 .chq-labels-btn {
   position: absolute;
   top: 8px;
-  right: 10px;
+  right: 42px;
   z-index: 9;
   display: inline-flex;
   align-items: center;
