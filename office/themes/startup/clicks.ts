@@ -61,9 +61,21 @@ function coffeeTableOf(L: Layout): Rect | null {
   return p ? { x: p.x, y: p.y, w: 38, h: 14 } : null;
 }
 
-function pyramidRect(L: Layout): Rect | null {
+/**
+ * Where the energy-drink pyramid stands: on the kitchen table, or (a galley
+ * kitchen has none) on top of the drinks fridge. Its base, its depth, and the
+ * floor the cans land on when it comes down.
+ */
+export function pyramidAt(L: Layout): { x: number; y: number; z: number; floor: number } | null {
   const isl = L.props.find((p) => p.id === "island");
-  return isl ? { x: isl.x + 3, y: isl.y - 15, w: 15, h: 19 } : null;
+  if (isl) return { x: isl.x + 4, y: isl.y + 1, z: isl.y + 20.6, floor: isl.y + 40 };
+  const v = L.props.find((p) => p.kind === "vending");
+  return v ? { x: v.x + 5, y: v.y + 1, z: v.y + 42.6, floor: v.y + 52 } : null;
+}
+
+function pyramidRect(L: Layout): Rect | null {
+  const p = pyramidAt(L);
+  return p ? { x: p.x - 1, y: p.y - 15, w: 15, h: 19 } : null;
 }
 
 function hammockRect(L: Layout): Rect | null {
@@ -81,8 +93,8 @@ export function startupClickables(L: Layout): SceneryClickable[] {
   const hr = hammockRect(L);
   if (hr) out.push({ id: "hammock", rect: hr, hover: W.hover.hammock });
   const door = plan?.garage?.door;
-  // The door's strip along the bottom (the server cage and the water jug above it are clickable themselves).
-  if (door) out.push({ id: "garage", rect: { x: door.x, y: door.y - 1, w: door.w, h: L.H - door.y + 1 }, hover: W.hover.garage });
+  // The door in the side wall and the end of the driveway in front of it.
+  if (door) out.push({ id: "garage", rect: { x: Math.max(0, door.x - 14), y: door.y, w: door.x - Math.max(0, door.x - 14) + door.w, h: door.h }, hover: W.hover.garage });
   const pr = pyramidRect(L);
   if (pr) out.push({ id: "pyramid", rect: pr, hover: W.hover.pyramid });
   const ct = coffeeTableOf(L);
@@ -221,7 +233,7 @@ function clickGarage(act: SceneryActions): string | null {
   }
   const kind = Math.random() < 0.6 ? "open" : "stuck";
   garage = { kind, t0: act.t };
-  mutter(act, gp.door.x + gp.door.w / 2, gp.door.y - 20, kind === "open" ? W.garageOpen : W.garageStuck, 1.2, 130);
+  mutter(act, gp.door.x + 40, gp.door.y + gp.door.h / 2, kind === "open" ? W.garageOpen : W.garageStuck, 1.2, 130);
   return "su-garage";
 }
 
@@ -229,8 +241,8 @@ function clickGarage(act: SceneryActions): string | null {
 export function rehearsalSpots(L: Layout): GatherSpot[] {
   const gp = planOf(L)?.garage;
   if (!gp?.door || !gp.access) return [];
-  const top = gp.access.hallY + 10;
-  const x0 = gp.door.x;
+  const top = gp.r.y;
+  const x0 = gp.r.x + 2;
   const way = gp.access;
   const at = (x: number, y: number, facing: GatherSpot["facing"], pose: GatherSpot["pose"], activity: string): GatherSpot => ({
     x,
@@ -241,10 +253,10 @@ export function rehearsalSpots(L: Layout): GatherSpot[] {
     path: [{ x: way.x, y: way.hallY, c: true }, { x: way.x, y }, { x, y }],
   });
   return [
-    at(x0 + 26, top + 26, "right", "throw", "rehearsing the demo-day pitch"),
-    at(x0 + 66, top + 20, "left", "stand", "poking holes in the pitch"),
-    at(x0 + 88, top + 28, "left", "stand", "poking holes in the pitch"),
-    at(x0 + 70, top + 36, "left", "cup", "poking holes in the pitch"),
+    at(x0 + 30, top + 30, "right", "throw", "rehearsing the demo-day pitch"),
+    at(x0 + 60, top + 24, "left", "stand", "poking holes in the pitch"),
+    at(x0 + 78, top + 32, "left", "stand", "poking holes in the pitch"),
+    at(x0 + 62, top + 42, "left", "cup", "poking holes in the pitch"),
   ];
 }
 
@@ -257,7 +269,7 @@ function clickPyramid(act: SceneryActions): string | null {
   const k = act.L.kitchen;
   let g: Gathering | null = null;
   if (coffee) {
-    const y = k.y + 32;
+    const y = Math.max(k.y + 32, pyramidAt(act.L)!.floor - 16);
     const x = r.x + 6;
     g = act.gather([{ x, y, facing: "front", pose: "stand", activity: "rebuilding the can pyramid", path: [coffee.path[0]!, { x: coffee.path[1]!.x, y }, { x, y }] }], 7, cues(W.restack));
   }
@@ -375,29 +387,30 @@ export function clickUnderlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
     const k = t - garage.t0;
     const open = garageOpen(k, garage);
     if (open > 0) {
-      // The door rolls up: daylight spills across the concrete.
+      // The door rolls up: daylight spills in across the concrete from the driveway.
       const night = info.night;
       ctx.fillStyle = night > 0.5 ? `rgba(255,220,150,${(0.12 * open).toFixed(3)})` : `rgba(255,248,210,${(0.32 * open).toFixed(3)})`;
-      const depth = Math.round(46 * open);
+      const depth = Math.round(70 * open);
+      const x = door.x + door.w;
       ctx.beginPath();
-      ctx.moveTo(door.x, door.y);
-      ctx.lineTo(door.x + door.w, door.y);
-      ctx.lineTo(door.x + door.w - 14, door.y - depth);
-      ctx.lineTo(door.x + 14, door.y - depth);
+      ctx.moveTo(x, door.y);
+      ctx.lineTo(x, door.y + door.h);
+      ctx.lineTo(x + depth, door.y + door.h - 10);
+      ctx.lineTo(x + depth, door.y + 10);
       ctx.closePath();
       ctx.fill();
-      // The driveway outside where the door was.
-      fill(ctx, door.x, door.y - 1, door.w, door.h + 1, night > 0.5 ? "#3a3a44" : "#d8d4cc");
-      fill(ctx, door.x, door.y - 1, door.w, Math.max(1, Math.round((1 - open) * 5)), "#eeeeea");
-      fill(ctx, door.x, door.y - 1 + Math.round((1 - open) * 5), door.w, 1, "#8a8a90");
+      // The opening where the door was, rolled up from the top.
+      const gone = Math.round(door.h * open);
+      fill(ctx, door.x, door.y, door.w, gone, night > 0.5 ? "#3a3a44" : "#d8d4cc");
+      fill(ctx, door.x, door.y + gone - 1, door.w, 1, "#8a8a90");
     }
   }
   if (fall) {
     const r = pyramidRect(L);
     if (r) {
-      // Cans on the floor in front of the table, rolling to a stop.
+      // Cans on the floor in front of it, rolling to a stop.
       const k = t - fall.t0;
-      const floorY = r.y + 40;
+      const floorY = pyramidAt(L)!.floor;
       for (let i = 0; i < 10; i++) {
         const k0 = Math.max(0, k - i * 0.05);
         const roll = Math.min(1, k0 / 1.6);
@@ -570,7 +583,7 @@ export function clickOverlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
       }
       ctx.globalAlpha = 1;
     } else if (bunk.kind === "lights" && k < 6) {
-      for (let x = b.x + 3; x < b.x + 27; x += 3) {
+      for (let x = b.x + 3; x < b.x + 25; x += 3) {
         const on = (Math.floor(t * 8) + x) % 3 === 0;
         fill(ctx, x, b.y + 4 + (x % 2), 1, 1, on ? "#ffffff" : "#5a4a6a");
       }
@@ -581,7 +594,8 @@ export function clickOverlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
     const k = t - garage.t0;
     if (garage.kind === "stuck" && k > 1.1 && k < 2.2) {
       // It jams with a grind and a shower of sparks from the track.
-      for (let i = 0; i < 6; i++) fill(ctx, door.x + door.w - 4 - ((i * 5 + Math.floor(t * 30)) % 9), door.y - 6 - ((i * 3) % 5), 1, 1, i % 2 ? "#ffd84a" : "#ffffff");
+      const sy = door.y + Math.round(door.h * 0.45);
+      for (let i = 0; i < 6; i++) fill(ctx, door.x + door.w + ((i * 5 + Math.floor(t * 30)) % 9), sy - ((i * 3) % 5), 1, 1, i % 2 ? "#ffd84a" : "#ffffff");
     }
     if (garage.kind !== "rehearsal" && k > 16) garage = null;
     else if (garage.kind === "rehearsal" && garage.g?.done && k > 3) garage = null;

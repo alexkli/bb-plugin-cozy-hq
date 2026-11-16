@@ -213,14 +213,7 @@ function cellFloor(ctx: Ctx, c: Cell, seed: number): void {
     case "living":
       carpet(ctx, r, C.carpet, seed);
       break;
-    case "spare":
-      carpet(ctx, r, "#a9b3be", seed);
-      break;
-    case "den":
-      carpet(ctx, r, "#a89078", seed);
-      break;
     case "kitchen":
-    case "laundry":
       vinyl(ctx, r, seed);
       break;
     case "entry":
@@ -241,33 +234,178 @@ let baking: Layout | null = null;
 function floor(ctx: Ctx, L: Layout): void {
   baking = L;
   const plan = planOf(L);
-  // Oak under everything: the hallways are what's left between the rooms.
-  oak(ctx, { x: 0, y: 0, w: L.W, h: L.H }, 11);
-  if (!plan) return;
-  // A long runner down the main hallway.
+  if (!plan) {
+    oak(ctx, { x: 0, y: 0, w: L.W, h: L.H }, 11);
+    return;
+  }
+  const lot = plan.lot;
+  // The lot: lawn everywhere the house isn't.
+  lawn(ctx, { x: 0, y: 0, w: L.W, h: L.H }, 404);
+  sideYards(ctx, L, plan);
+  // The house: oak under everything, the hallways are what's left between the rooms.
+  const top = Math.min(...L.segments.map((sg) => sg.depth)) - 8;
+  oak(ctx, { x: lot.x0, y: top, w: lot.x1 - lot.x0, h: lot.back - top }, 11);
   const h1 = L.net.halls[0]!;
-  runner(ctx, 0, L.W, h1);
+  runner(ctx, lot.x0 + 6, lot.x1 - 6, h1);
   plan.cells.forEach((c, i) => cellFloor(ctx, c, hash(`startup-cell-${i}-${c.r.x}-${c.r.y}`)));
   const y = plan.yard;
   if (y) {
-    lawn(ctx, y.r, 404);
     if (plan.patio) pavers(ctx, { x: plan.patio.x0, y: plan.patio.y, w: plan.patio.x1 - plan.patio.x0, h: HALF * 2 }, 7);
-    // Stepping stones down the side yards, where the aisles cross the lawn.
+    // Stepping stones where the aisles cross the lawn.
     for (const ax of L.net.aisles) {
       if (ax < y.r.x || ax > y.r.x + y.r.w) continue;
-      const top = plan.patio && plan.patio.x0 <= ax && plan.patio.x1 >= ax ? plan.patio.y + HALF * 2 : y.r.y;
-      steppingStones(ctx, { x: ax - 6, y: top, w: 12, h: L.H - 6 - top });
+      const t = plan.patio && plan.patio.x0 <= ax && plan.patio.x1 >= ax ? plan.patio.y + HALF * 2 : y.r.y;
+      steppingStones(ctx, { x: ax - 6, y: t, w: 12, h: L.H - 6 - t });
     }
-    // Lanes worn across the lawn to the hammock and the loungers.
     pool(ctx, y.pool);
-    fence(ctx, y.r.x, y.r.x + y.r.w, L.H - 5);
+    if (y.beds) vegBeds(ctx, y.beds);
+    fence(ctx, 0, L.W, L.H - 5);
   }
+  outerWalls(ctx, L, plan);
   const g = plan.garage;
   if (g?.door) garageDoor(ctx, g.door);
   // A doormat inside the front door.
   const d = L.wall.door;
   const seg = L.segments.find((s) => d.x + d.w / 2 >= s.x0 && d.x + d.w / 2 < s.x1);
   if (seg) doormat(ctx, d.x - 3, seg.depth + 1);
+}
+
+/** Raised vegetable beds along the back fence: tomatoes on stakes, lettuce, a scarecrow made of a hoodie. */
+function vegBeds(ctx: Ctx, r: Rect): void {
+  for (let x = r.x; x + 30 <= r.x + r.w; x += 38) {
+    rect(ctx, x, r.y, 30, r.h, OUTLINE);
+    rect(ctx, x + 1, r.y + 1, 28, r.h - 2, C.woodLo);
+    rect(ctx, x + 1, r.y + 1, 28, 1, C.woodHi);
+    rect(ctx, x + 3, r.y + 3, 24, r.h - 6, "#6a4a2e");
+    for (let k = 0; k < 4; k++) {
+      const px = x + 5 + k * 6;
+      rect(ctx, px, r.y + 4, 3, 4, C.palm);
+      rect(ctx, px + 1, r.y + 5, 1, 1, (k + x) % 2 ? "#e5544b" : C.palmHi);
+      rect(ctx, px, r.y + 10, 3, 3, C.palmHi);
+    }
+  }
+}
+
+/** The house's own walls on its lot: stucco down both sides with the roof's eave beyond them. */
+function outerWalls(ctx: Ctx, L: Layout, plan: StartupPlan): void {
+  const { x0, x1, back } = plan.lot;
+  const yTop = (x: number) => L.segments.find((sg) => x >= sg.x0 && x < sg.x1)?.depth ?? L.segments[0]!.depth;
+  const bottom = Math.min(back + 1, L.H);
+  for (const [x, side] of [[x0, -1], [x1 - 5, 1]] as const) {
+    const t = Math.min(yTop(x0), yTop(x1 - 1)) - 6;
+    // The eave: a strip of roof tiles just outside the wall.
+    if ((side < 0 && x0 >= 4) || (side > 0 && x1 <= L.W - 4)) {
+      const ex = side < 0 ? x - 4 : x + 5;
+      for (let yy = plan.lot.front; yy < bottom; yy += 3) {
+        rect(ctx, ex, yy, 4, 3, (yy / 3) % 2 ? "#b85a3a" : "#c86a44");
+        rect(ctx, side < 0 ? ex : ex + 3, yy, 1, 3, "#8a3a24");
+      }
+      ctx.fillStyle = "rgba(30,40,20,0.22)";
+      ctx.fillRect(side < 0 ? ex - 3 : ex + 4, plan.lot.front, 3, bottom - plan.lot.front);
+    }
+    rect(ctx, x, t, 5, bottom - t, OUTLINE);
+    rect(ctx, x + 1, t, 3, bottom - t, "#efe2c6");
+    rect(ctx, x + (side < 0 ? 3 : 1), t, 1, bottom - t, "#d8c49e");
+  }
+  // The eave along the back over the patio.
+  if (plan.patio && back < L.H - 4) {
+    for (let xx = x0 - 4; xx < x1 + 4; xx += 3) {
+      rect(ctx, xx, back + 1, 3, 3, (xx / 3) % 2 ? "#b85a3a" : "#c86a44");
+      rect(ctx, xx, back + 3, 3, 1, "#8a3a24");
+    }
+  }
+}
+
+/**
+ * The side yards between the house and the neighbours: the driveway down the
+ * left to the garage with the beat-up hatchback on it, garden beds, hedges
+ * along the neighbours' fences, the trash cans, the side gate to the backyard.
+ */
+function sideYards(ctx: Ctx, L: Layout, plan: StartupPlan): void {
+  const { x0, x1, front } = plan.lot;
+  const bottom = plan.patio ? plan.patio.y : L.H;
+  const rr = rng(9091);
+  // The neighbours' fences along the panel's edges, a hedge inside them.
+  for (const [fx, w] of [[0, x0], [x1, L.W - x1]] as const) {
+    if (w < 8) continue;
+    const edge = fx === 0 ? 0 : L.W - 3;
+    for (let y = front; y < L.H - 5; y += 4) {
+      rect(ctx, edge, y, 3, 4, (y / 4) % 2 ? C.fence : "#9c6842");
+      rect(ctx, edge, y, 3, 1, C.fenceHi);
+    }
+    const hx = fx === 0 ? 3 : L.W - 3 - Math.min(10, w - 4);
+    const hw = Math.min(10, w - 4);
+    if (hw >= 5) {
+      for (let y = front + 2; y < bottom - 2; y += 6) {
+        rect(ctx, hx, y, hw, 7, C.palmLo);
+        rect(ctx, hx + 1, y, hw - 2, 5, C.palm);
+        rect(ctx, hx + 2, y + 1, 2, 2, C.palmHi);
+      }
+    }
+  }
+  // The driveway down the left side to the garage door, the car on it.
+  const g = plan.garage?.door;
+  const dw = Math.min(30, x0 - 14);
+  if (g && dw >= 14) {
+    const dx = x0 - dw - 1;
+    const dy = front;
+    const dh = g.y + g.h + 6 - dy;
+    rect(ctx, dx, dy, dw, dh, C.concrete);
+    for (let y = dy + 24; y < dy + dh; y += 28) rect(ctx, dx, y, dw, 1, C.concreteLo);
+    for (let i = 0; i < (dw * dh) / 12; i++) rect(ctx, dx + Math.floor(rr() * dw), dy + Math.floor(rr() * dh), 1, 1, i % 2 ? C.concreteHi : C.concreteLo);
+    ctx.fillStyle = "rgba(40,36,44,0.2)";
+    ctx.fillRect(dx + Math.round(dw / 2) - 4, g.y - 30, 8, 12);
+    if (dw >= 18) hatchback(ctx, dx + Math.round(dw / 2) - 7, Math.max(dy + 4, g.y - 36));
+  }
+  // Garden beds and the trash cans on the right; beds on the left when it's roomy.
+  const beds = (bx: number, bw: number) => {
+    for (let y = front + 14; y + 22 <= bottom - 8; y += 34) {
+      rect(ctx, bx, y, bw, 22, "#7a5a3a");
+      rect(ctx, bx + 1, y + 1, bw - 2, 20, "#6a4a2e");
+      for (let k = 0; k < Math.floor(bw / 6); k++) {
+        const px = bx + 3 + k * 6;
+        const c = (k + y) % 3 === 0 ? "#e5544b" : (k + y) % 3 === 1 ? C.palm : C.yellow;
+        rect(ctx, px, y + 4, 3, 3, C.palm);
+        rect(ctx, px + 1, y + 5, 1, 1, c);
+        rect(ctx, px, y + 13, 3, 3, C.palmHi);
+      }
+    }
+  };
+  const rw = L.W - x1;
+  if (rw >= 26) beds(x1 + 10, Math.min(40, rw - 22));
+  if (x0 >= 70) beds(5 + 12, Math.min(40, x0 - dw - 34));
+  if (rw >= 18) {
+    // The trash and recycling cans by the side gate, and the gate itself.
+    const tx = x1 + 6;
+    const ty = bottom - 22;
+    for (const [i, c] of ["#4a5a4a", "#3a74c4"].entries()) {
+      rect(ctx, tx + i * 9, ty, 8, 12, OUTLINE);
+      rect(ctx, tx + i * 9 + 1, ty + 1, 6, 10, c);
+      rect(ctx, tx + i * 9 + 1, ty + 1, 6, 2, shade(c, 0.2));
+    }
+    if (plan.patio) {
+      const gy = plan.patio.y - 3;
+      rect(ctx, x1 + 1, gy, rw - 1, 3, C.fenceLo);
+      for (let x = x1 + 2; x < L.W - 2; x += 3) rect(ctx, x, gy, 2, 3, C.fence);
+      rect(ctx, x1 + 4, gy - 1, Math.min(14, rw - 6), 1, C.fenceHi);
+    }
+  }
+}
+
+/** Our beat-up hatchback, seen from above: faded red, one blue door, a surfboard rack. */
+function hatchback(ctx: Ctx, x: number, y: number): void {
+  const g = new Grid(14, 26);
+  g.rrect(1, 1, 12, 24, "#c4685a", 2);
+  g.rect(2, 2, 10, 2, "#d88878");
+  g.rect(2, 6, 10, 5, "#9ac8e8");
+  g.rect(2, 7, 10, 1, "#c8e4f4");
+  g.rect(2, 12, 10, 7, "#b85a4c");
+  g.rect(1, 12, 1, 5, "#4a7ac0").rect(12, 13, 1, 4, "#c4685a");
+  g.rect(2, 20, 10, 3, "#9ac8e8");
+  g.rect(3, 12, 8, 1, "#e8d4a8").rect(3, 18, 8, 1, "#e8d4a8");
+  g.set(2, 1, "#fff3c0").set(11, 1, "#fff3c0").set(2, 24, "#e5544b").set(11, 24, "#e5544b");
+  g.outline(OUTLINE);
+  put(ctx, g, x, y);
 }
 
 function runner(ctx: Ctx, x0: number, x1: number, hy: number): void {
@@ -293,14 +431,13 @@ function doormat(ctx: Ctx, x: number, y: number): void {
   put(ctx, g, x + 6, y + 1);
 }
 
-/** The roll-up garage door along the bottom: white panels, a handle, weatherstrip. */
+/** The roll-up garage door in the house's side wall, onto the driveway: white panels seen edge-on. */
 function garageDoor(ctx: Ctx, r: Rect): void {
-  rect(ctx, r.x - 3, r.y - 2, r.w + 6, r.h + 2, "#6a6a70");
-  rect(ctx, r.x, r.y - 1, r.w, r.h + 1, "#eeeeea");
-  rect(ctx, r.x, r.y - 1, r.w, 1, "#ffffff");
-  for (let x = r.x + 24; x < r.x + r.w - 4; x += 24) rect(ctx, x, r.y, 1, r.h, "#c9c9c4");
-  rect(ctx, r.x, r.y + 2, r.w, 1, "#d6d6d0");
-  rect(ctx, r.x + Math.round(r.w / 2) - 3, r.y + 1, 6, 1, "#8a8a90");
+  rect(ctx, r.x - 1, r.y - 2, r.w + 2, r.h + 4, "#6a6a70");
+  rect(ctx, r.x, r.y, r.w, r.h, "#eeeeea");
+  rect(ctx, r.x, r.y, 1, r.h, "#ffffff");
+  for (let y = r.y + 6; y < r.y + r.h - 2; y += 6) rect(ctx, r.x, y, r.w, 1, "#c9c9c4");
+  rect(ctx, r.x + 1, r.y + Math.round(r.h / 2) - 3, 1, 6, "#8a8a90");
 }
 
 // ------------------------------------------------------------------ the front wall
@@ -331,18 +468,21 @@ function busyOnWall(L: Layout): Rect[] {
 const hits = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 function wall(ctx: Ctx, L: Layout): void {
+  const plan = planOf(L);
+  const M = plan?.lot.front ?? 0;
+  if (plan && M > 0) street(ctx, L, plan);
   L.segments.forEach((sg, i) => {
     const d = sg.depth;
     const w = sg.x1 - sg.x0;
     const col = wallColor(L, sg.x0, sg.x1, d);
-    rect(ctx, sg.x0, 0, w, d, col.base);
+    rect(ctx, sg.x0, M, w, d - M, col.base);
     // Drywall seams and the odd nail pop.
-    for (let x = sg.x0 + 30 + (i * 17) % 20; x < sg.x1 - 4; x += 48) rect(ctx, x, 3, 1, d - 10, shade(col.base, -0.03));
-    speck(ctx, { x: sg.x0, y: 3, w, h: d - 10 }, [shade(col.base, -0.05), shade(col.base, 0.05)], 0.02, 31 + i);
+    for (let x = sg.x0 + 30 + (i * 17) % 20; x < sg.x1 - 4; x += 48) rect(ctx, x, M + 3, 1, d - M - 10, shade(col.base, -0.03));
+    speck(ctx, { x: sg.x0, y: M + 3, w, h: d - M - 10 }, [shade(col.base, -0.05), shade(col.base, 0.05)], 0.02, 31 + i);
     // Crown molding and the ceiling shadow.
-    rect(ctx, sg.x0, 0, w, 3, C.trim);
-    rect(ctx, sg.x0, 3, w, 1, C.trimLo);
-    rect(ctx, sg.x0, 4, w, 1, shade(col.base, -0.06));
+    rect(ctx, sg.x0, M, w, 3, C.trim);
+    rect(ctx, sg.x0, M + 3, w, 1, C.trimLo);
+    rect(ctx, sg.x0, M + 4, w, 1, shade(col.base, -0.06));
     if (col.kitchen) {
       // Subway tile behind the counter.
       const ty = d - 22;
@@ -365,9 +505,9 @@ function wall(ctx: Ctx, L: Layout): void {
     const left = L.segments.find((s) => s.x1 === px);
     const right = L.segments.find((s) => s.x0 === px);
     const d = Math.max(left?.depth ?? 64, right?.depth ?? 64);
-    rect(ctx, px - 3, 0, 6, d + 2, C.wallHi);
-    rect(ctx, px - 3, 0, 1, d + 2, "#fffaf0");
-    rect(ctx, px + 2, 0, 1, d + 2, C.wallDk);
+    rect(ctx, px - 3, M, 6, d + 2 - M, C.wallHi);
+    rect(ctx, px - 3, M, 1, d + 2 - M, "#fffaf0");
+    rect(ctx, px + 2, M, 1, d + 2 - M, C.wallDk);
     rect(ctx, px - 3, d - 6, 6, 5, C.trim);
     rect(ctx, px - 3, d - 1, 6, 1, "#a99a7a");
   }
@@ -381,6 +521,60 @@ function wall(ctx: Ctx, L: Layout): void {
       outlet(ctx, x, d - 14, hash(`outlet${x}`));
     }
   }
+}
+
+/**
+ * Out front, over the roof: the street with its dashed line and a neighbour's
+ * car, the curb and sidewalk, the strip of front lawn with our mailbox where
+ * the driveway meets the street, and the roof's tiled edge along the house.
+ */
+function street(ctx: Ctx, L: Layout, plan: StartupPlan): void {
+  const { x0, x1, front: M } = plan.lot;
+  const W = L.W;
+  rect(ctx, 0, 0, W, 11, "#6a6e78");
+  speck(ctx, { x: 0, y: 0, w: W, h: 11 }, ["#5e626c", "#767a84"], 0.12, 77);
+  for (let x = 4; x < W; x += 14) rect(ctx, x, 5, 7, 1, "#e8d48a");
+  rect(ctx, 0, 11, W, 1, "#c8c4bc");
+  rect(ctx, 0, 12, W, 3, "#d8d4cc");
+  for (let x = 8; x < W; x += 16) rect(ctx, x, 12, 1, 3, "#c4c0b8");
+  // The front lawn strip, the driveway across it.
+  rect(ctx, 0, 15, W, M - 15, C.grass);
+  speck(ctx, { x: 0, y: 15, w: W, h: M - 15 }, [C.grassLo, C.grassHi], 0.18, 78);
+  const g = plan.garage?.door;
+  const dw = Math.min(30, x0 - 14);
+  if (g && dw >= 14) {
+    const dx = x0 - dw - 1;
+    rect(ctx, dx, 12, dw, M - 12, C.concrete);
+    rect(ctx, dx, 12, dw, 1, C.concreteHi);
+    // The mailbox by the driveway, flag up.
+    const mx = Math.max(2, dx - 8);
+    rect(ctx, mx + 2, M - 12, 1, 6, "#6a4a30");
+    rect(ctx, mx - 1, M - 16, 7, 5, OUTLINE);
+    rect(ctx, mx, M - 15, 5, 3, "#3a5aa0");
+    rect(ctx, mx + 5, M - 17, 1, 3, "#e5544b");
+  }
+  // A street lamp on the sidewalk.
+  const lx = Math.round(W * 0.3);
+  rect(ctx, lx, 3, 1, 11, "#5a5e68");
+  rect(ctx, lx - 1, 2, 4, 2, "#3a3e48");
+  rect(ctx, lx, 3, 2, 1, "#fff1b8");
+  // A neighbour's car parked along the curb.
+  const cx = Math.round(W * 0.62);
+  const car = new Grid(26, 12);
+  car.rrect(1, 1, 24, 9, "#e8e4da", 2);
+  car.rect(6, 2, 6, 7, "#9ac8e8").rect(15, 2, 4, 7, "#9ac8e8");
+  car.set(1, 3, "#fff3c0").set(1, 7, "#fff3c0").set(24, 3, "#e5544b").set(24, 7, "#e5544b");
+  car.outline(OUTLINE);
+  put(ctx, car, cx, 0);
+  // The roof's tiled edge along the house's front.
+  for (let x = x0 - 4; x < x1 + 4; x += 3) {
+    for (let y = M - 7; y < M; y += 2) rect(ctx, x + ((y - M) % 4 ? 1 : 0), y, 3, 2, (x / 3 + y) % 2 ? "#c86a44" : "#b85a3a");
+  }
+  rect(ctx, x0 - 4, M - 8, x1 - x0 + 8, 1, "#e08a5a");
+  rect(ctx, x0 - 4, M - 1, x1 - x0 + 8, 1, "#7a3420");
+  ctx.fillStyle = "rgba(30,40,20,0.22)";
+  ctx.fillRect(x0 - 7, M - 6, 3, 6);
+  ctx.fillRect(x1 + 4, M - 6, 3, 6);
 }
 
 function outlet(ctx: Ctx, x: number, y: number, seed: number): void {

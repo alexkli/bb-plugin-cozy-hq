@@ -11,7 +11,7 @@ import type { Layout, Point, Rect } from "../../layout.ts";
 import { cached, floorPlan, mix, shade } from "../../themekit.ts";
 import { C, CANS, can, fill, ih, OUTLINE, sprite, STICKERS } from "./kit.ts";
 import { planOf, type StartupPlan } from "./plan.ts";
-import { clickDecor, clickLights, clickOverlay, clickUnderlay, pyramidDown, rehearsalSpots } from "./clicks.ts";
+import { clickDecor, clickLights, clickOverlay, clickUnderlay, pyramidAt, pyramidDown, rehearsalSpots } from "./clicks.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -29,10 +29,13 @@ function bulbsOf(L: Layout): { wire: Point[]; bulbs: Bulb[] } {
     const wire: Point[] = [];
     const bulbs: Bulb[] = [];
     let n = 0;
-    // Stapled under the crown molding every 24 px, sagging between staples.
-    for (let x = 2; x < L.W - 2; x++) {
+    // Stapled under the crown molding every 24 px, sagging between staples, the house's front wall only.
+    const top = planOf(L)?.lot.front ?? 0;
+    const x0 = Math.min(...L.segments.map((s) => s.x0)) + 2;
+    const x1 = Math.max(...L.segments.map((s) => s.x1)) - 2;
+    for (let x = x0; x < x1; x++) {
       const k = (x % 24) / 24;
-      const y = 5 + Math.round(Math.sin(k * Math.PI) * 3);
+      const y = top + 5 + Math.round(Math.sin(k * Math.PI) * 3);
       wire.push({ x, y });
       if (x % 12 === 6) bulbs.push({ x, y: y + 1, color: colors[n++ % colors.length]! });
     }
@@ -183,27 +186,27 @@ function pyramid(): HTMLCanvasElement {
 
 function bunkBed(): HTMLCanvasElement {
   // The bunk bed from the bedroom days, shoved into the corner: a sleeping bag on top, laundry below, fairy lights.
-  return sprite("bunk", 30, 46, (g) => {
+  return sprite("bunk", 28, 46, (g) => {
     const wood = C.wood;
-    g.vline(1, 0, 45, C.woodLo).vline(2, 0, 45, wood).vline(27, 0, 45, C.woodLo).vline(28, 0, 45, wood);
+    g.vline(1, 0, 45, C.woodLo).vline(2, 0, 45, wood).vline(25, 0, 45, C.woodLo).vline(26, 0, 45, wood);
     // Top bunk.
-    g.rect(3, 6, 24, 10, "#f4f2ea");
-    g.rect(3, 6, 24, 1, "#ffffff");
-    g.rrect(4, 7, 15, 8, "#3a6ea8", 2);
-    g.rect(5, 8, 13, 1, "#5a8ec8");
-    g.rrect(20, 7, 6, 5, "#ffffff", 1);
-    g.rect(3, 16, 24, 3, wood).rect(3, 16, 24, 1, C.woodHi);
+    g.rect(3, 6, 22, 10, "#f4f2ea");
+    g.rect(3, 6, 22, 1, "#ffffff");
+    g.rrect(4, 7, 14, 8, "#3a6ea8", 2);
+    g.rect(5, 8, 12, 1, "#5a8ec8");
+    g.rrect(19, 7, 5, 5, "#ffffff", 1);
+    g.rect(3, 16, 22, 3, wood).rect(3, 16, 22, 1, C.woodHi);
     // Bottom bunk: a mattress with laundry and a laptop.
-    g.rect(3, 26, 24, 10, "#e8e2d4");
-    g.rect(5, 28, 8, 5, "#c4483a").rect(9, 30, 6, 4, "#5f7fa8").rect(16, 29, 7, 4, "#c9ced6");
-    g.rect(3, 36, 24, 3, wood).rect(3, 36, 24, 1, C.woodHi);
+    g.rect(3, 26, 22, 10, "#e8e2d4");
+    g.rect(5, 28, 8, 5, "#c4483a").rect(9, 30, 6, 4, "#5f7fa8").rect(15, 29, 7, 4, "#c9ced6");
+    g.rect(3, 36, 22, 3, wood).rect(3, 36, 22, 1, C.woodHi);
     // The ladder.
-    g.vline(24, 16, 20, C.woodLo);
-    for (let y = 20; y < 36; y += 4) g.rect(22, y, 4, 1, wood);
+    g.vline(22, 16, 20, C.woodLo);
+    for (let y = 20; y < 36; y += 4) g.rect(20, y, 4, 1, wood);
     // Fairy lights along the top rail.
-    for (let x = 3; x < 27; x += 3) g.set(x, 4 + (x % 2), STICKERS[(x / 3) % STICKERS.length]!);
-    g.rect(3, 3, 24, 1, wood);
-    g.rect(0, 43, 4, 2, C.woodDk).rect(26, 43, 4, 2, C.woodDk);
+    for (let x = 3; x < 25; x += 3) g.set(x, 4 + (x % 2), STICKERS[(x / 3) % STICKERS.length]!);
+    g.rect(3, 3, 22, 1, wood);
+    g.rect(0, 43, 4, 2, C.woodDk).rect(24, 43, 4, 2, C.woodDk);
   });
 }
 
@@ -372,6 +375,18 @@ function hackTable(): HTMLCanvasElement {
   });
 }
 
+function airMattress(): HTMLCanvasElement {
+  // Someone's air mattress on the living-room floor, a sleeping bag kicked off it.
+  return sprite("air-mattress", 30, 16, (g) => {
+    g.rrect(1, 2, 28, 12, "#5a8ec8", 2);
+    g.rect(2, 3, 26, 1, "#7aaee8");
+    for (let x = 4; x < 27; x += 4) g.vline(x, 4, 9, "#4a7ab0");
+    g.rrect(3, 4, 7, 5, "#f4f2ea", 1);
+    g.rrect(12, 6, 16, 9, "#d86a3a", 2);
+    g.rect(13, 7, 14, 1, "#f08a5a");
+  });
+}
+
 function pizzaTower(): HTMLCanvasElement {
   // Pizza boxes stacked up to the light switch.
   return sprite("pizzas", 18, 22, (g) => {
@@ -390,7 +405,7 @@ function pizzaTower(): HTMLCanvasElement {
 
 interface Spots {
   console: { x: number; y: number; w: number } | null;
-  pyramid: Point | null;
+  pyramid: { x: number; y: number; z: number } | null;
   bench: Rect | null;
   bike: Rect | null;
   surf: Rect | null;
@@ -401,6 +416,7 @@ interface Spots {
   packages: Rect | null;
   scooter: Rect | null;
   board: Rect | null;
+  crash: Rect | null;
   recycling: Rect | null;
   hack: Rect | null;
   pizzas: Rect | null;
@@ -414,11 +430,6 @@ function consoleOf(L: Layout): { x: number; y: number; w: number } | null {
   return { x: Math.round(L.tv.x + (L.tv.w - w) / 2), y: seg.depth - 4, w };
 }
 
-/** The pyramid's base on the kitchen island (its left end). */
-function pyramidOf(L: Layout): Point | null {
-  const isl = L.props.find((p) => p.id === "island");
-  return isl ? { x: isl.x + 4, y: isl.y + 1 } : null;
-}
 
 function spotsOf(L: Layout): Spots {
   return cached(`startup|spots|${L.W}x${L.H}|${L.spots.length}|${L.props.length}`, () => {
@@ -466,7 +477,10 @@ function spotsOf(L: Layout): Spots {
     const living = plan?.cells.find((c) => c.kind === "living" && lc.x >= c.r.x && lc.x < c.r.x + c.r.w && lc.y >= c.r.y && lc.y < c.r.y + c.r.h)?.r;
     const area = living ? { x: L.lounge.x, y: L.couch.y + L.couch.h + 4, w: L.lounge.w, h: living.y + living.h - (L.couch.y + L.couch.h + 4) - 4 } : undefined;
     const wb = keep(pick(32, 38, area, taken));
-    return { console: consoleOf(L), pyramid: pyramidOf(L), bench, bike: bk, surf, fans, board: wb, recycling: bin2, hack, shoes, shoeBench: bench2, coats, packages: parcels, scooter: scoot, pizzas };
+    // The crash pad: an air mattress wherever the living room has floor left.
+    const lv = plan?.cells.find((c) => c.kind === "living")?.r;
+    const crash = keep(pick(30, 16, lv ? { x: lv.x + 4, y: lv.y + 40, w: lv.w - 8, h: lv.h - 44 } : undefined, taken));
+    return { console: consoleOf(L), pyramid: pyramidAt(L), bench, bike: bk, surf, fans, board: wb, crash, recycling: bin2, hack, shoes, shoeBench: bench2, coats, packages: parcels, scooter: scoot, pizzas };
   });
 }
 
@@ -514,7 +528,7 @@ export function startupDecor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
   if (s.pyramid && !pyramidDown(L, t)) {
     const p = s.pyramid;
     const img = pyramid();
-    out.push({ z: p.y + 20.6, draw: () => ctx.drawImage(img, p.x, p.y - 15) });
+    out.push({ z: p.z, draw: () => ctx.drawImage(img, p.x, p.y - 15) });
   }
   if (plan?.bunk) {
     const b = plan.bunk;
@@ -527,6 +541,7 @@ export function startupDecor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
   put(s.bench, workbench);
   put(s.surf, surfboard);
   put(s.board, rollingBoard);
+  put(s.crash, airMattress);
   put(s.recycling, recycling);
   put(s.hack, hackTable);
   put(s.bike, bike);
@@ -708,6 +723,8 @@ function staticLights(L: Layout): Light[] {
       if (p.kind === "vending") out.push([p.x + 10, p.y + 20, 22, 0.7, "#9af0ff", 0.18]);
       if (p.kind === "cooler") out.push([p.x + 8, p.y + 22, 8, 0.5, "#7ab8ff", 0.14]);
     }
+    // The street lamp out front.
+    if ((plan?.lot.front ?? 0) > 0) out.push([Math.round(L.W * 0.3) + 1, 6, 34, 0.7, "#ffe2a0", 0.2]);
     // The garage's fluorescent tube.
     const g = plan?.garage?.r;
     if (g) out.push([g.x + g.w / 2, g.y + 20, 60, 0.5, "#e8f4ff", 0.08]);
