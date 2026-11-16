@@ -142,7 +142,11 @@ function hearthSpots(L: Layout, p: CabinPlan, activity: string): GatherSpot[] {
     const side = Math.abs(left - x) <= Math.abs(right - x) ? left : right;
     return { x, y, facing, pose: "stand", activity, path: [{ x: side, y: hall, c: true }, { x: side, y }, { x, y }] };
   };
-  const xs = [box.x - 10, box.x + box.w + 10, box.x - 28, box.x + box.w + 28].filter((x) => x > g.x + 8 && x < g.x + g.w - 8);
+  // Clear of the room's walls and of the arcade cabinet if it stands in here.
+  const cab = L.arcade;
+  const xs = [box.x - 10, box.x + box.w + 10, box.x - 28, box.x + box.w + 28].filter(
+    (x) => x > g.x + 8 && x < g.x + g.w - 8 && !(cab && x > cab.x - 8 && x < cab.x + cab.w + 8 && y > cab.y - 4 && y < cab.y + cab.h + 16),
+  );
   return xs.map((x, i) => at(Math.round(x), i % 2 ? "left" : "right")).map((s) => ({ ...s, facing: "back" as Facing }));
 }
 

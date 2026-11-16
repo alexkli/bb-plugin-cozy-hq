@@ -11,6 +11,7 @@ import type { Layout, Rect, WallSegment } from "../../layout.ts";
 import {
   bossToys,
   Builder,
+  buildArcade,
   buildGames,
   buildKitchen,
   buildLibrary,
@@ -140,9 +141,12 @@ function utilitiesAt(b: Builder, x: number, baseY: number, approach: Point[]): v
   b.spot({ id: "cooler", kind: "cooler", group: "break", x: x + 8, y: baseY + 4, facing: "back", pose: "cup", path: [...approach, { x: x + 8, y: baseY + 4 }], activity: "chatting at the water cooler" });
 }
 
-/** The great room under the chimney: the hearth slab first, then the lounge (sofa facing the fire, piano, trout tank). */
-function buildGreatRoom(b: Builder, r: Rect, acc: Access, wallTv: Rect | null, naps: boolean): ReturnType<typeof buildLounge> {
-  const parts = buildLounge(b, { ...r, y: r.y + 8, h: r.h - 8 }, acc, wallTv, naps);
+/**
+ * The great room under the chimney: the hearth slab first, then the lounge (sofa facing
+ * the fire, piano, trout tank, and the arcade cabinet when there's no ski room for it).
+ */
+function buildGreatRoom(b: Builder, r: Rect, acc: Access, wallTv: Rect | null, naps: boolean, arcade: boolean): ReturnType<typeof buildLounge> {
+  const parts = buildLounge(b, { ...r, y: r.y + 8, h: r.h - 8 }, acc, wallTv, naps, arcade);
   const room = b.rooms[b.rooms.length - 1]!;
   if (room.kind === "lounge") room.rect = r;
   return parts;
@@ -204,13 +208,15 @@ function dressSkiRoom(plan: CabinPlan, r: Rect): void {
   if (bottom - top >= 16) plan.wax = { x: r.x + Math.round(r.w / 2) - 20, y: top + Math.round((bottom - top - 14) / 2), w: 40, h: 14 };
 }
 
-/** An old arcade cabinet in a nook of the great room (when there's no ski room for it). */
-function arcadeNook(b: Builder, x: number, y: number, acc: Access): Rect {
-  const arcade: Rect = { x, y, w: 24, h: 46 };
-  b.prop("arcade", "arcade", arcade.x - 1, arcade.y - 1, arcade.y + 46);
-  b.poke("arcade", "arcade", arcade);
-  b.spot({ id: "arcade", kind: "arcade", group: "lounge", x: arcade.x + 12, y: arcade.y + 58, facing: "back", pose: "stand", path: via(acc, arcade.y + 62, arcade.x + 12, arcade.y + 58), activity: "playing arcade games" });
-  return arcade;
+/**
+ * Short panels with no room for the cabinet elsewhere: it stands in the kitchen's front
+ * corner left of the table, played from the floor below the stools.
+ */
+function kitchenArcade(b: Builder, k: Rect, acc: Access, bottom: number): void {
+  const island = b.props.find((p) => p.kind === "kitchen-island");
+  const top = k.y + 30;
+  if (!island || island.x - k.x < 32 || top + 64 > bottom) return;
+  buildArcade(b, k.x + 4, top, via(acc, top + 62, k.x + 16, top + 58));
 }
 
 /** Deck chairs on the deck: nappers under wool blankets. */
@@ -402,30 +408,32 @@ function widePlan(W: number, H: number, threads: number): Layout {
   const top = D + 2;
   const mud: Rect = { x: X0, y: top, w: wL, h: hy - 8 - top };
   plan.mudroom = mud;
+  // The ski room: beside the great room on very wide panels, else under the kitchen when
+  // there's height. It has the arcade cabinet when it's wide enough; if not, the great room.
+  const y0 = hy + 10;
+  const kH = clamp(bottom - y0 - 8, 64, 92);
+  const side: Rect = { x: cx0 + gw + 10, y: top + 8, w: wC - gw - 10, h: hy - 8 - (top + 8) };
+  const below: Rect = { x: cx0, y: y0 + kH + 14, w: wC, h: Math.min(150, bottom - (y0 + kH + 8) - 6) };
+  const ski = split ? (side.h >= 104 ? side : null) : below.h >= 104 ? below : null;
   const great: Rect = { x: cx0, y: DC + 2, w: gw, h: hy - 8 - (DC + 2) };
-  const tvParts = buildGreatRoom(b, great, { hallY: hy, aisleX: a1 }, ch.wallTv, false);
+  const tvParts = buildGreatRoom(b, great, { hallY: hy, aisleX: a1 }, ch.wallTv, false, !ski || ski.w < 150);
   let games: Rect | null = null;
   let gamesParts: ReturnType<typeof buildGames> | null = null;
   let library = false;
-  if (split) {
-    const side: Rect = { x: cx0 + gw + 10, y: top + 8, w: wC - gw - 10, h: hy - 8 - (top + 8) };
-    if (side.h >= 104) {
-      games = side;
-      gamesParts = buildGames(b, side, { hallY: hy, aisleX: cx0 + gw + 5 });
-      dressSkiRoom(plan, side);
-    }
+  if (ski === side) {
+    games = side;
+    gamesParts = buildGames(b, side, { hallY: hy, aisleX: cx0 + gw + 5 });
+    dressSkiRoom(plan, side);
   }
   const meeting: Rect = { x: rx0, y: top, w: wR, h: hy - 8 - top };
   const whiteboard = buildMeeting(b, meeting, hy);
 
   // ---- below: the workroom, the kitchen (and the ski room), your study
-  const y0 = hy + 10;
   const wantRows = Math.ceil((threads + 3) / (2 * podCols));
   const fitRows = Math.max(1, Math.floor((bottom - y0 + 4) / POD_H));
   const rows = clamp(wantRows, 1, fitRows);
   buildPods(b, { x: X0, y: y0, w: wL, h: rows * POD_H - 4 }, { hallY: hy, aisleX: a1 });
   const leftY = y0 + rows * POD_H + 4;
-  const kH = clamp(bottom - y0 - 8, 64, 92);
   const kitchen: Rect = { x: cx0, y: y0 + 8, w: wC, h: kH - 8 };
   buildKitchen(b, kitchen, { hallY: hy, aisleX: a2 });
   let cY = kitchen.y + kitchen.h + 8;
@@ -439,8 +447,8 @@ function widePlan(W: number, H: number, threads: number): Layout {
     }
   }
   const cRest = bottom - cY;
-  if (!games && cRest >= 110) {
-    games = { x: cx0, y: cY + 6, w: wC, h: Math.min(150, cRest - 6) };
+  if (ski === below) {
+    games = below;
     gamesParts = buildGames(b, games, { hallY: hy, aisleX: a2 });
     dressSkiRoom(plan, games);
     cY = games.y + games.h + 8;
@@ -474,11 +482,10 @@ function widePlan(W: number, H: number, threads: number): Layout {
     if (!coldInMud) plan.bootRack = { x: mud.x + 80, y: mud.y + mud.h - 16, w: Math.min(mud.w - 96, 90), h: 14 };
   }
 
-  // No arcade in a ski room: the old cabinet in the great room's corner, between the piano and the sofa.
-  if (!gamesParts?.arcade) {
-    const span = tvParts.couch.x - 2 - (great.x + 40);
-    if (span >= 30 && great.h >= 76) gamesParts = { pingpong: gamesParts?.pingpong ?? null, arcade: arcadeNook(b, great.x + 40 + Math.round((span - 24) / 2), great.y + 6, { hallY: hy, aisleX: a1 }) };
-  }
+  // Neither the ski room nor the great room had room for the cabinet: the kitchen corner (unless the cold room is under the kitchen).
+  const sv = b.server;
+  const coldBelow = sv !== null && sv.x < kitchen.x + kitchen.w && sv.x + sv.w > kitchen.x && sv.y > kitchen.y;
+  if (!coldBelow) kitchenArcade(b, kitchen, { hallY: hy, aisleX: a2 }, cY === kitchen.y + kitchen.h + 8 ? bottom : cY - 8);
 
   // ---- outside: the sun deck
   let eventArea: Rect;
@@ -644,13 +651,8 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
     switch (row.kind) {
       case "great": {
         great = rect;
-        tvParts = buildGreatRoom(b, rect, acc, ch.wallTv, !rows.some((r) => r.kind === "games" || r.kind === "library" || r.kind === "deck"));
-        // No ski room: the old arcade cabinet stands in the corner between the piano and the sofa.
-        const span = tvParts.couch.x - 2 - (rect.x + 40);
-        if (!rows.some((r) => r.kind === "games") && span >= 30 && rect.h >= 70) {
-          const arcade = arcadeNook(b, rect.x + 40 + Math.round((span - 24) / 2), rect.y + 6, acc);
-          gamesParts = { pingpong: null, arcade };
-        }
+        // The cabinet stands by the piano unless the ski room has it.
+        tvParts = buildGreatRoom(b, rect, acc, ch.wallTv, !rows.some((r) => r.kind === "games" || r.kind === "library" || r.kind === "deck"), !rows.some((r) => r.kind === "games"));
         break;
       }
       case "pods":
