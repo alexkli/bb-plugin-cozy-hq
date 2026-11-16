@@ -414,122 +414,228 @@ function flyers(ctx: CanvasRenderingContext2D, win: Rect, info: PaintInfo, yh: n
 interface StreetFeatures {
   avenue: number;
   lamps: number[];
+  river: [number, number] | null;
 }
 
-function drawStreet(ctx: CanvasRenderingContext2D, lp: Rect, phase: Phase, snow: boolean): StreetFeatures {
+function drawStreet(ctx: CanvasRenderingContext2D, lp: Rect, phase: Phase, snow: boolean, seed: number): StreetFeatures {
   const { w, h } = lp;
   const P = PALS[phase];
+  const night = phase === "night";
   const av = Math.max(3, Math.round(h * 0.42));
-  // Rooftops across the avenue (smaller, farther) and on our side (closer).
-  const roofs = (y0: number, y1: number, minW: number, varW: number, seed: string) => {
+  // A river crossing the longer panes, with a bridge carrying the avenue over it.
+  let river: [number, number] | null = null;
+  if (w >= 150 && hash(`river${seed}`) % 3 !== 2) {
+    const rx = 24 + (hash(`rx${seed}`) % Math.max(1, w - 60));
+    river = [rx, rx + 12 + (hash(`rw${seed}`) % 6)];
+  }
+  const wet = (x: number, bw: number) => river !== null && x + bw > river[0] && x < river[1];
+  // Rooftops across the avenue (smaller, farther) and on our side (closer, with the odd tower top).
+  const roofs = (y0: number, y1: number, minW: number, varW: number, key: string, near: boolean) => {
     for (let x = -3; x < w; ) {
-      const g = lp.x + x;
-      const bw = minW + (hash(`${seed}w${g}`) % varW);
-      const base = P.facades[hash(`${seed}c${g}`) % P.facades.length]!;
-      const roof = snow ? "#e9edf2" : mix(base, phase === "night" ? "#000000" : "#ffffff", phase === "night" ? 0.1 : 0.12);
-      rect(ctx, x, y0, bw, y1 - y0, roof);
-      rect(ctx, x, y0, 1, y1 - y0, mix(base, "#000000", 0.25));
-      rect(ctx, x, y0, bw, 1, mix(base, "#ffffff", 0.25));
-      // Rooftop bits: skylights, AC units, a water tower.
-      const k = hash(`${seed}k${g}`) % 5;
-      const cx = x + 1 + (hash(`${seed}x${g}`) % Math.max(1, bw - 3));
-      const cy = y0 + 1 + (hash(`${seed}y${g}`) % Math.max(1, y1 - y0 - 3));
-      if (k === 0) {
-        rect(ctx, cx, cy, 2, 2, P.tank);
-        rect(ctx, cx, cy, 2, 1, mix(P.tank, "#ffffff", 0.25));
-      } else if (k === 1) rect(ctx, cx, cy, 2, 1, phase === "night" ? "#ffd98a" : "#9fb5c8");
-      else if (k === 2) rect(ctx, cx, cy, 1, 1, mix(base, "#ffffff", 0.4));
-      else if (k === 3 && y1 - y0 > 4) {
-        rect(ctx, cx, cy, 3, 2, phase === "night" ? "#24402c" : "#6f9a5c");
+      const g = seed + x;
+      let bw = minW + (hash(`${key}w${g}`) % varW);
+      if (wet(x, bw)) {
+        x = river![1] + 1;
+        continue;
+      }
+      const base = P.facades[hash(`${key}c${g}`) % P.facades.length]!;
+      const roof = snow ? "#e9edf2" : mix(base, night ? "#000000" : "#ffffff", night ? 0.1 : 0.12);
+      const kind = hash(`${key}k${g}`) % 9;
+      if (near && kind === 0 && y1 - y0 >= 7) {
+        // A neighbouring tower's top, much closer: a big roof with a helipad.
+        bw = Math.max(bw, 12);
+        rect(ctx, x, y0, bw, y1 - y0, night ? "#1d2338" : "#9aa3ad");
+        rect(ctx, x, y0, bw, 1, night ? "#2e3654" : "#c6ccd3");
+        const cx = x + Math.floor(bw / 2);
+        const cy = y0 + Math.floor((y1 - y0) / 2);
+        rect(ctx, cx - 3, cy - 2, 7, 5, night ? "#14182a" : "#4c535e");
+        rect(ctx, cx - 2, cy - 1, 5, 3, night ? "#ffd98a" : "#e9c46a");
+        rect(ctx, cx - 1, cy, 3, 1, night ? "#14182a" : "#4c535e");
+        if (night) rect(ctx, x + bw - 2, y0 + 1, 1, 1, "#ff5a4a");
+      } else if (kind === 1 && !near && y1 - y0 >= 4) {
+        // A pocket park with trees.
+        rect(ctx, x, y0, bw + 4, y1 - y0, night ? "#1c2c22" : "#6f9a5c");
+        for (let i = 0; i < bw + 2; i += 3) rect(ctx, x + 1 + i, y0 + 1 + (i % 2), 2, 2, night ? "#24402c" : "#4f7d47");
+        bw += 4;
+      } else {
+        rect(ctx, x, y0, bw, y1 - y0, roof);
+        rect(ctx, x, y0, 1, y1 - y0, mix(base, "#000000", 0.25));
+        rect(ctx, x, y0, bw, 1, mix(base, "#ffffff", 0.25));
+        // Rooftop bits: skylights, AC units, water towers, a roof garden.
+        const k = hash(`${key}q${g}`) % 5;
+        const cx = x + 1 + (hash(`${key}x${g}`) % Math.max(1, bw - 3));
+        const cy = y0 + 1 + (hash(`${key}y${g}`) % Math.max(1, y1 - y0 - 3));
+        if (k === 0) {
+          rect(ctx, cx, cy, 2, 2, P.tank);
+          rect(ctx, cx, cy, 2, 1, mix(P.tank, "#ffffff", 0.25));
+        } else if (k === 1) rect(ctx, cx, cy, 2, 1, night ? "#ffd98a" : "#9fb5c8");
+        else if (k === 2) rect(ctx, cx, cy, 1, 1, mix(base, "#ffffff", 0.4));
+        else if (k === 3 && y1 - y0 > 4) rect(ctx, cx, cy, 3, 2, night ? "#24402c" : "#6f9a5c");
+        if (night && hash(`${key}n${g}`) % 3 === 0) rect(ctx, x + 1 + (Math.abs(g) % Math.max(1, bw - 2)), y0 + 1, 1, 1, "#ffe3a8");
       }
       x += bw + 1;
     }
   };
   rect(ctx, 0, 0, w, h, P.street);
-  roofs(0, av - 1, 4, 5, "ra");
+  roofs(0, av - 1, 4, 5, "ra", false);
   // The avenue: sidewalks, asphalt, lane dashes.
   rect(ctx, 0, av - 1, w, 1, mix(P.street, "#ffffff", 0.2));
   rect(ctx, 0, av, w, 3, P.street);
-  for (let x = (lp.x % 4); x < w; x += 4) rect(ctx, x, av + 1, 2, 1, P.lane);
+  for (let x = seed % 4; x < w; x += 4) rect(ctx, x, av + 1, 2, 1, P.lane);
   rect(ctx, 0, av + 3, w, 1, mix(P.street, "#ffffff", 0.2));
-  roofs(av + 4, h, 6, 6, "rb");
+  roofs(av + 4, h, 6, 6, "rb", true);
   // A cross street.
-  const cs = (hash(`cs${lp.x}`) % Math.max(1, w - 8)) + 3;
-  rect(ctx, cs, av + 4, 2, h - av - 4, P.street);
+  const cs = (hash(`cs${seed}`) % Math.max(1, w - 8)) + 3;
+  if (!wet(cs, 2)) rect(ctx, cs, av + 4, 2, h - av - 4, P.street);
+  if (river) {
+    const [r0, r1] = river;
+    rect(ctx, r0, 0, r1 - r0, h, P.river);
+    for (let y = 1; y < h; y += 3) rect(ctx, r0 + 2 + ((y * 5) % Math.max(1, r1 - r0 - 4)), y, 2, 1, P.riverHi);
+    rect(ctx, r0, 0, 1, h, mix(P.river, "#ffffff", 0.3));
+    rect(ctx, r1 - 1, 0, 1, h, mix(P.river, "#000000", 0.25));
+    // The bridge.
+    rect(ctx, r0 - 1, av - 1, r1 - r0 + 2, 5, P.bridge);
+    rect(ctx, r0 - 1, av, r1 - r0 + 2, 3, P.street);
+    for (let x = r0; x < r1; x += 3) {
+      rect(ctx, x, av - 1, 1, 1, night ? "#ffd98a" : mix(P.bridge, "#ffffff", 0.3));
+      rect(ctx, x, av + 3, 1, 1, night ? "#ffd98a" : mix(P.bridge, "#ffffff", 0.3));
+    }
+  }
   const lamps: number[] = [];
-  for (let x = 2 + (lp.x % 6); x < w; x += 7) lamps.push(x);
-  return { avenue: av, lamps };
+  for (let x = 2 + (seed % 6); x < w; x += 7) lamps.push(x);
+  return { avenue: av, lamps, river };
 }
 
-function streetCanvas(lp: Rect, phase: Phase, snow: boolean): { canvas: HTMLCanvasElement; feats: StreetFeatures } {
-  return cached(`skyline|street|${lp.x},${lp.y},${lp.w},${lp.h}|${phase}|${snow}`, () => {
+function streetCanvas(lp: Rect, phase: Phase, snow: boolean, seed: number): { canvas: HTMLCanvasElement; feats: StreetFeatures } {
+  return cached(`skyline|street|${lp.w}x${lp.h}|${seed}|${phase}|${snow}`, () => {
     let feats: StreetFeatures | null = null;
     const canvas = makeCanvas(lp.w, lp.h, (ctx) => {
-      feats = drawStreet(ctx, lp, phase, snow);
+      feats = drawStreet(ctx, lp, phase, snow, seed);
     });
     return { canvas, feats: feats! };
   });
 }
 
-/** The lower glass: the city far below, with traffic. */
-export function drawLowerPanes(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): void {
+/** One pane of the city far below (a lower window, or the drop beyond the terrace rail), with traffic. */
+function streetPane(ctx: CanvasRenderingContext2D, lp: Rect, info: PaintInfo, seed: number, glass: boolean): void {
   const snow = info.weather === "snow";
   const dusk = duskness(info.hour);
   const night = info.night;
   const t = info.t;
-  for (const win of L.wall.windows) {
-    const lp = lowerPane(L, win);
-    if (!lp) continue;
-    const day = streetCanvas(lp, "day", snow);
-    ctx.drawImage(day.canvas, lp.x, lp.y);
-    if (dusk > 0.02) {
-      ctx.globalAlpha = dusk * (1 - night * 0.5);
-      ctx.drawImage(streetCanvas(lp, "dusk", snow).canvas, lp.x, lp.y);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(lp.x, lp.y, lp.w, lp.h);
+  ctx.clip();
+  const day = streetCanvas(lp, "day", snow, seed);
+  ctx.drawImage(day.canvas, lp.x, lp.y);
+  if (dusk > 0.02) {
+    ctx.globalAlpha = dusk * (1 - night * 0.5);
+    ctx.drawImage(streetCanvas(lp, "dusk", snow, seed).canvas, lp.x, lp.y);
+  }
+  if (night > 0.02) {
+    ctx.globalAlpha = clamp(night * 1.15, 0, 1);
+    ctx.drawImage(streetCanvas(lp, "night", snow, seed).canvas, lp.x, lp.y);
+  }
+  ctx.globalAlpha = 1;
+  const f = day.feats;
+  const y = lp.y + f.avenue;
+  if (night > 0.3) {
+    ctx.fillStyle = `rgba(255,190,110,${0.18 * night})`;
+    ctx.fillRect(lp.x, y, lp.w, 3);
+    ctx.fillStyle = `rgba(255,214,140,${0.9 * night})`;
+    for (const x of f.lamps) {
+      ctx.fillRect(lp.x + x, y - 1, 1, 1);
+      ctx.fillRect(lp.x + x + 3, y + 3, 1, 1);
     }
-    if (night > 0.02) {
-      ctx.globalAlpha = clamp(night * 1.15, 0, 1);
-      ctx.drawImage(streetCanvas(lp, "night", snow).canvas, lp.x, lp.y);
+  }
+  const cars = Math.max(3, Math.round(lp.w / 7));
+  for (let i = 0; i < cars; i++) {
+    const dir = i % 2 ? 1 : -1;
+    const speed = 5 + (i % 3) * 2.5;
+    const k = ((t * speed + i * 17 + seed) % (lp.w + 8)) - 4;
+    const x = Math.round(dir > 0 ? k : lp.w - k);
+    if (x < 0 || x >= lp.w - 1) continue;
+    const lane = dir > 0 ? 2 : 0;
+    if (night > 0.45) {
+      ctx.fillStyle = dir > 0 ? "#fff3d0" : "#ff5a4a";
+      ctx.fillRect(lp.x + x, y + lane, 1, 1);
+    } else {
+      ctx.fillStyle = i % 3 === 0 ? "#f2c230" : i % 3 === 1 ? "#2a2c32" : "#e8e8e4";
+      ctx.fillRect(lp.x + x, y + lane, 2, 1);
     }
-    ctx.globalAlpha = 1;
-    const f = day.feats;
-    const y = lp.y + f.avenue;
-    // Streetlights at night.
-    if (night > 0.3) {
-      ctx.fillStyle = `rgba(255,190,110,${0.18 * night})`;
-      ctx.fillRect(lp.x, y, lp.w, 3);
-      ctx.fillStyle = `rgba(255,214,140,${0.9 * night})`;
-      for (const x of f.lamps) {
-        ctx.fillRect(lp.x + x, y - 1, 1, 1);
-        ctx.fillRect(lp.x + x + 3, y + 3, 1, 1);
-      }
+  }
+  // The city glitters at night.
+  if (night > 0.45) {
+    ctx.fillStyle = "#fff1c4";
+    for (let i = 0; i < Math.ceil(lp.w / 14); i++) {
+      if (hash(`gl${seed}|${i}|${Math.floor(t * 1.3 + i * 0.37)}`) % 3 !== 0) continue;
+      ctx.fillRect(lp.x + (hash(`gx${seed}${i}`) % lp.w), lp.y + (hash(`gy${seed}${i}`) % lp.h), 1, 1);
     }
-    // Cars: cabs and dark sedans by day, head- and taillights at night.
-    for (let i = 0; i < 6; i++) {
-      const dir = i % 2 ? 1 : -1;
-      const speed = 5 + (i % 3) * 2.5;
-      const k = ((t * speed + i * 17 + win.x) % (lp.w + 8)) - 4;
-      const x = Math.round(dir > 0 ? k : lp.w - k);
-      if (x < 0 || x >= lp.w - 1) continue;
-      const lane = dir > 0 ? 2 : 0;
-      if (night > 0.45) {
-        ctx.fillStyle = dir > 0 ? "#fff3d0" : "#ff5a4a";
-        ctx.fillRect(lp.x + x, y + lane, 1, 1);
-      } else {
-        ctx.fillStyle = i % 3 === 0 ? "#f2c230" : i % 3 === 1 ? "#2a2c32" : "#e8e8e4";
-        ctx.fillRect(lp.x + x, y + lane, 2, 1);
-      }
+  }
+  // A helicopter far below now and then.
+  if (!glass && lp.w >= 160 && night < 0.6) {
+    const k = ((t + seed) % 46) / 15;
+    if (k < 1) {
+      const hx = lp.x + Math.round(k * (lp.w + 20)) - 10;
+      const hy = lp.y + Math.round(lp.h * 0.3);
+      ctx.fillStyle = "#2b2f38";
+      ctx.fillRect(hx, hy, 3, 2);
+      ctx.fillRect(hx - 2, hy, 2, 1);
+      ctx.fillStyle = Math.floor(t * 18) % 2 ? "#5a606b" : "#8a919c";
+      ctx.fillRect(hx - 1, hy - 1, 5, 1);
+      ctx.fillRect(hx + 1, hy - 2, 1, 3);
     }
-    if (overcast(info.weather)) {
-      ctx.fillStyle = night > 0.5 ? "rgba(24,26,40,0.3)" : "rgba(160,166,178,0.35)";
-      ctx.fillRect(lp.x, lp.y, lp.w, lp.h);
+  }
+  if (overcast(info.weather)) {
+    ctx.fillStyle = night > 0.5 ? "rgba(24,26,40,0.3)" : "rgba(160,166,178,0.35)";
+    ctx.fillRect(lp.x, lp.y, lp.w, lp.h);
+  }
+  // Clouds drifting by below the floor.
+  if (info.weather === "partly" || info.weather === "cloudy") {
+    const n = Math.max(1, Math.round(lp.w / 90)) * (info.weather === "cloudy" ? 2 : 1);
+    ctx.fillStyle = night > 0.5 ? "rgba(150,156,180,0.35)" : "rgba(252,253,255,0.62)";
+    for (let i = 0; i < n; i++) {
+      const cx = lp.x + Math.round(((t * (1.5 + (i % 3) * 0.6) + i * 83 + seed * 7) % (lp.w + 50)) - 25);
+      const cy = lp.y + ((i * 7 + seed) % Math.max(1, lp.h)) - 2;
+      ctx.fillRect(cx, cy, 20, 4);
+      ctx.fillRect(cx + 4, cy - 2, 11, 2);
+      ctx.fillRect(cx + 2, cy + 4, 14, 2);
     }
-    if (info.weather === "fog") {
-      ctx.fillStyle = night > 0.5 ? "rgba(120,124,140,0.55)" : "rgba(226,230,236,0.7)";
-      ctx.fillRect(lp.x, lp.y, lp.w, lp.h);
-    }
-    // Glass sheen.
+  }
+  if (info.weather === "fog") {
+    ctx.fillStyle = night > 0.5 ? "rgba(120,124,140,0.55)" : "rgba(226,230,236,0.7)";
+    ctx.fillRect(lp.x, lp.y, lp.w, lp.h);
+  }
+  if (glass) {
     ctx.fillStyle = `rgba(255,255,255,${night > 0.5 ? 0.03 : 0.09})`;
     for (let k = 0; k < lp.h; k++) if (k % 7 < 4) ctx.fillRect(lp.x + 4 + k, lp.y + lp.h - 1 - k, 1, 1);
   }
+  ctx.restore();
 }
 
+/** The lower glass: the city far below, with traffic. */
+export function drawLowerPanes(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): void {
+  for (const win of L.wall.windows) {
+    const lp = lowerPane(L, win);
+    if (lp) streetPane(ctx, lp, info, win.x, true);
+  }
+}
+
+/** Beyond the terrace rail: the street canyon a long way down (side strips are turned on end). */
+export function drawBeyond(ctx: CanvasRenderingContext2D, rects: Rect[], info: PaintInfo): void {
+  for (const r of rects) {
+    if (r.w >= r.h) {
+      streetPane(ctx, r, info, r.x + 31, false);
+      continue;
+    }
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(r.x, r.y, r.w, r.h);
+    ctx.clip();
+    // Draw a wide pane in turned coordinates: x along the strip, y across it.
+    ctx.translate(r.x + r.w, r.y);
+    ctx.rotate(Math.PI / 2);
+    streetPane(ctx, { x: 0, y: 0, w: r.h, h: r.w }, info, r.x * 3 + r.y + 57, false);
+    ctx.restore();
+  }
+}

@@ -6,6 +6,11 @@ import type { BackgroundSteps } from "../../theme.ts";
 import type { Layout, Rect, Room } from "../../layout.ts";
 import { Grid, OUTLINE, hash, rect, rng, shade, mix } from "../../themekit.ts";
 import { P } from "./pal.ts";
+import { corridorsFor, paintCells, partitions } from "./building.ts";
+import { planOf } from "./plan.ts";
+
+/** The layout whose background is being baked (the fixture steps don't get it). */
+let baking: Layout | null = null;
 
 const T = 12; // carpet tile size
 
@@ -127,7 +132,9 @@ function wornLanes(ctx: CanvasRenderingContext2D, L: Layout): void {
 }
 
 function floor(ctx: CanvasRenderingContext2D, L: Layout): void {
+  baking = L;
   carpetTiles(ctx, { x: 0, y: 0, w: L.W, h: L.H }, "#675f45", "#615941", hash(`annex-floor-${L.W}`), "#5e5d55");
+  if (corridorsFor(ctx, L)) return;
   wornLanes(ctx, L);
   const r = rng(hash(`annex-stains-${L.W}x${L.H}`));
   // Spills and coffee rings.
@@ -320,6 +327,10 @@ function wall(ctx: CanvasRenderingContext2D, L: Layout): void {
 // ------------------------------------------------------------------ rooms
 
 function pods(ctx: CanvasRenderingContext2D, L: Layout): void {
+  if (paintCells(ctx, L)) {
+    for (const d of L.desks) blob(ctx, d.chairX + 8, d.chairY + (d.side === "north" ? 12 : 10), 8, 4, "rgba(160,150,120,0.16)", hash(`chairwear${d.index}`));
+    return;
+  }
   const sets: [string, string, string][] = [
     ["#535a62", "#4f565e", "#655f4a"],
     ["#5d5a4a", "#585545", "#4f565e"],
@@ -345,6 +356,8 @@ function room(ctx: CanvasRenderingContext2D, room: Room, L: Layout): void {
   const r = room.rect;
   const seed = hash(`annex-room-${room.kind}-${r.x}-${r.y}`);
   const rr = rng(seed);
+  // On the Annex plan these rooms' floors come with the building.
+  if (planOf(L) && (room.kind === "kitchen" || room.kind === "waiting" || room.kind === "games" || room.kind === "library" || room.kind === "pod")) return;
   switch (room.kind) {
     case "meeting": {
       carpetTiles(ctx, r, "#5f6656", "#5a6152", seed, "#676047");
@@ -647,6 +660,7 @@ function status(ctx: CanvasRenderingContext2D, s: Rect): void {
 }
 
 function door(ctx: CanvasRenderingContext2D, d: Rect): void {
+  if (baking) partitions(ctx, baking);
   // A heavy old fire door: chipped paint, wired glass, a scuffed kick plate.
   const g = new Grid(d.w + 6, d.h + 4);
   g.rect(0, 2, d.w + 6, d.h + 2, "#4f3f2e");

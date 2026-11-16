@@ -626,6 +626,17 @@ function glassFront(p: PropPlacement, L: Layout, classic: () => HTMLCanvasElemen
       ? { "#7a4e2c": "#2a1a2a", "#a86c3a": P.mag, "#e9dcc6": "#2a1236", "#4a2e1a": "#120812", "#ffffff": P.magHi }
       : { "#8fa3b5": "#2b2546", "#b8c9d6": P.cyan, "#cfe6f5": "#1e2a5a", "#5b6b7a": "#100d20", "#ffffff": P.cyanHi },
   );
+  if (room?.kind === "meeting" && (p.w ?? 100) >= 90) {
+    const ctx = glass.getContext("2d")!;
+    const text = "HOLO DOME";
+    const tw = text.length * 4 - 1;
+    const x = 8;
+    ctx.fillStyle = OUTLINE;
+    ctx.fillRect(x - 3, 1, tw + 6, 9);
+    ctx.fillStyle = "#140a24";
+    ctx.fillRect(x - 2, 2, tw + 4, 7);
+    drawPixelText(ctx, text, x, 3, P.vioHi);
+  }
   if (room?.kind === "server") {
     // "THE CORE" across the glass.
     const ctx = glass.getContext("2d")!;

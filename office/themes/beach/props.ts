@@ -175,13 +175,17 @@ function pianoSprite(): HTMLCanvasElement {
 }
 
 function fishtankStand(): HTMLCanvasElement {
+  // A rock outcrop under the rock pool, with barnacles and a little seaweed.
   return spr("fishtank-stand", 42, 22, (g) => {
-    g.rect(1, 1, 40, 18, C.teak);
-    g.rect(1, 1, 40, 2, C.teakHi);
-    weave(g, 4, 6, 15, 10, C.rattan, C.rattanLo);
-    weave(g, 23, 6, 15, 10, C.rattan, C.rattanLo);
-    g.set(19, 11, C.sun).set(22, 11, C.sun);
-    g.rect(2, 19, 3, 2, C.teakDk).rect(37, 19, 3, 2, C.teakDk);
+    const rocks = ["#8a8278", "#a39a8e", "#77706a"];
+    g.rrect(1, 1, 40, 18, "#8a8278", 3);
+    g.ellipse(9, 9, 8, 7, rocks[1]!);
+    g.ellipse(22, 10, 9, 8, rocks[0]!);
+    g.ellipse(34, 9, 7, 7, rocks[2]!);
+    g.rect(3, 2, 10, 1, "#c8beb2").rect(16, 2, 9, 1, "#b4ab9e").rect(29, 3, 8, 1, "#a8a094");
+    for (const [x, y] of [[6, 12], [20, 15], [31, 13], [14, 6], [36, 6]] as const) g.set(x, y, "#e8e2d6").set(x + 1, y, "#c8beb2");
+    g.set(25, 5, "#57b86f").set(26, 4, "#3f9a5a").set(27, 5, "#57b86f").set(10, 4, "#57b86f").set(11, 3, "#3f9a5a");
+    g.rect(2, 19, 4, 2, "#6e665c").rect(36, 19, 4, 2, "#6e665c");
   });
 }
 

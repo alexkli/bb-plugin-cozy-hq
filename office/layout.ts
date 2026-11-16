@@ -284,16 +284,25 @@ export interface Layout {
     pillars: number[];
     paintings: { sprite: "SMALL_PAINTING" | "SMALL_PAINTING_2" | "LARGE_PAINTING"; x: number; y: number }[];
   };
+  /** Anything a scenery's own floor plan wants to remember for drawing it (tents, trees, …). */
+  themeData?: unknown;
+  /**
+   * Word swaps that hold for this floor plan only, over the scenery's
+   * `labels.words` (say "in the lounge" → "out in the schoolyard" when the
+   * plan has a yard where events happen).
+   */
+  words?: Record<string, string>;
 }
 
 export const MIN_W_WIDE = 600;
 export const MIN_H_WIDE = 300;
 export const PORTRAIT_W = 340;
 export const PORTRAIT_MIN_H = 600;
-const POD_H = 104;
-const POD_GAP = 30;
+/** Height of one desk pod row, and the gap between its two desk rows. */
+export const POD_H = 104;
+export const POD_GAP = 30;
 
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+export const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 export interface LayoutOptions {
   threads?: number;
@@ -318,7 +327,8 @@ export function connect(net: Network, a: Point, b: Point): Point[] {
   return out;
 }
 
-class Builder {
+/** Collects rooms, spots, props, plants and clickables while a floor plan is laid out. */
+export class Builder {
   spots: Spot[] = [];
   props: PropPlacement[] = [];
   plants: PlantPlacement[] = [];
@@ -351,12 +361,13 @@ class Builder {
 }
 
 /** Access to a room: the hallway it hangs off and an aisle beside it. */
-interface Access {
+export interface Access {
   hallY: number;
   aisleX: number;
 }
 
-const via = (acc: Access, laneY: number, x: number, y: number): Point[] => [
+/** A spot path: from the hallway at the aisle, along the aisle to a lane, along the lane, to the spot. */
+export const via = (acc: Access, laneY: number, x: number, y: number): Point[] => [
   { x: acc.aisleX, y: acc.hallY, c: true },
   { x: acc.aisleX, y: laneY },
   { x, y: laneY },
@@ -365,7 +376,7 @@ const via = (acc: Access, laneY: number, x: number, y: number): Point[] => [
 
 // ------------------------------------------------------------------ rooms
 
-function buildPods(b: Builder, r: Rect, acc: Access): void {
+export function buildPods(b: Builder, r: Rect, acc: Access): void {
   const cols = Math.max(1, Math.floor(r.w / 48));
   const rows = Math.max(1, Math.floor((r.h + 8) / POD_H));
   const x0 = r.x + Math.floor((r.w - cols * 48) / 2);
@@ -420,7 +431,7 @@ function buildPods(b: Builder, r: Rect, acc: Access): void {
   b.rooms.push({ kind: "pod", rect: { ...r, h: Math.min(r.h, rows * POD_H) } });
 }
 
-function buildMeeting(b: Builder, r: Rect, hallY: number): Rect {
+export function buildMeeting(b: Builder, r: Rect, hallY: number): Rect {
   const doorX = r.x + r.w - 16;
   b.rooms.push({ kind: "meeting", rect: r, walls: "glass", doorX, doorSide: "bottom" });
   // Leave room beside the board for whoever presents a plan to you.
@@ -481,7 +492,7 @@ function buildMeeting(b: Builder, r: Rect, hallY: number): Rect {
   return board;
 }
 
-function buildBoss(b: Builder, r: Rect, hallY: number): Layout["boss"] {
+export function buildBoss(b: Builder, r: Rect, hallY: number): Layout["boss"] {
   const doorX = r.x + 16;
   b.rooms.push({ kind: "boss", rect: r, walls: "wood", doorX, doorSide: "top" });
   const deskW = 60;
@@ -519,7 +530,7 @@ function buildBoss(b: Builder, r: Rect, hallY: number): Layout["boss"] {
   return { room: r, seat, desk, dogBed, lamp: { x: r.x + 14, y: r.y + 6 } };
 }
 
-function buildWaiting(b: Builder, r: Rect, hallY: number): void {
+export function buildWaiting(b: Builder, r: Rect, hallY: number): void {
   b.rooms.push({ kind: "waiting", rect: r });
   const aisleX = r.x + 6;
   // A small reception stand with a bell, top right.
@@ -589,7 +600,7 @@ function buildWaiting(b: Builder, r: Rect, hallY: number): void {
 }
 
 /** A little indoor garden: plants all round and benches to sit on. */
-function buildGarden(b: Builder, r: Rect, acc: Access): void {
+export function buildGarden(b: Builder, r: Rect, acc: Access): void {
   b.rooms.push({ kind: "garden", rect: r });
   b.plant("LARGE_PLANT", r.x + 2, r.y + r.h - 50);
   b.plant("LARGE_PLANT", r.x + r.w - 34, r.y + r.h - 50);
@@ -612,7 +623,7 @@ function buildGarden(b: Builder, r: Rect, acc: Access): void {
 }
 
 /** A small glass server room: racks with blinking lights and an AI cluster. */
-function buildServerRoom(b: Builder, r: Rect): void {
+export function buildServerRoom(b: Builder, r: Rect): void {
   b.rooms.push({ kind: "server", rect: r, walls: "glass", doorX: r.x + r.w - 12, doorSide: "top" });
   const n = Math.max(2, Math.floor((r.w - 10) / 18));
   const ai = Math.floor(n / 2);
@@ -627,7 +638,7 @@ function buildServerRoom(b: Builder, r: Rect): void {
   b.server = r;
 }
 
-function buildKitchen(b: Builder, r: Rect, acc: Access): void {
+export function buildKitchen(b: Builder, r: Rect, acc: Access): void {
   b.rooms.push({ kind: "kitchen", rect: r });
   // Counter along the top: coffee machine, kettle, sink, microwave.
   const cw = Math.min(r.w - 52, 120);
@@ -666,7 +677,7 @@ function buildKitchen(b: Builder, r: Rect, acc: Access): void {
   }
 }
 
-function buildLounge(b: Builder, r: Rect, acc: Access, wallTv: Rect | null, naps = false): { tv: Rect; screen: Rect; speakers: Rect[]; couch: Rect; fishtank: Rect } {
+export function buildLounge(b: Builder, r: Rect, acc: Access, wallTv: Rect | null, naps = false): { tv: Rect; screen: Rect; speakers: Rect[]; couch: Rect; fishtank: Rect } {
   b.rooms.push({ kind: "lounge", rect: r });
   let tv: Rect;
   if (wallTv) {
@@ -716,7 +727,7 @@ function buildLounge(b: Builder, r: Rect, acc: Access, wallTv: Rect | null, naps
   return { tv, screen, speakers, couch, fishtank };
 }
 
-function buildGames(b: Builder, r: Rect, acc: Access): { pingpong: Rect | null; arcade: Rect | null } {
+export function buildGames(b: Builder, r: Rect, acc: Access): { pingpong: Rect | null; arcade: Rect | null } {
   b.rooms.push({ kind: "games", rect: r });
   let pingpong: Rect | null = null;
   let arcade: Rect | null = null;
@@ -749,7 +760,7 @@ function buildGames(b: Builder, r: Rect, acc: Access): { pingpong: Rect | null; 
   return { pingpong, arcade };
 }
 
-function buildLibrary(b: Builder, r: Rect, acc: Access): void {
+export function buildLibrary(b: Builder, r: Rect, acc: Access): void {
   b.rooms.push({ kind: "library", rect: r });
   const shelves = Math.max(1, Math.floor((r.w - 40) / 34));
   const sx = r.x + Math.floor((r.w - shelves * 34) / 2);
@@ -767,12 +778,20 @@ function buildLibrary(b: Builder, r: Rect, acc: Access): void {
 
 // ------------------------------------------------------------------ templates
 
-export function buildLayout(Win: number, Hin: number, opts: LayoutOptions = {}): Layout {
+/** The size a floor plan is laid out at for a panel (never below the minimums), and whether it's the stacked portrait plan. */
+export function layoutSize(Win: number, Hin: number): { W: number; H: number; portrait: boolean } {
   const portrait = Win < Hin * 0.82;
-  return portrait ? buildPortrait(Math.max(PORTRAIT_W, Math.floor(Win)), Math.max(PORTRAIT_MIN_H, Math.floor(Hin)), opts) : buildWide(Math.max(MIN_W_WIDE, Math.floor(Win)), Math.max(MIN_H_WIDE, Math.floor(Hin)), opts);
+  return portrait
+    ? { W: Math.max(PORTRAIT_W, Math.floor(Win)), H: Math.max(PORTRAIT_MIN_H, Math.floor(Hin)), portrait }
+    : { W: Math.max(MIN_W_WIDE, Math.floor(Win)), H: Math.max(MIN_H_WIDE, Math.floor(Hin)), portrait };
 }
 
-function finish(
+export function buildLayout(Win: number, Hin: number, opts: LayoutOptions = {}): Layout {
+  const { W, H, portrait } = layoutSize(Win, Hin);
+  return portrait ? buildPortrait(W, H, opts) : buildWide(W, H, opts);
+}
+
+export function finish(
   b: Builder,
   W: number,
   H: number,
@@ -895,7 +914,7 @@ function finish(
 }
 
 /** Water cooler, printer and bin along the bottom edge at x. */
-function utilities(b: Builder, H: number, x: number, hallY: number): void {
+export function utilities(b: Builder, H: number, x: number, hallY: number): void {
   b.prop("cooler", "cooler", x, H - 40, H - 5);
   b.poke("cooler", "cooler", { x, y: H - 40, w: 16, h: 36 });
   b.prop("printer", "printer", x + 22, H - 30, H - 4);
@@ -905,7 +924,7 @@ function utilities(b: Builder, H: number, x: number, hallY: number): void {
   b.spot({ id: "cooler", kind: "cooler", group: "break", x: x + 8, y: H - 2, facing: "back", pose: "cup", path: [{ x: x + 8, y: hallY, c: true }, { x: x + 8, y: H - 2 }], activity: "chatting at the water cooler" });
 }
 
-function buildWide(W: number, H: number, opts: LayoutOptions): Layout {
+export function buildWide(W: number, H: number, opts: LayoutOptions): Layout {
   const b = new Builder();
   const threads = opts.threads ?? 8;
   const podCols = clamp(Math.floor((W * 0.33) / 48), 3, 6);
@@ -1044,7 +1063,7 @@ function buildWide(W: number, H: number, opts: LayoutOptions): Layout {
   });
 }
 
-function buildPortrait(W: number, H: number, opts: LayoutOptions): Layout {
+export function buildPortrait(W: number, H: number, opts: LayoutOptions): Layout {
   const b = new Builder();
   const threads = opts.threads ?? 8;
   const aisleX = W - 8;

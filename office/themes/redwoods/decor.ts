@@ -1,7 +1,7 @@
 // Redwood Camp: little things on the forest floor (ferns, mushrooms, rocks, stumps).
 import { C, logEnd, sprite } from "./kit.ts";
 
-export type DecorKind = "ferns" | "shrooms" | "rock" | "stump" | "cones" | "lantern-stake" | "woodpile";
+export type DecorKind = "ferns" | "shrooms" | "rock" | "stump" | "cones" | "lantern-stake" | "woodpile" | "log" | "bush";
 
 function frond(g: import("../../themekit.ts").Grid, x: number, y: number, len: number, dir: number, c: string, hi: string): void {
   // A fern frond arching out from (x, y), leaflets on both sides.
@@ -15,6 +15,13 @@ function frond(g: import("../../themekit.ts").Grid, x: number, y: number, len: n
       if (i % 2 === 0 && i < len - 2) g.set(fx - dir, fy - 2, c).set(fx - dir, fy + 2, c);
     }
   }
+}
+
+function hlogLocal(g: import("../../themekit.ts").Grid, x: number, y: number, w: number, h: number): void {
+  for (let j = 0; j < h; j++) g.rect(x, y + j, w, 1, j < 1 ? C.barkLt : j < 3 ? C.barkHi : j < h - 1 ? C.barkMid : C.bark);
+  for (let i = 3; i < w - 3; i += 5) g.rect(x + i, y + 2 + (i % 3), 3, 1, C.barkDk);
+  logEnd(g, x + 1, y + (h - 1) / 2, 1.5, (h - 1) / 2);
+  logEnd(g, x + w - 2, y + (h - 1) / 2, 1.5, (h - 1) / 2);
 }
 
 export function decorSprite(kind: DecorKind, seed: number): HTMLCanvasElement {
@@ -73,6 +80,29 @@ export function decorSprite(kind: DecorKind, seed: number): HTMLCanvasElement {
         g.set(3, 0, C.iron).rect(2, 1, 3, 1, C.iron).rect(1, 2, 5, 4, C.iron);
         g.rect(2, 2, 3, 3, C.glass).set(3, 3, C.flameHi);
         g.rect(2, 16, 3, 1, C.mossHi);
+      });
+    case "log":
+      return sprite(`decor-log-${v}`, 32, 12, (g) => {
+        // A fallen log, mossy on top, a shelf fungus and a fern.
+        hlogLocal(g, 1, 3, 29, 7);
+        for (let x = 4; x < 27; x++) if ((x * 5 + v) % 4 < 2) g.set(x, 3, C.mossHi).set(x, 4, (x * 3) % 5 === 0 ? C.moss : C.barkLt);
+        g.rect(12, 9, 4, 1, "#e0b77e").rect(13, 10, 3, 1, "#b58652");
+        frond(g, 25, 4, 6, 1, C.fern, C.fernHi);
+        if (v === 2) g.set(8, 2, "#c4552d").set(8, 1, "#e07a4a");
+      });
+    case "bush":
+      return sprite(`decor-bush-${v}`, 18, 14, (g) => {
+        // A huckleberry bush.
+        g.ellipse(8.5, 8, 7.5, 5, C.fernDk);
+        g.ellipse(7.5, 6.5, 6, 3.6, C.fern);
+        g.ellipse(6.5, 5.5, 3.5, 2, C.fernHi);
+        for (const [x, y] of [
+          [4, 8],
+          [11, 6],
+          [13, 9],
+          [8, 10],
+          [6, 4],
+        ] as const) g.set(x, y, v === 1 ? "#3a4a8a" : "#b23a32");
       });
     case "woodpile":
       return sprite(`decor-woodpile`, 20, 12, (g) => {

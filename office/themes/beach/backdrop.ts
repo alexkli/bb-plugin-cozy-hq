@@ -5,6 +5,8 @@ import type { BackgroundSteps } from "../../theme.ts";
 import type { Rect } from "../../layout.ts";
 import { Grid, OUTLINE, rng, shade } from "../../themekit.ts";
 import { C, fill, paint } from "./kit.ts";
+import { boardwalk, firePit, pavers, pool, sea, shackEave, towel, workDeck } from "./grounds.ts";
+import { planOf } from "./plan.ts";
 
 // ------------------------------------------------------------------ floors
 
@@ -137,7 +139,28 @@ function rope(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h:
 
 export const BACKDROP: Partial<BackgroundSteps> = {
   floor(ctx, L) {
-    deckRows(ctx, { x: 0, y: 0, w: L.W, h: L.H }, 91);
+    const P = planOf(L);
+    if (!P) deckRows(ctx, { x: 0, y: 0, w: L.W, h: L.H }, 91);
+    else {
+      // Sand everywhere, the villa's deck along the top, the pool deck, the pools, boardwalks and the surf.
+      sandPatch(ctx, { x: 0, y: 0, w: L.W, h: L.H }, 61);
+      deckRows(ctx, { x: 0, y: 0, w: L.W, h: P.terraceEnd }, 91);
+      fill(ctx, 0, P.terraceEnd, L.W, 2, "#9a7a50");
+      fill(ctx, 0, P.terraceEnd + 2, L.W, 2, "rgba(90,60,30,0.18)");
+      if (P.pavers) {
+        pavers(ctx, { x: 0, y: P.pavers.y0 + 2, w: L.W, h: P.pavers.y1 - P.pavers.y0 - 2 });
+        fill(ctx, 0, P.pavers.y1, L.W, 2, "#c8b48e");
+        fill(ctx, 0, P.pavers.y1 + 2, L.W, 2, "rgba(120,90,50,0.15)");
+      }
+      for (const pl of P.pools) {
+        // A paved apron around a pool out on the sand.
+        if (!P.pavers || pl.y > P.pavers.y1) pavers(ctx, { x: pl.x - 10, y: pl.y - 10, w: pl.w + 20, h: pl.h + 18 });
+        pool(ctx, pl);
+      }
+      for (const w of P.walks) boardwalk(ctx, w);
+      if (P.sea) sea(ctx, P.sea);
+      if (P.bonfire) firePit(ctx, P.bonfire.x, P.bonfire.y);
+    }
     // A sisal doormat and a dusting of sand by the door.
     const e = L.entrance;
     const mat: Rect = { x: e.x - 12, y: e.y + 1, w: 24, h: 9 };
@@ -210,6 +233,10 @@ export const BACKDROP: Partial<BackgroundSteps> = {
   },
 
   pods(ctx, L) {
+    if (planOf(L)) {
+      L.pods.forEach((pod, i) => workDeck(ctx, pod, i));
+      return;
+    }
     const borders = [C.aqua, C.coral, C.sea];
     L.pods.forEach((pod, i) => rug(ctx, { x: pod.x - 4, y: pod.y + 2, w: pod.w + 8, h: pod.h - 2 }, borders[i % borders.length]!, C.white, i % 2 ? "#e0cb98" : "#dcc690", i));
   },
@@ -249,15 +276,20 @@ export const BACKDROP: Partial<BackgroundSteps> = {
         if (rw > 20 && rh > 20) rug(ctx, { x: r.x + Math.round((r.w - rw) / 2) + 6, y: r.y + 22, w: rw, h: rh }, C.seaLo, C.sunHi, "#d9c189", 4);
         break;
       }
-      case "waiting":
-        rug(ctx, { x: r.x + 2, y: r.y + 2, w: r.w - 4, h: r.h - 4 }, C.aqua, C.white, "#e3d3a8", 8, true);
+      case "waiting": {
+        const P = planOf(L);
+        if (P) P.towels.forEach((t, i) => towel(ctx, t, i));
+        else rug(ctx, { x: r.x + 2, y: r.y + 2, w: r.w - 4, h: r.h - 4 }, C.aqua, C.white, "#e3d3a8", 8, true);
         break;
+      }
       case "kitchen":
         cementTiles(ctx, r);
         break;
       case "games": {
         // A sand pit with a rope edge and the shadow of a shade sail.
         sandPatch(ctx, r, 21);
+        const P = planOf(L);
+        if (P) shackEave(ctx, r, P.shack);
         ctx.fillStyle = "rgba(150,110,60,0.13)";
         ctx.beginPath();
         ctx.moveTo(r.x + r.w * 0.22, r.y + 6);
@@ -362,7 +394,14 @@ export const BACKDROP: Partial<BackgroundSteps> = {
       const gap = room.doorSide === "top" ? room.doorX ?? -1 : -1;
       for (let x = r.x - 2; x < r.x + r.w + 1; x++) {
         if (gap >= 0 && x >= gap - 9 && x < gap + 9) continue;
-        if (wood) {
+        if (wood && planOf(L)) {
+          // The bungalow's thatched eave.
+          const len = 7 + ((x * 7) % 3 === 0 ? 1 : 0);
+          fill(ctx, x, r.y - 9, 1, 1, C.thatchDk);
+          fill(ctx, x, r.y - 8, 1, len, x % 2 ? C.thatch : C.thatchHi);
+          if ((x * 5) % 4 === 0) fill(ctx, x, r.y - 6, 1, 2, C.thatchLo);
+          fill(ctx, x, r.y - 9 + len, 1, 1, C.thatchDk);
+        } else if (wood) {
           fill(ctx, x, r.y - 8, 1, 2, C.teakLo);
           fill(ctx, x, r.y - 6, 1, 5, (x - r.x) % 6 === 0 ? C.teak : "#e6d6b6");
           fill(ctx, x, r.y - 1, 1, 1, C.teakDk);

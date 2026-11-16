@@ -6,16 +6,20 @@
 // See office/themes/README.md for the hooks; the pieces live in ./beach/.
 import type { Theme } from "../theme.ts";
 import { BACKDROP } from "./beach/backdrop.ts";
+import { beachDressVisitor, beachPet, beachTidePool, hermitCrab } from "./beach/critters.ts";
 import { beachChair, beachDesk, beachPlant, beachScreen } from "./beach/furnish.ts";
 import { BEACH_LABELS, BEACH_SOUNDS, beachDress, beachLook, beachNpc, beachOutdoor } from "./beach/people.ts";
+import { beachLayout } from "./beach/plan.ts";
 import { beachProp } from "./beach/props.ts";
-import { beachDecor, beachLighting, beachOutside, beachOverlay, beachSky, beachUnderlay, beachWallLights } from "./beach/view.ts";
+import { beachDecor, beachLighting, beachOverlay, beachUnderlay } from "./beach/life.ts";
+import { beachOutside, beachSky, beachWallLights } from "./beach/view.ts";
 
 export const BEACH: Theme = {
   id: "beach",
   name: "Surf Villa",
   blurb: "A beach villa with surfboards, palms and the waves outside",
   icon: "🏄",
+  layout: (W, H, opts) => beachLayout(W, H, opts),
   background: BACKDROP,
   prop: beachProp,
   plant: (sprite) => beachPlant(sprite),
@@ -33,6 +37,10 @@ export const BEACH: Theme = {
   look: beachLook,
   npc: beachNpc,
   dress: beachDress,
+  dressVisitor: beachDressVisitor,
+  pet: beachPet,
+  roomba: () => hermitCrab(),
+  fishTank: beachTidePool,
   labels: BEACH_LABELS,
   sounds: BEACH_SOUNDS,
   outdoor: beachOutdoor,

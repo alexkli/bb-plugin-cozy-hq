@@ -6,6 +6,7 @@ import type { Light, OutsideInfo, PaintInfo, SkyColors, Theme, WallLightsInfo, D
 import type { Layout, Rect } from "../../layout.ts";
 import { Grid, OUTLINE, cached, classicProp, floorPlan, hash, makeCanvas, mix, rng } from "../../themekit.ts";
 import { P, papers } from "./pal.ts";
+import { planOf } from "./plan.ts";
 
 // ------------------------------------------------------------------ sky
 
@@ -322,7 +323,7 @@ function wallLights(ctx: CanvasRenderingContext2D, L: Layout, info: WallLightsIn
 
 // ------------------------------------------------------------------ clutter: boxes, cabinets, the leak
 
-type Kind = "boxes" | "cabinet" | "pile" | "chair" | "deadplant" | "sign" | "coatstand";
+type Kind = "boxes" | "cabinet" | "pile" | "chair" | "deadplant" | "sign" | "coatstand" | "crts" | "copier" | "chairs" | "carpet" | "urn";
 
 interface Item {
   kind: Kind | "bucket";
@@ -468,6 +469,89 @@ function coatStand(): HTMLCanvasElement {
   });
 }
 
+function crtStack(seed: number): HTMLCanvasElement {
+  return cached(`annex|deco|crts|${seed % 2}`, () => {
+    // Dead monitors stacked two high, a tangle of leads.
+    const g = new Grid(18, 24);
+    for (const [y, dx] of [[11, 0], [1, 1 + (seed % 2)]] as const) {
+      g.rect(1 + dx, y + 1, 14, 10, P.beigeLo);
+      g.rect(1 + dx, y + 1, 14, 1, P.beige);
+      g.rect(3 + dx, y + 3, 10, 6, "#2a2a26");
+      g.set(4 + dx, y + 4, "#4a4a44");
+    }
+    g.rect(2, 21, 12, 2, P.beigeDk);
+    g.rect(14, 16, 3, 1, "#2a2826").set(16, 17, "#2a2826").set(15, 18, "#2a2826");
+    g.outline(OUTLINE);
+    return g.toCanvas();
+  });
+}
+
+function copier(): HTMLCanvasElement {
+  return cached("annex|deco|copier", () => {
+    // A photocopier that died in the nineties, a sheet over half of it.
+    const g = new Grid(28, 24);
+    g.rect(1, 6, 26, 16, P.beigeLo);
+    g.rect(1, 6, 26, 1, P.beige);
+    g.rect(3, 9, 22, 4, P.beigeDk);
+    g.rect(2, 2, 24, 5, P.beige);
+    g.rect(4, 3, 20, 2, "#3a3630");
+    g.rect(14, 1, 13, 14, "#cfc8b0");
+    g.rect(14, 1, 13, 1, "#e0dac6");
+    g.rect(16, 6, 1, 8, "#b8b098").rect(22, 4, 1, 10, "#b8b098");
+    g.rect(3, 15, 9, 5, P.beigeDk).rect(4, 16, 7, 1, P.beige);
+    g.outline(OUTLINE);
+    return g.toCanvas();
+  });
+}
+
+function chairStack(): HTMLCanvasElement {
+  return cached("annex|deco|chairs", () => {
+    // Plastic chairs stacked up to the ceiling, more or less.
+    const g = new Grid(16, 26);
+    const colors = ["#b0603a", "#5c6470", "#b0603a", "#6a7a5a", "#b0603a"];
+    colors.forEach((c, i) => {
+      const y = 2 + i * 3;
+      g.rrect(3, y, 10, 4, c, 1);
+      g.rect(4, y, 8, 1, "#c8784c");
+    });
+    g.rect(2, 17, 12, 3, "#b0603a");
+    g.rect(3, 20, 1, 5, P.metal).rect(12, 20, 1, 5, P.metal);
+    g.outline(OUTLINE);
+    return g.toCanvas();
+  });
+}
+
+function urnTrolley(): HTMLCanvasElement {
+  return cached("annex|deco|urn", () => {
+    // A tea urn on a squeaky trolley, for office dos.
+    const g = new Grid(18, 24);
+    g.rect(1, 10, 16, 2, P.metal).rect(1, 10, 16, 1, P.metalHi);
+    g.rect(1, 18, 16, 2, P.metalLo);
+    g.rect(2, 12, 1, 8, P.metalDk).rect(15, 12, 1, 8, P.metalDk);
+    g.set(2, 21, "#2a2826").set(15, 21, "#2a2826");
+    g.rrect(5, 1, 8, 9, "#a9aba2", 1);
+    g.rect(6, 2, 2, 6, "#c8cac0");
+    g.rect(8, 0, 2, 1, P.metalDk);
+    g.rect(12, 6, 3, 1, P.metalDk);
+    g.rect(3, 7, 2, 3, "#c8bc97").rect(13, 15, 3, 3, "#c8bc97").rect(4, 15, 4, 3, P.card);
+    g.outline(OUTLINE);
+    return g.toCanvas();
+  });
+}
+
+function rolledCarpet(): HTMLCanvasElement {
+  return cached("annex|deco|carpet", () => {
+    const g = new Grid(26, 10);
+    g.rect(2, 2, 22, 6, "#7a4a3a");
+    g.rect(2, 2, 22, 1, "#8e5a46");
+    for (let x = 5; x < 22; x += 5) g.rect(x, 3, 1, 5, "#6a3e30");
+    g.ellipse(23, 5, 2, 3, "#a87a5a");
+    g.set(23, 5, "#6a3e30");
+    g.outline(OUTLINE);
+    return g.toCanvas();
+  });
+}
+
 function bucket(): HTMLCanvasElement {
   return cached("annex|deco|bucket", () => {
     const g = new Grid(12, 11);
@@ -490,8 +574,26 @@ function clutter(L: Layout): Item[] {
     const overlap = (a: Rect, b: Rect, m = 0) => a.x < b.x + b.w + m && a.x + a.w + m > b.x && a.y < b.y + b.h + m && a.y + a.h + m > b.y;
     const plants: Rect[] = L.plants.filter((pl) => pl.sprite !== "HANGING_PLANT").map((pl) => ({ x: pl.x, y: pl.y, w: pl.sprite === "LARGE_PLANT" ? 32 : 16, h: pl.sprite === "LARGE_PLANT" ? 48 : 32 }));
     const clash = (r: Rect) => taken.some((o) => overlap(r, o, 4)) || plants.some((o) => overlap(r, o, 2));
+    // Keep off the event floor and wherever the gags and the handyman walk.
+    const building = planOf(L);
+    const ev = L.eventArea;
+    const walks = building?.extra ?? [];
+    const nearWalk = (r: Rect) =>
+      walks.some((path) =>
+        path.some((p, i) => {
+          const q = path[i + 1];
+          if (!q) return false;
+          const x0 = Math.min(p.x, q.x) - 8;
+          const x1 = Math.max(p.x, q.x) + 8;
+          const y0 = Math.min(p.y, q.y) - 8;
+          const y1 = Math.max(p.y, q.y) + 4;
+          return r.x < x1 && r.x + r.w > x0 && r.y < y1 && r.y + r.h > y0;
+        }),
+      );
     const add = (kind: Item["kind"], canvas: HTMLCanvasElement, at: Rect) => {
       const r = { x: at.x, y: at.y, w: canvas.width, h: canvas.height };
+      if (r.x < 6 || r.x + r.w > L.W - 6 || r.y + r.h > L.H - 3) return false;
+      if (overlap(r, ev, 6) || nearWalk(r)) return false;
       if (clash(r) || !plan.isFree(r)) return false;
       taken.push(r);
       items.push({ kind, x: r.x, y: r.y, canvas, z: r.y + r.h - 1 });
@@ -509,8 +611,35 @@ function clutter(L: Layout): Item[] {
     const boss = L.boss.room;
     for (const s of plan.find(18, 12, 3, boss)) add("pile", pile(hash(`bp${s.x}`)), s);
     for (const s of plan.find(20, 22, 1, boss)) add("boxes", boxStack(hash(`bb${s.x}`)), s);
+    // The storerooms, crammed: boxes, cabinets and dead equipment in rows.
+    for (const c of building?.cells ?? []) {
+      if (c.kind !== "storage") continue;
+      const rs = rng(hash(`store-${c.r.x}-${c.r.y}`));
+      for (let bottom = c.r.y + Math.min(30, c.r.h - 2); bottom <= c.r.y + c.r.h - 2; bottom += 28) {
+        for (let x = c.r.x + 5; x < c.r.x + c.r.w - 8; ) {
+          const k = rs();
+          const seed = Math.floor(rs() * 1000);
+          const kind: Kind = k < 0.42 ? "boxes" : k < 0.56 ? "cabinet" : k < 0.68 ? "crts" : k < 0.76 ? "copier" : k < 0.86 ? "chairs" : k < 0.93 ? "carpet" : "deadplant";
+          const canvas = kind === "boxes" ? boxStack(seed) : kind === "cabinet" ? cabinet(seed) : kind === "crts" ? crtStack(seed) : kind === "copier" ? copier() : kind === "chairs" ? chairStack() : kind === "carpet" ? rolledCarpet() : deadPlant();
+          if (x + canvas.width > c.r.x + c.r.w - 3) break;
+          const at = { x, y: Math.min(bottom, c.r.y + c.r.h - 2) - canvas.height, w: canvas.width, h: canvas.height };
+          if (at.y >= c.r.y + 3 && add(kind, canvas, at)) x += canvas.width + 1 + Math.floor(rs() * 3);
+          else x += 6;
+        }
+      }
+    }
+    // The old hall: chairs stacked down the side, the tea urn on its trolley.
+    for (const c of building?.cells ?? []) {
+      if (c.kind !== "hall") continue;
+      let first = true;
+      for (let y = c.r.y + 6; y + 26 <= c.r.y + c.r.h - 4; y += 30) {
+        const canvas = first ? urnTrolley() : chairStack();
+        add(first ? "urn" : "chairs", canvas, { x: c.r.x + 5, y, w: canvas.width, h: canvas.height });
+        first = false;
+      }
+    }
     // And everywhere else: whatever fits.
-    const n = Math.max(5, Math.min(14, Math.round((L.W * L.H) / 26000)));
+    const n = Math.max(3, Math.min(9, Math.round((L.W * L.H) / 40000)));
     // Clutter collects against walls and furniture, not in the middle of the floor.
     const all = plan.find(20, 30, 160);
     const solids: Rect[] = [];
@@ -577,23 +706,6 @@ function decor(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): Drawa
     } else {
       out.push({ z: it.z, draw: () => ctx.drawImage(it.canvas, it.x, it.y) });
     }
-  }
-  // The fish tank's water has gone murky.
-  const ft = L.props.find((p) => p.kind === "fishtank-stand");
-  if (ft) {
-    const tank = L.fishtank;
-    out.push({
-      z: ft.z + 0.05,
-      draw: () => {
-        ctx.fillStyle = "rgba(96,110,52,0.42)";
-        ctx.fillRect(tank.x, tank.y + 2, tank.w, tank.h - 2);
-        ctx.fillStyle = "rgba(80,96,40,0.6)";
-        ctx.fillRect(tank.x, tank.y + 2, 2, tank.h - 2);
-        ctx.fillRect(tank.x + tank.w - 3, tank.y + 3, 3, tank.h - 4);
-        ctx.fillStyle = "rgba(210,220,180,0.35)";
-        ctx.fillRect(tank.x + 3, tank.y + 4, tank.w - 6, 1);
-      },
-    });
   }
   // The dripping tap.
   const tap = L.props.find((p) => p.kind === "cooler");
@@ -706,6 +818,18 @@ function lights(L: Layout, info: PaintInfo): Light[] {
     const lv = tubeLevel(i, L, list, info, lastDead);
     if (lv > 0.05) out.push([tb.x + tb.w / 2, 12, 56, 0.6 * lv, "#e6eed0", 0.07 * lv]);
   });
+  // The building: a tired fluorescent over every room (one always on the blink), bare bulbs in the storerooms.
+  const building = planOf(L);
+  if (building && info.night > 0.2) {
+    building.cells.forEach((c, i) => {
+      if (c.kind === "walled") return;
+      const store = c.kind === "storage" || c.kind === "nook";
+      const blink = i === 2 && Math.floor(info.t * 7) % 9 < 2 ? 0.2 : 1;
+      const rad = Math.max(26, Math.min(70, Math.min(c.r.w, c.r.h) * 0.6));
+      out.push([c.r.x + c.r.w / 2, c.r.y + c.r.h / 2, rad, (store ? 0.32 : 0.45) * blink, store ? "#ffd890" : "#e6e8c8", store ? 0.08 : 0.05]);
+    });
+    for (const hy of L.net.halls) for (let x = 60; x < L.W; x += 140) out.push([x, hy, 30, 0.38, "#ece6c0", 0.05]);
+  }
   // A bare bulb over the kitchenette, a glow off the vending machine.
   const k = L.kitchen;
   out.push([k.x + k.w * 0.55, k.y + 6, 46, 0.5, "#ffd890", 0.12]);

@@ -77,12 +77,14 @@ drizzle, rain, snow, thunderstorms with lightning), from Open-Meteo for your
 approximate location; click a window to open it and hear outside (birds,
 crickets at night, rain, wind, thunder, a foghorn in fog).
 
-The settings (the gear at the top right) pick a scenery that dresses the same office as another place:
-Classic office, Neon City (cyberpunk), Redwood Camp (glamping in the
-redwoods), Surf Villa (a beach villa), Sky Loft (a New York penthouse),
-Dusty Annex (a shabby back office) or School. Only the look, sounds and
-words change; who sits where and everything that happens stay the same. The
-pick is kept per browser and the buddy dresses to match.
+The settings (the gear at the top right) pick a scenery that moves the office to another place:
+Classic office, Neon City (cyberpunk streets), Redwood Camp (tents among the
+redwoods), Surf Villa (villa, pool and beach), Sky Loft (a New York
+penthouse), Dusty Annex (a shabby back office) or School. Each has its own
+floor plan, pets, visitors, sounds and words (the TV says where events
+happen there: the plaza, the schoolyard, the terrace); everything that
+happens stays the same. The pick is kept per browser and the buddy dresses
+to match.
 
 Characters that are not threads: you (the boss at the big desk), Biscuit the
 dog, Pixel the cat, a roomba, the cleaning crew (evenings and early mornings),

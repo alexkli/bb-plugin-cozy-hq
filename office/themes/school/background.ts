@@ -5,6 +5,8 @@ import { cached, drawPixelText, Grid, mix, pa, pixelTextWidth, rect, rng, shade 
 import type { BackgroundSteps } from "../../theme.ts";
 import type { Layout, Rect, Room } from "../../layout.ts";
 import { BOOKS, C, CRAYONS, noise, OUTLINE, overlaps, stamp, wallFixtures } from "./kit.ts";
+import { planOf } from "./plan.ts";
+import { paintCorridor, paintHalfWalls, paintPortable, paintYard } from "./yard.ts";
 
 // ------------------------------------------------------------------ floors
 
@@ -403,18 +405,167 @@ function drawPoster(ctx: CanvasRenderingContext2D, it: WallItem): void {
   }
 }
 
+function paintRoomFloor(ctx: CanvasRenderingContext2D, room: Room, L: Layout): void {
+  const r = room.rect;
+  switch (room.kind) {
+    case "meeting": {
+      // A classroom: mint and cream tiles.
+      linoleum(ctx, r, "#e3efdc", "#d8e9d3", "#c6dbc1", 8, false, 70);
+      break;
+    }
+    case "boss": {
+      carpetFleck(ctx, r, "#5d7aa8", "#6d8bb8");
+      const rw = Math.min(r.w - 30, 110);
+      const rh = Math.min(r.h - 40, 64);
+      const g = new Grid(rw, rh);
+      g.rrect(0, 0, rw, rh, "#7a2f38", 3);
+      g.rrect(2, 2, rw - 4, rh - 4, "#a8404a", 2);
+      g.rrect(5, 5, rw - 10, rh - 10, C.yellowLo, 1);
+      g.rrect(6, 6, rw - 12, rh - 12, "#a8404a", 1);
+      // An apple in the middle.
+      const ax = Math.floor(rw / 2);
+      const ay = Math.floor(rh / 2);
+      g.ellipse(ax - 0.5, ay + 1, 4, 3.5, "#e5544b");
+      g.rect(ax - 2, ay - 2, 1, 1, "#f2837a");
+      g.rect(ax, ay - 4, 1, 2, "#7a5236").rect(ax + 1, ay - 4, 2, 1, C.green);
+      stamp(ctx, g, r.x + Math.round((r.w - rw) / 2) + 6, r.y + 22);
+      break;
+    }
+    case "waiting": {
+      // The hallway by the principal's office and the nurse.
+      rect(ctx, r.x, r.y, r.w, r.h, C.navy);
+      linoleum(ctx, { x: r.x + 2, y: r.y + 2, w: r.w - 4, h: r.h - 4 }, "#f1ead9", "#d5e4f2", "#c6d6e6", 10, false, 0);
+      break;
+    }
+    case "kitchen": {
+      // Cafeteria checkerboard.
+      rect(ctx, r.x, r.y, r.w, r.h, "#c9574d");
+      linoleum(ctx, { x: r.x + 2, y: r.y + 2, w: r.w - 4, h: r.h - 4 }, "#f5ead8", "#f2c4b5", "#e6cdb9", 8, false, 0);
+      break;
+    }
+    case "lounge": {
+      // Library corner: honey wood and a rainbow reading rug.
+      carpetTiles(ctx, r, "#a9cfc6", "#a2c8bf", "#b6d8cf");
+      const c = L.couch;
+      rainbowRug(ctx, Math.round(c.x + c.w / 2), c.y + 2, 124, 64);
+      break;
+    }
+    case "games": {
+      // The gym: maple strips and court lines.
+      planks(ctx, r, "#ecc994", "#e6c28b", "#d6ad73", 4, 60);
+      const inset = 6;
+      const line = "#2f5f9e";
+      const box = { x: r.x + inset, y: r.y + inset, w: r.w - inset * 2, h: r.h - inset * 2 };
+      rect(ctx, box.x, box.y, box.w, 1, line);
+      rect(ctx, box.x, box.y + box.h - 1, box.w, 1, line);
+      rect(ctx, box.x, box.y, 1, box.h, line);
+      rect(ctx, box.x + box.w - 1, box.y, 1, box.h, line);
+      const cx = Math.round(r.x + r.w / 2);
+      const cy = Math.round(r.y + r.h / 2);
+      rect(ctx, cx, box.y, 1, box.h, "#d6403a");
+      const g = new Grid(31, 21);
+      g.ellipse(15, 10, 14, 9.5, "#d6403a");
+      g.ellipse(15, 10, 13, 8.5, "#ecc994");
+      g.ellipse(15, 10, 5, 3.5, C.yellow);
+      stamp(ctx, g, cx - 15, cy - 10);
+      // Keys at both ends
+      const kh = Math.min(30, box.h - 10);
+      for (const kx of [box.x, box.x + box.w - 22]) {
+        ctx.fillStyle = "rgba(229,84,75,0.22)";
+        ctx.fillRect(kx + 1, cy - kh / 2, 21, kh);
+        rect(ctx, kx, cy - kh / 2, 22, 1, line);
+        rect(ctx, kx, cy + kh / 2, 22, 1, line);
+      }
+      break;
+    }
+    case "garden": {
+      // The school garden: grass, raised beds and stepping stones.
+      for (let y = r.y; y < r.y + r.h; y += 4) {
+        for (let x = r.x; x < r.x + r.w; x += 4) rect(ctx, x, y, 4, 4, ((x + y) >> 2) % 2 ? "#7fbf5e" : "#88c766");
+      }
+      for (let i = 0; i < (r.w * r.h) / 40; i++) rect(ctx, r.x + ((i * 37) % r.w), r.y + ((i * 53) % r.h), 1, 2, "#64a24c");
+      const beds = Math.max(1, Math.floor((r.w - 20) / 50));
+      for (let b = 0; b < beds; b++) {
+        const bx = r.x + 12 + b * 50;
+        const by = r.y + 10;
+        rect(ctx, bx, by, 38, 16, OUTLINE);
+        rect(ctx, bx + 1, by + 1, 36, 14, C.mapleLo);
+        rect(ctx, bx + 3, by + 3, 32, 10, "#6b4a32");
+        for (let x = bx + 5; x < bx + 34; x += 5) {
+          rect(ctx, x, by + 5, 3, 2, "#5cb860");
+          rect(ctx, x + 1, by + 4, 1, 1, "#8fd88a");
+          rect(ctx, x, by + 9, 3, 2, "#5cb860");
+          rect(ctx, x + 1, by + 11, 1, 1, b % 2 ? "#e5544b" : "#f39a3d");
+        }
+      }
+      for (let x = r.x + 10; x < r.x + r.w - 10; x += 14) {
+        const y = r.y + r.h - 18 + Math.round(Math.sin(x * 0.08) * 3);
+        rect(ctx, x, y, 9, 5, "#d4cbb9");
+        rect(ctx, x + 1, y, 7, 1, "#ebe4d6");
+      }
+      rect(ctx, r.x, r.y, r.w, 2, "#64a24c");
+      break;
+    }
+    case "server": {
+      // Computer lab closet: light anti-static tiles.
+      linoleum(ctx, r, "#d5dbe2", "#cbd2da", "#b6bfc9", 8, false, 0);
+      rect(ctx, r.x, r.y + r.h - 2, r.w, 2, C.blue);
+      break;
+    }
+    case "library":
+      carpetFleck(ctx, r, "#86b0dc", "#a3c5e8", "#5f8fc4");
+      break;
+    default:
+      break;
+  }
+}
+
+/** The green "+" sign over the way in (a new thread). */
+function plusSign(ctx: CanvasRenderingContext2D, d: Rect): void {
+  const sg = new Grid(14, 9);
+  sg.rect(1, 1, 12, 7, C.green);
+  sg.rect(1, 1, 12, 1, C.greenHi);
+  sg.rect(6, 2, 2, 5, "#ffffff").rect(4, 4, 6, 1, "#ffffff");
+  sg.outline(OUTLINE);
+  stamp(ctx, sg, d.x + d.w / 2 - 7, Math.max(1, d.y - 12));
+}
+
+/** The school gate in the yard fence: brick pillars, an arch sign and iron bars. */
+function paintGate(ctx: CanvasRenderingContext2D, d: Rect): void {
+  const g = new Grid(d.w + 14, d.h + 2);
+  const ox = 7;
+  for (const px of [0, d.w + 8]) {
+    g.rect(px, 6, 6, d.h - 5, "#b85c46");
+    for (let yy = 8; yy < d.h; yy += 3) g.rect(px, yy, 6, 1, "#9a4a38").set(px + ((yy / 3) % 2 ? 2 : 4), yy + 1, "#9a4a38");
+    g.rect(px - 1, 4, 8, 3, "#d8d3c8");
+    g.rect(px - 1, 4, 8, 1, "#ffffff");
+  }
+  g.rect(1, 0, d.w + 12, 7, C.blue);
+  g.rect(1, 0, d.w + 12, 1, C.blueHi);
+  // Iron bars, painted green.
+  g.rect(ox - 1, 9, d.w + 2, 1, C.greenLo);
+  g.rect(ox - 1, d.h - 2, d.w + 2, 1, C.greenLo);
+  for (let x = ox; x < ox + d.w; x += 3) {
+    g.vline(x, 9, d.h - 10, C.greenLo);
+    g.set(x, 8, C.green);
+  }
+  g.outline(OUTLINE);
+  stamp(ctx, g, d.x - ox, d.y - 1);
+  const label = "SCHOOL";
+  drawPixelText(ctx, label, d.x + d.w / 2 - Math.floor(pixelTextWidth(label) / 2), d.y, "#ffffff");
+  plusSign(ctx, d);
+}
+
 // ------------------------------------------------------------------ steps
 
 export const BACKGROUND: Partial<BackgroundSteps> = {
   floor(ctx, L) {
-    linoleum(ctx, { x: 0, y: 0, w: L.W, h: L.H }, "#ece4d2", "#e6ddca", "#d7ccb5");
-    // Hallway lane lines.
-    for (const hy of L.net.halls) {
-      for (const dy of [-11, 10]) {
-        rect(ctx, 0, hy + dy, L.W, 1, "#9dbfe0");
-        rect(ctx, 0, hy + dy + 1, L.W, 1, "#b8d2ea");
-      }
-    }
+    const P = planOf(L);
+    const inside = P?.yard ? P.front + 4 : L.H;
+    linoleum(ctx, { x: 0, y: 0, w: L.W, h: inside }, "#ece4d2", "#e6ddca", "#d7ccb5");
+    // The corridors: terrazzo with blue borders.
+    for (const hy of L.net.halls) if (hy !== P?.walk) paintCorridor(ctx, L, hy);
+    if (P) paintYard(ctx, L, P);
   },
   wall(ctx, L) {
     abcIndex = 0;
@@ -468,120 +619,29 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
     }
   },
   pods(ctx, L) {
-    L.pods.forEach((pod, i) => letterRug(ctx, { x: pod.x - 4, y: pod.y + 2, w: pod.w + 8, h: pod.h - 2 }, i));
+    const P = planOf(L);
+    for (const c of P?.corners ?? []) {
+      // A rug under the teacher's corner.
+      rect(ctx, c.x + 4, c.y + 3, c.w - 8, c.h - 6, C.navy);
+      rect(ctx, c.x + 6, c.y + 5, c.w - 12, c.h - 10, "#7fa9d6");
+      for (let x = c.x + 8; x < c.x + c.w - 8; x += 6) rect(ctx, x, c.y + 6, 2, c.h - 12, "#8db4dd");
+    }
+    L.pods.forEach((pod, i) => {
+      const portable = P?.portable && pod.y >= P.portable.y - 2;
+      if (portable) {
+        paintPortable(ctx, pod);
+        letterRug(ctx, { x: pod.x + 4, y: pod.y + 10, w: pod.w - 8, h: pod.h - 14 }, i);
+      } else letterRug(ctx, { x: pod.x - 4, y: pod.y + 2, w: pod.w + 8, h: pod.h - 2 }, i);
+    });
   },
   room(ctx, room, L) {
-    const r = room.rect;
-    switch (room.kind) {
-      case "meeting": {
-        // A classroom: mint and cream tiles.
-        linoleum(ctx, r, "#e3efdc", "#d8e9d3", "#c6dbc1", 8, false, 70);
-        break;
-      }
-      case "boss": {
-        carpetFleck(ctx, r, "#5d7aa8", "#6d8bb8");
-        const rw = Math.min(r.w - 30, 110);
-        const rh = Math.min(r.h - 40, 64);
-        const g = new Grid(rw, rh);
-        g.rrect(0, 0, rw, rh, "#7a2f38", 3);
-        g.rrect(2, 2, rw - 4, rh - 4, "#a8404a", 2);
-        g.rrect(5, 5, rw - 10, rh - 10, C.yellowLo, 1);
-        g.rrect(6, 6, rw - 12, rh - 12, "#a8404a", 1);
-        // An apple in the middle.
-        const ax = Math.floor(rw / 2);
-        const ay = Math.floor(rh / 2);
-        g.ellipse(ax - 0.5, ay + 1, 4, 3.5, "#e5544b");
-        g.rect(ax - 2, ay - 2, 1, 1, "#f2837a");
-        g.rect(ax, ay - 4, 1, 2, "#7a5236").rect(ax + 1, ay - 4, 2, 1, C.green);
-        stamp(ctx, g, r.x + Math.round((r.w - rw) / 2) + 6, r.y + 22);
-        break;
-      }
-      case "waiting": {
-        // The hallway by the principal's office and the nurse.
-        rect(ctx, r.x, r.y, r.w, r.h, C.navy);
-        linoleum(ctx, { x: r.x + 2, y: r.y + 2, w: r.w - 4, h: r.h - 4 }, "#f1ead9", "#d5e4f2", "#c6d6e6", 10, false, 0);
-        break;
-      }
-      case "kitchen": {
-        // Cafeteria checkerboard.
-        rect(ctx, r.x, r.y, r.w, r.h, "#c9574d");
-        linoleum(ctx, { x: r.x + 2, y: r.y + 2, w: r.w - 4, h: r.h - 4 }, "#f5ead8", "#f2c4b5", "#e6cdb9", 8, false, 0);
-        break;
-      }
-      case "lounge": {
-        // Library corner: honey wood and a rainbow reading rug.
-        carpetTiles(ctx, r, "#a9cfc6", "#a2c8bf", "#b6d8cf");
-        const c = L.couch;
-        rainbowRug(ctx, Math.round(c.x + c.w / 2), c.y + 2, 124, 64);
-        break;
-      }
-      case "games": {
-        // The gym: maple strips and court lines.
-        planks(ctx, r, "#ecc994", "#e6c28b", "#d6ad73", 4, 60);
-        const inset = 6;
-        const line = "#2f5f9e";
-        const box = { x: r.x + inset, y: r.y + inset, w: r.w - inset * 2, h: r.h - inset * 2 };
-        rect(ctx, box.x, box.y, box.w, 1, line);
-        rect(ctx, box.x, box.y + box.h - 1, box.w, 1, line);
-        rect(ctx, box.x, box.y, 1, box.h, line);
-        rect(ctx, box.x + box.w - 1, box.y, 1, box.h, line);
-        const cx = Math.round(r.x + r.w / 2);
-        const cy = Math.round(r.y + r.h / 2);
-        rect(ctx, cx, box.y, 1, box.h, "#d6403a");
-        const g = new Grid(31, 21);
-        g.ellipse(15, 10, 14, 9.5, "#d6403a");
-        g.ellipse(15, 10, 13, 8.5, "#ecc994");
-        g.ellipse(15, 10, 5, 3.5, C.yellow);
-        stamp(ctx, g, cx - 15, cy - 10);
-        // Keys at both ends
-        const kh = Math.min(30, box.h - 10);
-        for (const kx of [box.x, box.x + box.w - 22]) {
-          ctx.fillStyle = "rgba(229,84,75,0.22)";
-          ctx.fillRect(kx + 1, cy - kh / 2, 21, kh);
-          rect(ctx, kx, cy - kh / 2, 22, 1, line);
-          rect(ctx, kx, cy + kh / 2, 22, 1, line);
-        }
-        break;
-      }
-      case "garden": {
-        // The school garden: grass, raised beds and stepping stones.
-        for (let y = r.y; y < r.y + r.h; y += 4) {
-          for (let x = r.x; x < r.x + r.w; x += 4) rect(ctx, x, y, 4, 4, ((x + y) >> 2) % 2 ? "#7fbf5e" : "#88c766");
-        }
-        for (let i = 0; i < (r.w * r.h) / 40; i++) rect(ctx, r.x + ((i * 37) % r.w), r.y + ((i * 53) % r.h), 1, 2, "#64a24c");
-        const beds = Math.max(1, Math.floor((r.w - 20) / 50));
-        for (let b = 0; b < beds; b++) {
-          const bx = r.x + 12 + b * 50;
-          const by = r.y + 10;
-          rect(ctx, bx, by, 38, 16, OUTLINE);
-          rect(ctx, bx + 1, by + 1, 36, 14, C.mapleLo);
-          rect(ctx, bx + 3, by + 3, 32, 10, "#6b4a32");
-          for (let x = bx + 5; x < bx + 34; x += 5) {
-            rect(ctx, x, by + 5, 3, 2, "#5cb860");
-            rect(ctx, x + 1, by + 4, 1, 1, "#8fd88a");
-            rect(ctx, x, by + 9, 3, 2, "#5cb860");
-            rect(ctx, x + 1, by + 11, 1, 1, b % 2 ? "#e5544b" : "#f39a3d");
-          }
-        }
-        for (let x = r.x + 10; x < r.x + r.w - 10; x += 14) {
-          const y = r.y + r.h - 18 + Math.round(Math.sin(x * 0.08) * 3);
-          rect(ctx, x, y, 9, 5, "#d4cbb9");
-          rect(ctx, x + 1, y, 7, 1, "#ebe4d6");
-        }
-        rect(ctx, r.x, r.y, r.w, 2, "#64a24c");
-        break;
-      }
-      case "server": {
-        // Computer lab closet: light anti-static tiles.
-        linoleum(ctx, r, "#d5dbe2", "#cbd2da", "#b6bfc9", 8, false, 0);
-        rect(ctx, r.x, r.y + r.h - 2, r.w, 2, C.blue);
-        break;
-      }
-      case "library":
-        carpetFleck(ctx, r, "#86b0dc", "#a3c5e8", "#5f8fc4");
-        break;
-      default:
-        break;
+    paintRoomFloor(ctx, room, L);
+    // Half-walls around the open rooms (the classroom, cafeteria, library, gym).
+    const P = planOf(L);
+    const cx = room.rect.x + room.rect.w / 2;
+    const cy = room.rect.y + room.rect.h / 2;
+    for (const w of P?.walls ?? []) {
+      if (cx > w.rect.x && cx < w.rect.x + w.rect.w && cy > w.rect.y && cy < w.rect.y + w.rect.h) paintHalfWalls(ctx, w, L);
     }
   },
   roomWalls(ctx, room, L) {
@@ -689,6 +749,10 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
     stamp(ctx, b, s.x - 1, s.y - 1);
   },
   door(ctx, d) {
+    if (d.y > 150) {
+      paintGate(ctx, d);
+      return;
+    }
     // A classroom door: painted frame, wood slab, a narrow window and a kick plate.
     const g = new Grid(d.w + 6, d.h + 4);
     g.rect(0, 2, d.w + 6, d.h + 2, C.blueLo);
@@ -705,12 +769,7 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
     g.set(d.w - 4, 11, C.yellow).rect(d.w - 5, 12, 3, 1, C.yellow).set(d.w - 4, 13, C.yellow);
     g.outline(OUTLINE);
     stamp(ctx, g, d.x - 3, d.y - 3);
-    const sg = new Grid(14, 9);
-    sg.rect(1, 1, 12, 7, C.green);
-    sg.rect(1, 1, 12, 1, C.greenHi);
-    sg.rect(6, 2, 2, 5, "#ffffff").rect(4, 4, 6, 1, "#ffffff");
-    sg.outline(OUTLINE);
-    stamp(ctx, sg, d.x + d.w / 2 - 7, Math.max(1, d.y - 12));
+    plusSign(ctx, d);
   },
   legend(ctx, n) {
     // An index card with a big "?", pinned.

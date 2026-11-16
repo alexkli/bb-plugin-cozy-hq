@@ -5,9 +5,9 @@
 // office/themes/README.md for how to write one.
 
 import type { WeatherKind } from "../contract.ts";
-import type { CharPose, Look } from "./characters.ts";
+import type { CatPose, CharPose, DogPose, Look } from "./characters.ts";
 import type { ChairTone, Screen } from "./desks.ts";
-import type { Facing, Layout, PlantPlacement, PokeKind, PropPlacement, Rect, Room } from "./layout.ts";
+import type { Facing, Layout, LayoutOptions, PlantPlacement, PokeKind, PropPlacement, Rect, Room } from "./layout.ts";
 import type { Drawable, Season } from "./life.ts";
 import type { DeskStyle } from "./model.ts";
 
@@ -97,8 +97,8 @@ export interface ThemeLabels {
   tvWeather?: string;
   /** Hover text for clickable things. */
   poke?: Partial<Record<PokeKind, string>>;
-  /** Hover text for visitors and pets. */
-  npc?: Partial<Record<"guard" | "janitor" | "technician" | "delivery" | "kid" | "dog" | "cat", string>>;
+  /** Hover text for visitors, pets and the roomba ("String lights · …" is relabeled via `words`). */
+  npc?: Partial<Record<"guard" | "janitor" | "technician" | "delivery" | "kid" | "dog" | "cat" | "roomba", string>>;
   /**
    * Word swaps in the legend, activities ("chatting at the water cooler")
    * and hover texts, e.g. { "kitchen": "cafeteria", "Kitchen": "Cafeteria" }.
@@ -115,6 +115,16 @@ export interface Theme {
   blurb: string;
   /** An emoji for the picker. */
   icon: string;
+
+  // ------------------------------------------------------------ the floor plan
+  /**
+   * The scenery's own floor plan for a panel of W×H native pixels (already
+   * at least the minimum size; `portrait` for a phone held upright), with
+   * desks for about `threads` people. Return null to use the classic plan.
+   * It must provide everything a Layout has (see office/themes/README.md,
+   * "Floor plans"); `node --test` checks every scenery's plan at many sizes.
+   */
+  layout?(W: number, H: number, opts: Required<Pick<LayoutOptions, "threads">> & { portrait: boolean }): Layout | null;
 
   // ------------------------------------------------------------ the backdrop (baked)
   background?: Partial<BackgroundSteps>;
@@ -165,6 +175,12 @@ export interface Theme {
     /** Sunbeams through the windows on clear days (default true). */
     sunbeam?: boolean;
   };
+  /**
+   * The door standing open while someone comes or goes (`door` is
+   * `L.wall.door`; the frame is the `door` background step). Return true when
+   * you drew it (false: the classic dark doorway and swung-open leaf).
+   */
+  doorOpen?(ctx: CanvasRenderingContext2D, door: Rect, info: PaintInfo): boolean;
   /** Marker colors for planners' whiteboard strokes (chalk on a chalkboard, say). */
   boardInk?: string[];
   /** Busy screens: the background and the code colors. */
@@ -181,6 +197,23 @@ export interface Theme {
    * characters.ts: head from row 2, body from row 14, feet at row 27).
    */
   dress?(ctx: CanvasRenderingContext2D, a: { x: number; y: number; facing: Facing; pose: CharPose; seed: number; seated: boolean; look: Look }, t: number): void;
+
+  /**
+   * The office pets, any animal you like: the dog (20×15 sprite, drawn at
+   * x−10, y−14 of its position) and the cat (16×13, drawn at x−8, y−12).
+   * Keep the size; poses are the classic ones.
+   */
+  pet?(kind: "dog" | "cat", pose: DogPose | CatPose, facing: "left" | "right", blink: boolean, classic: () => HTMLCanvasElement): HTMLCanvasElement | null;
+  /** The roomba, or whatever cleans in your scenery (16×9 sprite, drawn at x−8, y−6 of its position). */
+  roomba?(classic: () => HTMLCanvasElement): HTMLCanvasElement | null;
+  /**
+   * The fish tank's water and fish, drawn into `tank` (`L.fishtank`) every
+   * frame; the "fishtank-stand" prop is under it. Return true when you drew
+   * it (false: the classic tank).
+   */
+  fishTank?(ctx: CanvasRenderingContext2D, tank: Rect, info: PaintInfo & { fish: { x: number; y: number; dir: 1 | -1; color: string; phase: number }[]; feeding: boolean }): boolean;
+  /** Like `dress`, for you and the visitors (the guard's visor, the courier's bag). */
+  dressVisitor?(ctx: CanvasRenderingContext2D, v: { x: number; y: number; facing: Facing; pose: CharPose; kind: VisitorKind }, t: number): void;
 
   // ------------------------------------------------------------ words and sounds
   labels?: ThemeLabels;

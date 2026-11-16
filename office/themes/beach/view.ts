@@ -1,11 +1,9 @@
-// Surf Villa: everything drawn live. The ocean outside the windows (waves,
-// surfers, sailboats, gulls, palms, a sunset and a moon path), shell lights on
-// a rope, tiki torches and lanterns at night, a crab on the sand and a warm
-// glare by day.
-import type { Light, OutsideInfo, PaintInfo, SkyColors, Theme, WallLightsInfo } from "../../theme.ts";
+// Surf Villa: the sky and the view: the ocean outside the windows (waves,
+// surfers, sailboats, gulls, palms, a sunset and a moon path) and the shell
+// lights on a rope along the villa's beam.
+import type { OutsideInfo, SkyColors, WallLightsInfo } from "../../theme.ts";
 import type { Layout, Rect } from "../../layout.ts";
-import type { Drawable } from "../../theme.ts";
-import { cached, floorPlan, Grid, hash, mix, OUTLINE } from "../../themekit.ts";
+import { cached, Grid, hash, mix } from "../../themekit.ts";
 import { C, fill } from "./kit.ts";
 
 // ------------------------------------------------------------------ sky
@@ -40,7 +38,7 @@ type Tone = 0 | 1 | 2;
 
 /** A palm tree leaning right (flip for left), in day, dusk or night tones. */
 function palmSprite(tone: Tone, flip: boolean, tall: number): HTMLCanvasElement {
-  return cached(`beach|palm|${tone}|${flip}|${tall}`, () => {
+  return cached(`beach|view-palm|${tone}|${flip}|${tall}`, () => {
     const g = new Grid(30, tall + 10);
     const trunk = tone === 0 ? "#a07a4e" : tone === 1 ? "#5a3e3a" : "#0d1830";
     const trunkLo = tone === 0 ? "#7c5a36" : tone === 1 ? "#432c30" : "#0a1226";
@@ -81,7 +79,7 @@ function palmSprite(tone: Tone, flip: boolean, tall: number): HTMLCanvasElement 
 }
 
 function umbrellaSprite(tone: Tone): HTMLCanvasElement {
-  return cached(`beach|umbrella|${tone}`, () => {
+  return cached(`beach|view-umbrella|${tone}`, () => {
     const g = new Grid(15, 14);
     const a = tone === 0 ? C.coral : tone === 1 ? "#8a4a4e" : "#1a2440";
     const b = tone === 0 ? C.white : tone === 1 ? "#a08a8a" : "#26304c";
@@ -95,7 +93,7 @@ function umbrellaSprite(tone: Tone): HTMLCanvasElement {
 }
 
 function surfboardSprite(tone: Tone): HTMLCanvasElement {
-  return cached(`beach|board|${tone}`, () => {
+  return cached(`beach|view-board|${tone}`, () => {
     const g = new Grid(5, 12);
     g.ellipse(2, 5.5, 1.6, 5.5, tone === 0 ? C.sun : tone === 1 ? "#8a7050" : "#18223c");
     g.rect(2, 1, 1, 10, tone === 0 ? C.coral : tone === 1 ? "#7a4a44" : "#1e2a46");
@@ -359,312 +357,3 @@ export function beachWallLights(ctx: CanvasRenderingContext2D, L: Layout, info: 
   }
 }
 
-// ------------------------------------------------------------------ decor spots
-
-export interface DecorSpots {
-  torches: { x: number; y: number }[];
-  racks: { x: number; y: number }[];
-  shower: { x: number; y: number } | null;
-  castle: { x: number; y: number } | null;
-}
-
-/** Where the tiki torches, surfboard racks and the beach shower go (per layout). */
-export function decorSpots(L: Layout): DecorSpots {
-  return cached(`beach|decor|${L.W}x${L.H}|${L.props.length}|${L.spots.length}`, () => {
-    const plan = floorPlan(L);
-    const taken: Rect[] = [];
-    const clear = (r: Rect) => !taken.some((o) => r.x < o.x + o.w + 10 && r.x + r.w + 10 > o.x && r.y < o.y + o.h + 10 && r.y + r.h + 10 > o.y);
-    const wallDepth = (x: number) => L.segments.find((sg) => x >= sg.x0 && x < sg.x1)?.depth ?? 64;
-    // Tall things need the floor behind them clear too (leaning on the wall is fine).
-    const room = (r: Rect, tall: number) => {
-      const top = Math.max(r.y - tall, wallDepth(r.x) + 5, wallDepth(r.x + r.w - 1) + 5);
-      return top >= r.y || plan.isFree({ x: r.x, y: top, w: r.w, h: r.y - top });
-    };
-    const pick = (w: number, h: number, within: Rect | null, n = 1, tall = 0): Rect[] => {
-      if (!within) return [];
-      const out: Rect[] = [];
-      for (const r of plan.find(w, h, 200, within)) {
-        if (out.length >= n) break;
-        if (!clear(r) || !room(r, tall)) continue;
-        out.push(r);
-        taken.push(r);
-      }
-      return out;
-    };
-    const racks: { x: number; y: number }[] = [];
-    // Surfboard racks: by the lounge and in the games room (or anywhere free).
-    for (const r of [...pick(28, 10, L.lounge, 1, 30), ...pick(28, 10, L.games, 1, 30)]) racks.push({ x: r.x, y: r.y + r.h });
-    if (racks.length === 0) for (const r of pick(28, 10, { x: 0, y: 0, w: L.W, h: L.H }, 1, 30)) racks.push({ x: r.x, y: r.y + r.h });
-    // Tiki torches: one per room, in the corner nearest the hallway, clear
-    // of the TV wall and its speakers.
-    const avoid: Rect[] = [L.tv, ...L.speakers].map((r) => ({ x: r.x - 8, y: r.y - 8, w: r.w + 16, h: r.h + 40 }));
-    for (const pl of L.plants) {
-      const big = pl.sprite === "LARGE_PLANT";
-      avoid.push({ x: pl.x - 4, y: pl.y, w: big ? 40 : 24, h: (big ? 48 : 32) + 12 });
-    }
-    const hit = (r: Rect) => avoid.some((o) => r.x < o.x + o.w && r.x + r.w > o.x && r.y < o.y + o.h && r.y + r.h > o.y);
-    const wallAt = (x: number) => L.segments.find((sg) => x >= sg.x0 && x < sg.x1)?.depth ?? 64;
-    const torches: { x: number; y: number }[] = [];
-    for (const area of [L.kitchen, L.waiting, L.games, L.lounge, L.rooms.find((r) => r.kind === "garden")?.rect ?? null]) {
-      if (!area) continue;
-      const cands = plan.find(8, 8, 400, area).filter((r) => !hit(r) && r.y > wallAt(r.x) + 16 && clear(r) && room(r, 18));
-      if (cands.length === 0) continue;
-      const corners = [
-        { x: area.x, y: area.y + area.h },
-        { x: area.x + area.w, y: area.y + area.h },
-        { x: area.x, y: area.y },
-        { x: area.x + area.w, y: area.y },
-      ];
-      let best = cands[0]!;
-      let bestD = Infinity;
-      for (const r of cands) {
-        const d = Math.min(...corners.map((c) => Math.hypot(r.x + 4 - c.x, r.y + 8 - c.y)));
-        if (d < bestD) {
-          bestD = d;
-          best = r;
-        }
-      }
-      taken.push(best);
-      torches.push({ x: best.x + 4, y: best.y + best.h });
-    }
-    const sh = pick(14, 10, L.games, 1, 32);
-    const shower = sh[0] ? { x: sh[0].x + 7, y: sh[0].y + sh[0].h } : null;
-    const sandy = L.games ?? L.rooms.find((r) => r.kind === "garden")?.rect ?? null;
-    const cs = sandy ? plan.find(20, 12, 200, sandy).filter((r) => clear(r)) : [];
-    const c = cs.length ? cs[Math.floor(cs.length * 0.6)]! : null;
-    const castle = c ? { x: c.x + 2, y: c.y + c.h } : null;
-    return { torches, racks, shower, castle };
-  });
-}
-
-function torchSprite(): HTMLCanvasElement {
-  return cached("beach|torch", () => {
-    const g = new Grid(9, 28);
-    for (let j = 9; j < 27; j++) g.rect(4, j, 1, 1, j % 4 === 0 ? C.bambooNode : C.bamboo).set(3, j, C.bambooLo);
-    g.rect(2, 5, 5, 5, C.thatch);
-    g.rect(2, 5, 5, 1, C.thatchHi);
-    for (let i = 2; i < 7; i += 2) g.set(i, 7, C.thatchLo).set(i + 1, 8, C.thatchDk);
-    g.rect(3, 4, 3, 1, "#3a2a20");
-    g.outline(OUTLINE);
-    return g.toCanvas();
-  });
-}
-
-function rackSprite(): HTMLCanvasElement {
-  return cached("beach|rack", () => {
-    const g = new Grid(30, 40);
-    // An A-frame of bamboo with three boards leaning in it.
-    g.rect(2, 12, 2, 27, C.bambooLo).rect(26, 12, 2, 27, C.bambooLo);
-    g.rect(1, 34, 28, 2, C.bamboo);
-    g.rect(1, 22, 28, 1, C.bambooLo);
-    const boards: [number, string, string][] = [
-      [8, C.aqua, C.white],
-      [15, C.coral, C.sunHi],
-      [22, C.sun, C.coral],
-    ];
-    for (const [bx, c, stripe] of boards) {
-      g.ellipse(bx, 18, 3.4, 16.5, c);
-      g.rect(bx, 3, 1, 31, stripe);
-      g.set(bx - 2, 8, shade(c));
-    }
-    g.outline(OUTLINE);
-    return g.toCanvas();
-  });
-}
-
-function shade(c: string): string {
-  return mix(c, "#ffffff", 0.4);
-}
-
-function showerSprite(): HTMLCanvasElement {
-  return cached("beach|shower", () => {
-    const g = new Grid(14, 42);
-    g.rect(5, 6, 3, 34, C.teak).rect(5, 6, 1, 34, C.teakHi);
-    g.rect(6, 3, 6, 2, C.chromeLo).rect(10, 5, 3, 2, C.chrome);
-    g.rect(2, 38, 10, 3, C.driftLo);
-    g.rect(2, 38, 10, 1, C.driftHi);
-    g.rect(8, 22, 2, 1, C.chrome);
-    g.outline(OUTLINE);
-    return g.toCanvas();
-  });
-}
-
-export function beachDecor(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): Drawable[] {
-  const s = decorSpots(L);
-  const out: Drawable[] = [];
-  const t = info.t;
-  for (const [i, p] of s.torches.entries()) {
-    out.push({
-      z: p.y,
-      draw: () => {
-        ctx.drawImage(torchSprite(), p.x - 4, p.y - 27);
-        const f = Math.floor(t * 9 + i * 3) % 4;
-        const fx = p.x - 1;
-        const fy = p.y - 22;
-        fill(ctx, fx, fy - 4 + (f === 1 ? 1 : 0), 3, 4 - (f === 1 ? 1 : 0), "#ff8a3d");
-        fill(ctx, fx + (f % 2), fy - 6 + (f === 3 ? 1 : 0), 1, 2, "#ffb347");
-        fill(ctx, fx + 1, fy - 3, 1, 2, "#fff0a0");
-      },
-    });
-  }
-  for (const p of s.racks) out.push({ z: p.y, draw: () => ctx.drawImage(rackSprite(), p.x - 1, p.y - 40) });
-  const sh = s.shower;
-  if (sh) {
-    out.push({
-      z: sh.y,
-      draw: () => {
-        ctx.drawImage(showerSprite(), sh.x - 7, sh.y - 41);
-        // The odd drip.
-        const k = (t * 0.9) % 1;
-        if (k < 0.5) fill(ctx, sh.x + 4, sh.y - 34 + Math.floor(k * 60), 1, 1, "#9fe0f0");
-      },
-    });
-  }
-  const c = s.castle;
-  if (c) out.push({ z: c.y, draw: () => ctx.drawImage(castleSprite(), c.x - 1, c.y - 15) });
-  // A gull wanders in off the beach now and then, pecking at crumbs.
-  const hall = L.net.halls[0];
-  if (hall !== undefined && info.night < 0.4 && (info.weather === "clear" || info.weather === "partly")) {
-    const cyc = (t % 80) / 80;
-    if (cyc < 0.4) {
-      const k = cyc / 0.4;
-      const from = L.entrance.x + 20;
-      const span = Math.min(120, L.W - from - 20);
-      const there = k < 0.5;
-      const pos = there ? k * 2 : (1 - k) * 2;
-      const pecking = Math.floor(t * 1.3) % 4 === 0;
-      const gx = Math.round(from + pos * span);
-      const gy = hall + 7;
-      out.push({ z: gy, draw: () => drawGull(ctx, gx, gy, there, pecking, Math.floor(t * 6) % 2 === 0) });
-    }
-  }
-  return out;
-}
-
-function castleSprite(): HTMLCanvasElement {
-  return cached("beach|castle", () => {
-    const g = new Grid(20, 16);
-    const sand = "#e8c88a";
-    const hi = "#f6dfaa";
-    const lo = "#c9a462";
-    g.rect(2, 9, 16, 5, sand).rect(2, 9, 16, 1, hi).rect(2, 13, 16, 1, lo);
-    g.rect(3, 4, 5, 6, sand).rect(12, 4, 5, 6, sand).rect(7, 6, 6, 4, sand);
-    for (const x of [3, 5, 7, 12, 14, 16]) g.set(x, 3, sand);
-    g.rect(3, 4, 5, 1, hi).rect(12, 4, 5, 1, hi);
-    g.rect(9, 10, 2, 3, "#8a6a3a");
-    g.vline(14, 0, 4, "#8a6a3a").rect(15, 0, 3, 2, C.coral);
-    g.set(5, 6, lo).set(14, 6, lo);
-    g.rect(1, 13, 2, 1, C.pink).set(18, 12, "#f4d3c4");
-    g.outline(OUTLINE);
-    return g.toCanvas();
-  });
-}
-
-function drawGull(ctx: CanvasRenderingContext2D, x: number, y: number, right: boolean, peck: boolean, step: boolean): void {
-  const d = right ? 1 : -1;
-  const px = (dx: number) => x + (right ? dx : -dx - 1);
-  fill(ctx, x - 3, y, 7, 1, "rgba(60,40,30,0.18)");
-  fill(ctx, px(-3), y - 5, 6, 3, OUTLINE);
-  fill(ctx, px(-2), y - 4, 4, 2, "#ffffff");
-  fill(ctx, px(-3), y - 4, 2, 1, "#9aa6b8");
-  fill(ctx, px(-1), y - 4, 2, 1, "#c4ccd8");
-  const hy = peck ? y - 3 : y - 6;
-  fill(ctx, px(1), hy - 1, 3, 3, OUTLINE);
-  fill(ctx, px(2), hy, 1, 1, "#ffffff");
-  fill(ctx, px(1), hy, 1, 1, "#ffffff");
-  fill(ctx, px(3), hy + (peck ? 1 : 0), 1, 1, "#ffc83d");
-  fill(ctx, px(2), hy, 1, 1, peck ? "#ffffff" : "#ffffff");
-  fill(ctx, px(-1), y - 2, 1, 2, "#ff9f40");
-  fill(ctx, px(step ? 1 : 0), y - 2, 1, 2, "#ff9f40");
-  void d;
-}
-
-// ------------------------------------------------------------------ lighting
-
-export const beachLighting: NonNullable<Theme["lighting"]> = {
-  tint: "14,26,62",
-  darkness: (night, _wx, classic) => classic * 0.96 + night * 0.02,
-  lights(L, info) {
-    const s = decorSpots(L);
-    const out: Light[] = [];
-    const t = info.t;
-    for (const [i, p] of s.torches.entries()) {
-      const fl = 0.82 + Math.sin(t * 9 + i * 2) * 0.06 + Math.sin(t * 3.7 + i) * 0.08;
-      out.push([p.x, p.y - 26, 40, 0.9 * fl, "#ffa040", 0.26 * fl]);
-    }
-    // Hurricane candles on the veranda's little tables.
-    for (const [i, c] of candles(L).entries()) {
-      const fl = 0.8 + Math.sin(t * 7 + i * 1.7) * 0.08 + Math.sin(t * 2.9 + i) * 0.07;
-      out.push([c.x, c.y, 20, 0.75 * fl, "#ffc070", 0.2 * fl]);
-    }
-    // Lanterns: the tiki bar, the cabana and the waiting lounge.
-    const k = L.kitchen;
-    out.push([k.x + k.w * 0.75, k.y + 34, 46, 0.7, "#ffc070", 0.16]);
-    const m = L.meeting;
-    out.push([m.x + 14, m.y + m.h - 24, 34, 0.6, "#ffd08a", 0.14]);
-    if (L.games) out.push([L.games.x + L.games.w / 2, L.games.y + L.games.h / 2, 60, 0.45, "#ffb870", 0.08]);
-    if (L.server) out.push([L.server.x + 8, L.server.y + 8, 22, 0.5, "#86eee4", 0.12]);
-    return out;
-  },
-};
-
-function candles(L: Layout): { x: number; y: number }[] {
-  return cached(`beach|candles|${L.W}x${L.H}|${L.props.length}`, () => L.props.filter((p) => p.kind === "lounge-table").map((p) => ({ x: p.x + 13, y: p.y + 2 })));
-}
-
-// ------------------------------------------------------------------ underlay and overlay
-
-/** A crab scuttling sideways across the sand (games pit or dunes). */
-export function beachUnderlay(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): void {
-  const sandy = L.games ?? L.rooms.find((r) => r.kind === "garden")?.rect ?? null;
-  if (!sandy) return;
-  const t = info.t;
-  const cycle = (t * 0.05) % 1;
-  // It pops out for a while, then hides.
-  if (cycle > 0.55) return;
-  const k = Math.sin(cycle * Math.PI * 4) * 0.5 + 0.5;
-  const x = Math.round(sandy.x + 30 + k * Math.max(10, sandy.w - 60));
-  const y = Math.round(sandy.y + Math.min(sandy.h - 14, 52));
-  const step = Math.floor(t * 10) % 2;
-  fill(ctx, x - 3, y, 7, 1, "rgba(120,80,40,0.18)");
-  fill(ctx, x - 2, y - 3, 5, 3, C.coralLo);
-  fill(ctx, x - 1, y - 3, 3, 1, C.coral);
-  fill(ctx, x - 1, y - 4, 1, 1, OUTLINE);
-  fill(ctx, x + 1, y - 4, 1, 1, OUTLINE);
-  fill(ctx, x - 4, y - 3 - step, 2, 1, C.coral);
-  fill(ctx, x + 3, y - 3 - (1 - step), 2, 1, C.coral);
-  fill(ctx, x - 3, y - step, 1, 1, C.coralDk);
-  fill(ctx, x + 3, y - 1 + step, 1, 1, C.coralDk);
-}
-
-/** Warm sun glare from the windows by day, a rosy cast at sunset. */
-export function beachOverlay(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): void {
-  const clear = info.weather === "clear" || info.weather === "partly";
-  if (!clear) return;
-  const h = info.hour;
-  // Golden hour: a warm soft-light wash at sunset (and a little at dawn).
-  const golden = Math.max(0, 1 - Math.abs(h - 18.7) / 1.5) * (h > 17.2 && h < 20.2 ? 1 : 0) + Math.max(0, 1 - Math.abs(h - 6.6) / 0.9) * 0.6;
-  if (golden > 0.01) {
-    ctx.save();
-    ctx.globalCompositeOperation = "soft-light";
-    ctx.fillStyle = `rgba(255,${Math.round(150 - golden * 30)},70,${0.55 * golden})`;
-    ctx.fillRect(0, 0, L.W, L.H);
-    ctx.restore();
-  }
-  if (info.night > 0.65) return;
-  const k = (1 - info.night) * 0.08;
-  const g = ctx.createLinearGradient(0, 0, 0, L.H * 0.55);
-  g.addColorStop(0, `rgba(255,236,180,${k})`);
-  g.addColorStop(1, "rgba(255,236,180,0)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, L.W, Math.ceil(L.H * 0.55));
-  // Heat shimmer: a few slow glints drifting near the windows.
-  const t = info.t;
-  ctx.fillStyle = `rgba(255,250,225,${0.35 * (1 - info.night)})`;
-  for (const [i, win] of L.wall.windows.entries()) {
-    for (let j = 0; j < 2; j++) {
-      const p = (t * 0.05 + i * 0.31 + j * 0.5) % 1;
-      ctx.fillRect(Math.round(win.x + 6 + ((i * 13 + j * 17) % (win.w - 8)) + Math.sin(t + j) * 2), Math.round(win.y + win.h + 8 + p * 40), 1, 1);
-    }
-  }
-}

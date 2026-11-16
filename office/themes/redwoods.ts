@@ -9,8 +9,10 @@
 import type { Theme } from "../theme.ts";
 import { BACKGROUND } from "./redwoods/background.ts";
 import { chair, desk, SCREEN_COLORS, screen } from "./redwoods/desks.ts";
-import { darkness, decor, lights, outside, overlay, sky, underlay, wallLights } from "./redwoods/live.ts";
+import { darkness, decor, doorOpen, lights, outside, overlay, sky, underlay, wallLights } from "./redwoods/live.ts";
 import { dress, look, npc } from "./redwoods/people.ts";
+import { dressVisitor, mower, pet, pond } from "./redwoods/critters.ts";
+import { campLayout } from "./redwoods/plan.ts";
 import { plant, prop, speaker } from "./redwoods/props.ts";
 import { LABELS, outdoor, SOUNDS } from "./redwoods/words.ts";
 
@@ -19,6 +21,7 @@ export const REDWOODS: Theme = {
   name: "Redwood Camp",
   blurb: "Glamping among the redwoods: tents, lanterns and a campfire",
   icon: "🌲",
+  layout: (W, H, opts) => campLayout(W, H, opts),
   background: BACKGROUND,
   prop,
   plant: (name) => plant(name),
@@ -29,6 +32,7 @@ export const REDWOODS: Theme = {
   sky: (hour) => sky(hour),
   outside,
   wallLights,
+  doorOpen: (ctx, door, info) => doorOpen(ctx, door, info),
   underlay,
   decor,
   overlay,
@@ -42,6 +46,10 @@ export const REDWOODS: Theme = {
   look: (l) => look(l),
   npc,
   dress: (ctx, a) => dress(ctx, a),
+  dressVisitor: (ctx, v) => dressVisitor(ctx, v),
+  pet: (kind, pose, facing, blink) => pet(kind, pose, facing, blink),
+  roomba: () => mower(),
+  fishTank: (ctx, tank, info) => pond(ctx, tank, info),
   labels: LABELS,
   sounds: SOUNDS,
   outdoor,

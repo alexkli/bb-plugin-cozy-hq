@@ -60,13 +60,23 @@ export const beachDress: NonNullable<Theme["dress"]> = (ctx, a) => {
   const sandal = SANDALS[s % SANDALS.length]!;
   if (!sitting) {
     const legY = bt + 7;
+    // Board shorts: bare shins under the shorts, flip-flops below.
+    const skin = a.look?.skin;
     if (side) {
       const k = pose === "walk1" ? -1 : pose === "walk3" ? 1 : 0;
+      if (skin) {
+        put(7 + k, legY + 3, 3, 2, skin);
+        put(10 - k, legY + 3, 3, 2, skin);
+      }
       put(7 + k, legY + 5, 3, 1, sandal);
       put(10 - k, legY + 5, 3, 1, sandal);
     } else {
       const l = pose === "walk1" ? 1 : 0;
       const r = pose === "walk3" ? 1 : 0;
+      if (skin) {
+        put(5, legY + 3, 3, 2 - l, skin);
+        put(10, legY + 3, 3, 2 - r, skin);
+      }
       put(5, legY + 5 - l, 3, 1, sandal);
       put(10, legY + 5 - r, 3, 1, sandal);
     }
@@ -146,7 +156,7 @@ export const BEACH_LABELS: NonNullable<Theme["labels"]> = {
     clock: "Life-ring clock",
     arcade: "Tiki arcade · insert a coin",
     pingpong: "Table tennis under the sail · serve",
-    fishtank: "Reef tank · feed the fish",
+    fishtank: "Rock pool · feed the fish",
     whiteboard: "Cabana whiteboard · threads in plan mode",
     server: "The board shed · the AI cluster · click to train a model",
     couch: "Rattan sofa · bounce on it",
@@ -160,7 +170,8 @@ export const BEACH_LABELS: NonNullable<Theme["labels"]> = {
     technician: "The surf-shop fixer · patching things up",
     delivery: "Poke bowls and smoothies for the crew",
     dog: "Biscuit, the beach dog · pet",
-    cat: "Pixel, the villa cat · pet",
+    cat: "Mango, the villa parrot · pet",
+    roomba: "The hermit crab · send it off (or home)",
   },
   words: {
     Kitchen: "Tiki bar",
@@ -187,7 +198,7 @@ export const BEACH_LABELS: NonNullable<Theme["labels"]> = {
     "having a tea": "sipping a coconut",
     "picking a snack": "grabbing a juice",
     "snacking at the island": "snacking at the tiki bar",
-    "watching the fish": "watching the reef tank",
+    "watching the fish": "watching the rock pool",
     "watching TV": "watching the surf report",
     "playing ping-pong": "playing table tennis",
     "a ping-pong match": "a table tennis match",
@@ -202,6 +213,18 @@ export const BEACH_LABELS: NonNullable<Theme["labels"]> = {
 };
 
 export const BEACH_SOUNDS: NonNullable<Theme["sounds"]> = {
+  // Mango the parrot squawks instead of meowing, and chirrs instead of purring.
+  meow: (k) => {
+    k.tone(1500, 0, 0.1, "sawtooth", 0.04, 2300);
+    k.tone(2300, 0.1, 0.16, "square", 0.03, 1400);
+  },
+  purr: (k) => {
+    for (let i = 0; i < 4; i++) k.tone(900 + i * 60, i * 0.07, 0.06, "triangle", 0.025, 1150);
+  },
+  // The hermit crab sets off: tiny clicks on the boardwalk.
+  roomba: (k) => {
+    for (let i = 0; i < 6; i++) k.noise(i * 0.07, 0.03, 0.04, 3200);
+  },
   // Waves rolling in and out and a couple of gulls.
   "surf-day": (k) => {
     k.swell(0, 3.2, 0.14, 520, 220, 0.6, "lowpass");

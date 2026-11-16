@@ -214,3 +214,32 @@ export function floorPlan(L: Layout): FloorPlan {
     return { isFree, find };
   });
 }
+
+// ------------------------------------------------------------------ floor plans
+
+export {
+  Builder,
+  buildBoss,
+  buildGames,
+  buildGarden,
+  buildKitchen,
+  buildLayout,
+  buildLibrary,
+  buildLounge,
+  buildMeeting,
+  buildPods,
+  buildPortrait,
+  buildServerRoom,
+  buildWaiting,
+  buildWide,
+  clamp,
+  connect,
+  finish,
+  layoutSize,
+  POD_GAP,
+  POD_H,
+  utilities,
+  via,
+} from "./layout.ts";
+export type { Access, Desk, Facing, LayoutOptions, Network, Point, Room, RoomKind, Spot, SpotGroup, SpotKind, WallSegment } from "./layout.ts";
+export { checkLayout } from "./layoutcheck.ts";

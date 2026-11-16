@@ -159,13 +159,34 @@ function piano(): HTMLCanvasElement {
 }
 
 function fishtankStand(): HTMLCanvasElement {
-  return sprite("fishtank-stand", 42, 22, (g) => {
-    // An old apple crate on its side, with a few river stones.
-    boards(g, 1, 1, 40, 18, { hi: C.logHi, base: C.log, lo: C.logLo, gap: C.logDk }, 6, 41);
-    g.rect(1, 1, 40, 1, C.logHi);
-    g.rect(1, 1, 2, 18, C.logLo).rect(39, 1, 2, 18, C.logLo);
-    g.rect(14, 8, 14, 5, "#e6dabd").rect(15, 9, 12, 3, "#c9b48a").set(20, 10, C.fern).set(21, 10, C.fernHi);
-    g.rect(2, 19, 3, 2, C.logDk).rect(37, 19, 3, 2, C.logDk);
+  return sprite("pond-bank", 42, 22, (g) => {
+    // The trout pond's stone bank, mossy, with ferns at the ends.
+    const stones: [number, number, number, number][] = [
+      [1, 1, 9, 6],
+      [10, 1, 8, 7],
+      [18, 1, 10, 6],
+      [28, 1, 8, 7],
+      [36, 1, 5, 6],
+      [3, 7, 10, 6],
+      [13, 8, 9, 6],
+      [22, 7, 10, 7],
+      [32, 8, 8, 6],
+      [1, 13, 8, 6],
+      [9, 14, 11, 5],
+      [20, 14, 9, 5],
+      [29, 14, 12, 5],
+    ];
+    for (const [i, [x, y, w, h]] of stones.entries()) {
+      const c = i % 3 === 0 ? C.stone : i % 3 === 1 ? "#958f84" : "#7d7a70";
+      g.rrect(x, y, w, h, c, 1);
+      g.rect(x + 1, y, w - 2, 1, C.stoneHi);
+      g.rect(x + 1, y + h - 1, w - 2, 1, C.stoneDk);
+      if (i % 4 === 1) g.rect(x + 1, y + 1, 3, 1, C.mossHi).set(x + 2, y + 2, C.moss);
+    }
+    g.rect(1, 19, 40, 2, C.mossDk);
+    for (let x = 2; x < 40; x += 3) g.set(x, 19, C.moss);
+    fern(g, 3, 19, 9, 0.9, 41);
+    fern(g, 38, 19, 8, 0.9, 42);
   });
 }
 

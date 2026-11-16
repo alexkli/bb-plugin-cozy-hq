@@ -215,12 +215,12 @@ export function recolorNear(src: HTMLCanvasElement, map: Record<string, string>,
   });
 }
 
-const latestByKind = new Map<string, { key: string; value: unknown }>();
+const latestByKind = new Map<string, { key: unknown; value: unknown }>();
 /**
  * Like `cached`, but keeps only the newest value per `kind`: for things
  * baked per layout (the panel gets resized; old sizes are never needed again).
  */
-export function perLayout<T>(kind: string, key: string, build: () => T): T {
+export function perLayout<T>(kind: string, key: unknown, build: () => T): T {
   const hit = latestByKind.get(kind);
   if (hit && hit.key === key) return hit.value as T;
   const value = build();

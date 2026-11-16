@@ -4,6 +4,7 @@ import type { Theme, SynthKit } from "../../theme.ts";
 import type { WeatherKind } from "../../../contract.ts";
 
 const words: Record<string, string> = {
+  Biscuit: "Crumpet",
   kitchen: "kitchenette",
   Kitchen: "Kitchenette",
   lounge: "break room",
@@ -75,8 +76,9 @@ const npc = {
   technician: "The handyman · fixing things, eventually",
   delivery: "Takeaway rider · soaked through",
   kid: "A visiting kid · unimpressed",
-  dog: "Biscuit, the office dog · has seen better offices · pet",
-  cat: "Pixel, the stray who stayed · pet",
+  dog: "Crumpet, the office dog · old, scruffy, snores · pet",
+  cat: "Smudge, the alley cat · came in through a window · pet",
+  roomba: "The taped-up robot vacuum · send it off (or home)",
 };
 
 // ------------------------------------------------------------------ sounds

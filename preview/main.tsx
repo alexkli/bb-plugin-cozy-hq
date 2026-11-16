@@ -11,6 +11,25 @@ import { showCatalog } from "./catalog.ts";
 
 const q = new URLSearchParams(location.search);
 const key = "preview";
+
+// `hour` sets the clock as well (the TV, tooltips, lunch), not only the light.
+if (q.has("hour")) {
+  const RealDate = Date;
+  const h = Number(q.get("hour"));
+  const target = new RealDate();
+  target.setHours(Math.floor(h), Math.round((h % 1) * 60), 0, 0);
+  const offset = target.getTime() - RealDate.now();
+  class ShiftedDate extends RealDate {
+    constructor(...args: unknown[]) {
+      if (args.length === 0) super(RealDate.now() + offset);
+      else super(...(args as [number]));
+    }
+    static override now(): number {
+      return RealDate.now() + offset;
+    }
+  }
+  globalThis.Date = ShiftedDate as DateConstructor;
+}
 const debug: Record<string, unknown> = { sample: true, expose: true };
 if (q.has("hour")) debug.hour = Number(q.get("hour"));
 for (const k of ["weather", "event", "gag", "season", "scenery"]) if (q.has(k)) debug[k] = q.get(k);

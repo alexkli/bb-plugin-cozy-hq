@@ -10,16 +10,20 @@ import { PEOPLE } from "./annex/people.ts";
 import { PROPS } from "./annex/props.ts";
 import { WORDS } from "./annex/words.ts";
 import { DESKS } from "./annex/workstations.ts";
+import { annexLayout } from "./annex/plan.ts";
+import { PETS } from "./annex/pets.ts";
 
 export const ANNEX: Theme = {
   id: "annex",
   name: "Dusty Annex",
   blurb: "A shabby, forgotten office where nothing quite works",
   icon: "🗄️",
+  layout: annexLayout,
   background: BACKGROUND,
   ...PROPS,
   ...DESKS,
   ...LIVE,
   ...PEOPLE,
+  ...PETS,
   ...WORDS,
 };

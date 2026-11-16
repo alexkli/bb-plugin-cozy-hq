@@ -13,6 +13,8 @@ import { BACKGROUND } from "./school/background.ts";
 import { schoolChair, schoolDesk, schoolScreen } from "./school/desks.ts";
 import { decor, lights, overlay, wallLights } from "./school/live.ts";
 import { paintOutside } from "./school/outside.ts";
+import { aquarium, dressVisitor, ladybugBot, schoolPet } from "./school/pets.ts";
+import { schoolLayout } from "./school/plan.ts";
 import { schoolDress, schoolLook, schoolNpc } from "./school/people.ts";
 import { intercom, schoolPlant, schoolProp } from "./school/props.ts";
 import { LABELS, outdoor, SOUNDS } from "./school/words.ts";
@@ -22,6 +24,7 @@ export const SCHOOL: Theme = {
   name: "School",
   blurb: "An elementary and middle school: classrooms, cafeteria and playground",
   icon: "🏫",
+  layout: schoolLayout,
   background: BACKGROUND,
   prop: schoolProp,
   plant: (s) => schoolPlant(s),
@@ -44,6 +47,10 @@ export const SCHOOL: Theme = {
   look: schoolLook,
   npc: schoolNpc,
   dress: schoolDress,
+  dressVisitor,
+  pet: (kind, pose, facing, blink) => schoolPet(kind, pose, facing, blink),
+  roomba: () => ladybugBot(),
+  fishTank: aquarium,
   labels: LABELS,
   sounds: SOUNDS,
   outdoor,

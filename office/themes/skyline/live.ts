@@ -6,7 +6,10 @@ import type { Layout, Rect } from "../../layout.ts";
 import { cached, floorPlan, makeCanvas, OUTLINE } from "../../themekit.ts";
 import { segKind } from "./background.ts";
 import { C, clamp, sprite } from "./kit.ts";
-import { drawLowerPanes, duskness } from "./view.ts";
+import { drawBeyond, drawLowerPanes, duskness } from "./view.ts";
+import { outdoors, terraceDecor, terraceLights } from "./terrace.ts";
+import { planOf } from "./plan.ts";
+import { spiralStair } from "./luxe.ts";
 
 const layoutKey = (L: Layout) => `${L.W}x${L.H}|${L.props.length}|${L.spots.length}`;
 
@@ -146,6 +149,11 @@ function reflectionSprite(w: number, rgb: string): HTMLCanvasElement {
 /** The lower glass, and the windows mirrored in the polished floor. */
 export function skylineUnderlay(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): void {
   drawLowerPanes(ctx, L, info);
+  const plan = planOf(L);
+  if (plan && plan.beyond.length > 0) {
+    drawBeyond(ctx, plan.beyond, info);
+    edgeGlow(ctx, L, plan.beyond, info);
+  }
   const gloomy = info.weather !== "clear" && info.weather !== "partly";
   for (const win of L.wall.windows) {
     const sg = L.segments.find((s) => win.x >= s.x0 && win.x < s.x1);
@@ -156,6 +164,39 @@ export function skylineUnderlay(ctx: CanvasRenderingContext2D, L: Layout, info: 
     ctx.drawImage(spr, win.x + 4, sg.depth + 1);
     ctx.globalAlpha = 1;
   }
+}
+
+/** Light off the glass on the polished floor: daylight by day, the city's glow at night. */
+function edgeGlow(ctx: CanvasRenderingContext2D, L: Layout, strips: Rect[], info: PaintInfo): void {
+  const night = info.night > 0.5;
+  const rgb = night ? "255,196,130" : "235,246,255";
+  const a = night ? 0.5 : 0.35;
+  for (const r of strips) {
+    if (r.w >= r.h) {
+      const g = glowSprite("v", rgb);
+      ctx.globalAlpha = a;
+      ctx.drawImage(g, r.x, r.y - 14, r.w, 14);
+    } else {
+      const left = r.x < L.W / 2;
+      ctx.globalAlpha = a;
+      ctx.drawImage(glowSprite(left ? "hl" : "h", rgb), left ? r.x + r.w : r.x - 14, r.y, 14, r.h);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** A soft glow brightening toward the glass: below ("v"), to the right ("h") or to the left ("hl"). */
+function glowSprite(dir: "v" | "h" | "hl", rgb: string): HTMLCanvasElement {
+  return cached(`skyline|edgeglow|${dir}|${rgb}`, () =>
+    makeCanvas(dir === "v" ? 1 : 14, dir === "v" ? 14 : 1, (c) => {
+      for (let i = 0; i < 14; i++) {
+        const k = dir === "hl" ? 13 - i : i;
+        c.fillStyle = `rgba(${rgb},${((k / 13) ** 2 * 0.6).toFixed(3)})`;
+        if (dir === "v") c.fillRect(0, i, 1, 1);
+        else c.fillRect(i, 0, 1, 1);
+      }
+    }),
+  );
 }
 
 // ------------------------------------------------------------------ decor
@@ -230,12 +271,12 @@ function plan(L: Layout): DecorPlan {
     const taken: Rect[] = [];
     const ev = L.eventArea;
     const apart = (r: Rect, o: Rect, m: number) => r.x + r.w < o.x - m || r.x > o.x + o.w + m || r.y + r.h < o.y - m || r.y > o.y + o.h + m;
-    const closed = L.rooms.filter((room) => room.walls).map((room) => room.rect);
+    const closed = [...L.rooms.filter((room) => room.walls).map((room) => room.rect), ...outdoors(L)];
     const clearOfEvents = (r: Rect) => apart(r, ev, 8) && closed.every((c) => apart(r, c, 4));
     const place = (c: HTMLCanvasElement, within: Rect | undefined, pick: "first" | "last" = "first", anywhere = false) => {
       const spots = fp
         .find(c.width + 2, c.height, 24, within)
-        .filter((r) => (anywhere ? apart(r, ev, 8) : clearOfEvents(r)) && !taken.some((o) => Math.abs(o.x - r.x) < 48 && Math.abs(o.y - r.y) < 48));
+        .filter((r) => (anywhere ? apart(r, ev, 8) && outdoors(L).every((o) => apart(r, o, 4)) : clearOfEvents(r)) && !taken.some((o) => Math.abs(o.x - r.x) < 48 && Math.abs(o.y - r.y) < 48));
       const r = pick === "first" ? spots[0] : spots[spots.length - 1];
       if (!r) return false;
       taken.push(r);
@@ -250,6 +291,10 @@ function plan(L: Layout): DecorPlan {
     const d = L.wall.door;
     const dseg = L.segments.find((s) => d.x >= s.x0 && d.x < s.x1);
     place(umbrellaStand(), { x: d.x - 34, y: (dseg?.depth ?? 64) + 1, w: d.w + 68, h: 30 });
+    // A spiral stair up to the roof: in the lounge, else by the reception or anywhere open.
+    if (!place(spiralStair(), { x: L.lounge.x, y: L.lounge.y, w: L.lounge.w, h: L.lounge.h })) {
+      if (!place(spiralStair(), { x: L.waiting.x, y: L.waiting.y, w: L.waiting.w, h: L.waiting.h })) place(spiralStair(), undefined, "last");
+    }
     place(floorVase(), { x: L.lounge.x, y: L.lounge.y, w: L.lounge.w, h: L.lounge.h });
     place(sculpture(), { x: L.waiting.x, y: L.waiting.y, w: L.waiting.w, h: L.waiting.h }, "last");
     if (!items.some((it) => it.canvas === floorVase())) place(floorVase(), undefined, "last");
@@ -257,9 +302,9 @@ function plan(L: Layout): DecorPlan {
   });
 }
 
-export function skylineDecor(ctx: CanvasRenderingContext2D, L: Layout): Drawable[] {
+export function skylineDecor(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): Drawable[] {
   const P = plan(L);
-  const out: Drawable[] = [];
+  const out: Drawable[] = terraceDecor(ctx, L, info);
   for (const it of P.items) out.push({ z: it.z, draw: () => ctx.drawImage(it.canvas, it.x, it.y) });
   return out;
 }
@@ -311,15 +356,35 @@ export function skylineLights(L: Layout, info: PaintInfo): Light[] {
     for (const s of scallops(L)) if (s.warm) out.push([s.x, s.depth - 12, 22, 0.4, "#ffe0b0", 0.04]);
     // Recessed downlights in a grid over the floor: warm pools on the concrete.
     const top = Math.max(...L.segments.map((sg) => sg.depth)) + 26;
+    const outside = outdoors(L);
     for (let y = top, row = 0; y < L.H - 10; y += 84, row++) {
-      for (let x = 48 + (row % 2) * 48; x < L.W - 20; x += 96) out.push([x, y, 36, 0.34, "#ffd9a8", 0.05]);
+      for (let x = 48 + (row % 2) * 48; x < L.W - 20; x += 96) {
+        if (outside.some((r) => x > r.x - 10 && x < r.x + r.w + 10 && y > r.y - 10 && y < r.y + r.h + 10)) continue;
+        out.push([x, y, 36, 0.34, "#ffd9a8", 0.05]);
+      }
     }
     return out;
   });
+  const terrace = terraceLights(L, info);
+  // The city far below glows through the glass at night.
+  const strips = cached(`skyline|striplights|${layoutKey(L)}`, () => {
+    const out: Light[] = [];
+    for (const r of planOf(L)?.beyond ?? []) {
+      const long = Math.max(r.w, r.h);
+      for (let k = 24; k < long; k += 56) {
+        const x = r.w >= r.h ? r.x + k : r.x + r.w / 2;
+        const y = r.w >= r.h ? r.y + r.h / 2 : r.y + k;
+        out.push([x, y, 26, 0.6, "#ffcf8f", 0.05]);
+      }
+    }
+    return out;
+  });
+  terrace.push(...strips);
+  const all = terrace.length > 0 ? base.concat(terrace) : base;
   // Golden hour: low sun spilling in through the glass.
   const dusk = duskness(info.hour);
-  if (dusk < 0.05 || (info.weather !== "clear" && info.weather !== "partly")) return base;
-  const out = base.slice();
+  if (dusk < 0.05 || (info.weather !== "clear" && info.weather !== "partly")) return all;
+  const out = all.slice();
   for (const win of L.wall.windows) {
     const sg = L.segments.find((s) => win.x >= s.x0 && win.x < s.x1);
     out.push([win.x + win.w / 2 + 8, (sg?.depth ?? 64) + 24, 84, 0.55 * dusk, "#ffa055", 0.34 * dusk]);

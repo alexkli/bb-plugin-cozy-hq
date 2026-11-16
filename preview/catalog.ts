@@ -2,7 +2,7 @@
 // sizes: a checklist for scenery authors.
 import { chairCanvas, deskCanvas, screenFor, type ChairTone } from "../office/desks.ts";
 import { classicProp, pa } from "../office/furniture.ts";
-import { buildLayout, type PlantPlacement, type PropPlacement } from "../office/layout.ts";
+import { buildLayout, layoutSize, type PlantPlacement, type PropPlacement } from "../office/layout.ts";
 import type { DeskStyle } from "../office/model.ts";
 import { themeById } from "../office/themes/index.ts";
 
@@ -41,7 +41,8 @@ export function showCatalog(stage: HTMLElement, scenery: string): void {
   // Props from a few layouts, so every kind shows up once.
   const seen = new Set<string>();
   for (const [w, h] of [[666, 474], [900, 420], [600, 698], [390, 844]] as const) {
-    const L = buildLayout(w, h, { threads: 16 });
+    const size = layoutSize(w, h);
+    const L = theme.layout?.(size.W, size.H, { threads: 16, portrait: size.portrait }) ?? buildLayout(w, h, { threads: 16 });
     for (const p of L.props as PropPlacement[]) {
       const k = `${p.kind}`;
       if (seen.has(k)) continue;

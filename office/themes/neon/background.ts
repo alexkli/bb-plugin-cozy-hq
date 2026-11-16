@@ -4,6 +4,7 @@ import type { BackgroundSteps } from "../../theme.ts";
 import type { Layout, Rect, Room } from "../../layout.ts";
 import { cached, carpet, classicProp, drawPixelText, Grid, hash, makeCanvas, OUTLINE, pixelTextWidth, rect, rng, tiles } from "../../themekit.ts";
 import { glyph, P, perLayout, stamp } from "./kit.ts";
+import { planOf, type Front, type NeonPlan } from "./plan.ts";
 
 // ------------------------------------------------------------------ signs on the wall
 
@@ -183,7 +184,7 @@ function freeWall(L: Layout): { x0: number; x1: number; depth: number }[] {
 
 /** Neon signs in the free stretches of wall (also used for their glow at night). */
 export function wallSigns(L: Layout): WallSign[] {
-  return perLayout("signs", `${L.W}x${L.H}|${L.props.length}|${L.wall.windows.length}`, () => {
+  return perLayout("signs", L, () => {
     const signs: WallSign[] = [];
     let n = 0;
     for (const f of freeWall(L)) {
@@ -226,17 +227,21 @@ export function wallSigns(L: Layout): WallSign[] {
 
 /** The hallway trim dashes on free floor (x, y, w, h), lit in turns by the underlay. */
 export function floorDashes(L: Layout): { x: number; y: number; w: number; h: number; i: number }[] {
-  return perLayout("dashes", `${L.W}x${L.H}|${L.rooms.length}`, () => {
+  return perLayout("dashes", L, () => {
     const blocked = (x: number, y: number) =>
       L.rooms.some((r) => x >= r.rect.x - 4 && x < r.rect.x + r.rect.w + 4 && y >= r.rect.y - 10 && y < r.rect.y + r.rect.h + 4) ||
       L.pods.some((p) => x >= p.x - 6 && x < p.x + p.w + 6 && y >= p.y - 2 && y < p.y + p.h + 4) ||
       L.segments.some((s) => x >= s.x0 && x < s.x1 && y < s.depth + 3);
     const out: { x: number; y: number; w: number; h: number; i: number }[] = [];
+    const plan = planOf(L);
     for (const hy of L.net.halls) {
-      for (const dy of [-11, 10]) {
+      const st = plan?.streets.find((q) => q.y === hy);
+      const offs = st ? [-st.half + 1, st.half - 2] : [-11, 10];
+      for (const dy of offs) {
         let i = 0;
         for (let x = 2; x < L.W - 4; x += 8) {
           if (blocked(x, hy + dy) || blocked(x + 4, hy + dy)) continue;
+          if (st && L.net.aisles.some((ax) => Math.abs(x + 2 - ax) < 13)) continue;
           out.push({ x, y: hy + dy, w: 4, h: 1, i: i++ });
         }
       }
@@ -246,7 +251,7 @@ export function floorDashes(L: Layout): { x: number; y: number; w: number; h: nu
         let i = 0;
         for (let y = 2; y < L.H - 4; y += 8) {
           if (blocked(ax + dx, y) || blocked(ax + dx, y + 4)) continue;
-          if (L.net.halls.some((hy) => Math.abs(y + 2 - hy) < 14)) continue;
+          if (L.net.halls.some((hy) => Math.abs(y + 2 - hy) < (plan?.streets.find((q) => q.y === hy)?.half ?? 10) + 6)) continue;
           out.push({ x: ax + dx, y, w: 1, h: 4, i: i++ });
         }
       }
@@ -289,10 +294,75 @@ function floor(ctx: CanvasRenderingContext2D, L: Layout): void {
     g.hline(Math.round(pw * 0.25), Math.floor(ph / 2), Math.round(pw * 0.45), streak);
     stamp(ctx, g, px, py);
   }
+  const plan = planOf(L);
+  if (plan) {
+    for (const ax of L.net.aisles) alley(ctx, L, ax);
+    for (const st of plan.streets) street(ctx, L, st);
+    if (plan.plaza) plazaFloor(ctx, plan.plaza);
+  }
   // Hallway trim: dim neon dashes along both edges of every hallway and aisle.
   for (const d of floorDashes(L)) {
     rect(ctx, d.x, d.y, d.w, d.h, "#1a7488");
     rect(ctx, d.x - (d.w > 1 ? 0 : 0), d.y + d.h, d.w, 1, "#16112a");
+  }
+}
+
+/** A back alley along an aisle: darker pavement between the rooms. */
+function alley(ctx: CanvasRenderingContext2D, L: Layout, ax: number): void {
+  const top = Math.max(...L.segments.filter((sg) => ax >= sg.x0 - 8 && ax <= sg.x1 + 8).map((sg) => sg.depth), 0);
+  rect(ctx, ax - 7, top, 14, L.H - top, "#1a1626");
+  for (let y = top + 3; y < L.H; y += 10) {
+    rect(ctx, ax - 7, y, 14, 1, "#15121f");
+    if (hash(`al${ax}${y}`) % 5 === 0) rect(ctx, ax - 4 + (hash(`b${y}`) % 6), y + 4, 3, 1, "#2a1f3e");
+  }
+  rect(ctx, ax - 7, top, 1, L.H - top, "#120f1c");
+  rect(ctx, ax + 6, top, 1, L.H - top, "#120f1c");
+}
+
+/** The night-market street: wet asphalt, curbs, lane lines and crosswalks. */
+function street(ctx: CanvasRenderingContext2D, L: Layout, st: NeonPlan["streets"][number]): void {
+  const y0 = st.y - st.half;
+  const y1 = st.y + st.half;
+  rect(ctx, 0, y0, L.W, y1 - y0, "#191628");
+  const r = rng(hash(`street${st.y}${L.W}`));
+  for (let i = 0; i < (L.W * (y1 - y0)) / 10; i++) rect(ctx, Math.floor(r() * L.W), y0 + Math.floor(r() * (y1 - y0)), 1, 1, r() < 0.5 ? "#211d33" : "#13101d");
+  // Puddles with long neon reflections.
+  for (let i = 0; i < L.W / 70; i++) {
+    const px = Math.floor(r() * L.W);
+    const py = y0 + 3 + Math.floor(r() * Math.max(1, y1 - y0 - 8));
+    const pw = 14 + Math.floor(r() * 24);
+    rect(ctx, px, py, pw, 2, "#120f1a");
+    rect(ctx, px + 2, py + 2, pw - 4, 1, "#120f1a");
+    rect(ctx, px + 3, py, Math.floor(pw * 0.4), 1, r() < 0.5 ? "#5a1d5a" : "#174a64");
+  }
+  // Sidewalk curbs with a neon lip.
+  rect(ctx, 0, y0 - 4, L.W, 4, "#332d4e");
+  rect(ctx, 0, y0 - 4, L.W, 1, "#4e4772");
+  rect(ctx, 0, y0 - 1, L.W, 1, P.cyanLo);
+  rect(ctx, 0, y1, L.W, 4, "#2b2642");
+  rect(ctx, 0, y1, L.W, 1, P.magLo);
+  rect(ctx, 0, y1 + 1, L.W, 1, "#4a4368");
+  rect(ctx, 0, y1 + 4, L.W, 1, "#0c0a14");
+  // Lane edges and a dashed center line (amber).
+  if (st.half >= 12) {
+    rect(ctx, 0, y0 + 4, L.W, 1, "#2a2638");
+    rect(ctx, 0, y1 - 5, L.W, 1, "#2a2638");
+  }
+  for (let x = 4; x < L.W; x += 16) rect(ctx, x, st.y + 4, 8, 1, "#9a7420");
+  // Crosswalks where the alleys cross the street.
+  for (const ax of L.net.aisles) {
+    rect(ctx, ax - 11, y0, 22, y1 - y0, "#16131e");
+    for (let x = ax - 10; x <= ax + 8; x += 4) rect(ctx, x, y0 + 2, 2, y1 - y0 - 4, "#56507a");
+  }
+  // Bollards along the curbs (their caps glow).
+  const plan = planOf(L);
+  for (const bo of plan?.bollards ?? []) {
+    if (bo.y < y0 - 6 || bo.y > y1 + 6) continue;
+    const c = (bo.x >> 3) % 2 ? P.mag : P.cyan;
+    rect(ctx, bo.x - 2, bo.y - 6, 4, 8, OUTLINE);
+    rect(ctx, bo.x - 1, bo.y - 5, 2, 6, "#4c4670");
+    rect(ctx, bo.x - 1, bo.y - 5, 2, 2, c);
+    rect(ctx, bo.x - 2, bo.y + 2, 4, 1, "rgba(0,0,0,0.4)");
   }
 }
 
@@ -366,10 +436,139 @@ function pods(ctx: CanvasRenderingContext2D, L: Layout): void {
     neonBorder(ctx, r, POD_TRIM[i % POD_TRIM.length]!, 2);
     // Corner markers.
     for (const [cx, cy] of [[r.x + 4, r.y + 4], [r.x + r.w - 7, r.y + 4], [r.x + 4, r.y + r.h - 5], [r.x + r.w - 7, r.y + r.h - 5]] as const) rect(ctx, cx, cy, 3, 1, POD_TRIM[i % POD_TRIM.length]!);
+    if (!planOf(L)) return;
+    // Capsule hotel: every desk column is a lit capsule with rounded hatches.
+    const trim = POD_TRIM[i % POD_TRIM.length]!;
+    const cols = Math.round(pod.w / 48);
+    for (let c = 0; c < cols; c++) {
+      const x = pod.x + c * 48;
+      ctx.drawImage(capsule(pod.h, trim, hash(`cap${i}-${c}`)), x, pod.y);
+      const label = `${String.fromCharCode(65 + (i % 26))}${c + 1}`;
+      drawPixelText(ctx, label, x + 6, pod.y + 5, trim);
+    }
   });
 }
 
+/** One capsule: a rounded steel shell with a neon seam and hatch rings at both ends. */
+function capsule(h: number, trim: string, seed: number): HTMLCanvasElement {
+  return cached(`neon|capsule|${h}|${trim}|${seed % 3}`, () => {
+    const g = new Grid(48, h);
+    g.rrect(1, 1, 46, h - 2, "#2a2444", 10);
+    g.rrect(2, 2, 44, h - 4, "#3d3660", 9);
+    g.rrect(3, 3, 42, h - 6, trim, 9);
+    g.rrect(4, 4, 40, h - 8, "#14101f", 8);
+    // Hatch rings at the ends.
+    for (const cy of [9, h - 10]) {
+      for (let a = 0; a < Math.PI * 2; a += 0.09) {
+        const x = Math.round(24 + Math.cos(a) * 12);
+        const y = Math.round(cy + Math.sin(a) * 4);
+        if (g.get(x, y) === "#14101f") g.set(x, y, "#2e2850");
+      }
+    }
+    // A status light on each end.
+    const led = [P.lime, P.yel, P.mag][seed % 3]!;
+    g.set(40, 5, led).set(40, h - 6, led);
+    g.outline(OUTLINE);
+    return g.toCanvas();
+  });
+}
+
+// ------------------------------------------------------------------ storefronts
+
+function awning(ctx: CanvasRenderingContext2D, f: Front, x0: number, x1: number): void {
+  const lo = mixHex(f.color, "#120e1e", 0.55);
+  for (let x = x0; x < x1; x++) {
+    const stripe = Math.floor((x - f.x0) / 4) % 2 === 0;
+    rect(ctx, x, f.y - 2, 1, 6, stripe ? f.color : lo);
+    if ((x - f.x0) % 4 === 1) rect(ctx, x, f.y + 4, 2, 1, stripe ? f.color : lo);
+  }
+  rect(ctx, x0, f.y - 3, x1 - x0, 1, OUTLINE);
+  rect(ctx, x0, f.y - 2, x1 - x0, 1, mixHex(f.color, "#ffffff", 0.35));
+  rect(ctx, x0, f.y + 5, x1 - x0, 1, "rgba(0,0,0,0.35)");
+}
+
+function drawFront(ctx: CanvasRenderingContext2D, f: Front): void {
+  // Split the front at its doorways.
+  const spans: [number, number][] = [];
+  let x = f.x0 + 2;
+  for (const g of f.gaps) {
+    if (g - 8 > x) spans.push([x, g - 8]);
+    x = g + 8;
+  }
+  if (f.x1 - 2 > x) spans.push([x, f.x1 - 2]);
+  if (f.side === "top") {
+    // Below the street: an awning along the curb, noren on the ramen shop, lit mats at the doors.
+    for (const [a, z] of spans) {
+      awning(ctx, f, a, z);
+      if (f.kind === "kitchen") {
+        for (let nx = a + 2; nx + 7 <= z; nx += 9) {
+          rect(ctx, nx, f.y + 5, 7, 7, "#7a1028");
+          rect(ctx, nx, f.y + 5, 7, 1, "#a8183a");
+          rect(ctx, nx + 2, f.y + 8, 3, 1, "#f4e8d8");
+          rect(ctx, nx + 3, f.y + 7, 1, 3, "#f4e8d8");
+        }
+      }
+    }
+    for (const g of f.gaps) {
+      rect(ctx, g - 6, f.y + 2, 12, 2, mixHex(f.color, "#120e1e", 0.6));
+      rect(ctx, g - 5, f.y + 2, 10, 1, f.color);
+    }
+    // The shop sign sits up on the awning.
+    const s = wordSign(f.sign, f.color, 1);
+    const longest = spans.reduce((b, q) => (q[1] - q[0] > b[1] - b[0] ? q : b), spans[0] ?? [f.x0, f.x1]);
+    if (longest[1] - longest[0] >= s.base.width + 4) ctx.drawImage(s.base, Math.round((longest[0] + longest[1]) / 2 - s.base.width / 2), f.y - 10);
+  } else {
+    // Above the street: a shop ledge with neon trim, roll-up shutters half open over the doors.
+    for (const [a, z] of spans) {
+      rect(ctx, a, f.y - 4, z - a, 5, "#1a1530");
+      rect(ctx, a, f.y - 5, z - a, 1, OUTLINE);
+      rect(ctx, a, f.y - 4, z - a, 1, f.color);
+      rect(ctx, a, f.y + 1, z - a, 1, "#0c0a14");
+      for (let k = a + 3; k < z - 2; k += 12) rect(ctx, k, f.y - 2, 6, 2, "#2a2444");
+    }
+    for (const g of f.gaps) {
+      rect(ctx, g - 7, f.y - 12, 14, 7, OUTLINE);
+      for (let yy = f.y - 11; yy < f.y - 6; yy++) rect(ctx, g - 6, yy, 12, 1, yy % 2 ? "#6a6694" : "#4c4670");
+      rect(ctx, g - 6, f.y - 6, 12, 1, "#ffd23f");
+    }
+  }
+}
+
+function mixHex(a: string, b: string, t: number): string {
+  const pa = parseHex(a);
+  const pb = parseHex(b);
+  const c = (i: number) => Math.round(pa[i]! + (pb[i]! - pa[i]!) * t).toString(16).padStart(2, "0");
+  return `#${c(0)}${c(1)}${c(2)}`;
+}
+
+function parseHex(c: string): number[] {
+  return [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+}
+
+/** The plaza: big lit pavers and a neon ring in the middle. */
+function plazaFloor(ctx: CanvasRenderingContext2D, r: Rect): void {
+  rect(ctx, r.x, r.y, r.w, r.h, "#1e1a30");
+  for (let y = r.y; y < r.y + r.h; y += 10) {
+    rect(ctx, r.x, y, r.w, 1, "#15121f");
+    for (let x = r.x + ((y - r.y) % 20 ? 0 : 10); x < r.x + r.w; x += 20) rect(ctx, x, y, 1, 10, "#15121f");
+  }
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2 + 2;
+  for (const [k, c] of [[1, P.magLo], [0.62, P.cyanLo]] as const) {
+    const rx = Math.min(r.w / 2 - 8, 60) * k;
+    const ry = Math.min(r.h / 2 - 3, 16) * k;
+    for (let a = 0; a < Math.PI * 2; a += 0.03) rect(ctx, Math.round(cx + Math.cos(a) * rx), Math.round(cy + Math.sin(a) * ry), 1, 1, c);
+  }
+  rect(ctx, r.x, r.y + r.h - 1, r.w, 1, "#2e2850");
+}
+
 function room(ctx: CanvasRenderingContext2D, room: Room, L: Layout): void {
+  roomFloor(ctx, room, L);
+  const plan = planOf(L);
+  for (const f of plan?.fronts ?? []) if (f.kind === room.kind && f.x0 === room.rect.x) drawFront(ctx, f);
+}
+
+function roomFloor(ctx: CanvasRenderingContext2D, room: Room, L: Layout): void {
   const r = room.rect;
   switch (room.kind) {
     case "meeting": {
@@ -377,6 +576,20 @@ function room(ctx: CanvasRenderingContext2D, room: Room, L: Layout): void {
       tiles(ctx, r, "#1d2240", "#212746", 8);
       for (let x = r.x; x < r.x + r.w; x += 16) rect(ctx, x, r.y, 1, r.h, "#28305a");
       for (let y = r.y; y < r.y + r.h; y += 16) rect(ctx, r.x, y, r.w, 1, "#28305a");
+      if (planOf(L)) {
+        // The holo dome: projection rings on the floor and the ribs of the dome.
+        const cx = r.x + r.w / 2;
+        const cy = r.y + r.h * 0.58;
+        const rx0 = r.w / 2 - 6;
+        const ry0 = Math.min(r.h * 0.42, rx0 * 0.62);
+        for (const [k, c] of [[1, "#2b4a7a"], [0.72, "#244068"], [0.44, "#2e5a88"]] as const) {
+          for (let a = 0; a < Math.PI * 2; a += 0.025) rect(ctx, Math.round(cx + Math.cos(a) * rx0 * k), Math.round(cy + Math.sin(a) * ry0 * k), 1, 1, c);
+        }
+        for (let s = 0; s < 8; s++) {
+          const a = (s / 8) * Math.PI * 2;
+          for (let f = 0.46; f < 1; f += 0.04) rect(ctx, Math.round(cx + Math.cos(a) * rx0 * f), Math.round(cy + Math.sin(a) * ry0 * f), 1, 1, "#223a60");
+        }
+      }
       break;
     }
     case "boss": {
@@ -403,6 +616,15 @@ function room(ctx: CanvasRenderingContext2D, room: Room, L: Layout): void {
       rug.rrect(8, 8, rug.w - 16, rug.h - 16, "#1f0d26", 1);
       for (let x = 12; x < rug.w - 12; x += 8) rug.set(x, Math.floor(rug.h / 2), P.magLo).set(x + 1, Math.floor(rug.h / 2) - 1, P.magLo).set(x + 1, Math.floor(rug.h / 2) + 1, P.magLo);
       stamp(ctx, rug, r.x + Math.round((r.w - rug.w) / 2) + 6, r.y + 22);
+      if (planOf(L)) {
+        // A raised platform: a lit lip all round, steps down at the door.
+        rect(ctx, r.x, r.y, r.w, 2, "#3a2a4a");
+        rect(ctx, r.x, r.y + 2, r.w, 1, P.magLo);
+        rect(ctx, r.x, r.y, 2, r.h, "#3a2a4a");
+        rect(ctx, r.x + r.w - 2, r.y, 2, r.h, "#3a2a4a");
+        rect(ctx, r.x + 2, r.y + r.h - 12, r.w - 4, 1, P.magLo);
+        if (room.doorX !== undefined) for (let k = 0; k < 3; k++) rect(ctx, room.doorX - 8, r.y + 3 + k * 3, 16, 1, k % 2 ? "#4a3a5c" : "#2a1f36");
+      }
       break;
     }
     case "waiting": {
@@ -412,6 +634,20 @@ function room(ctx: CanvasRenderingContext2D, room: Room, L: Layout): void {
         for (let x = r.x + 6 + ((y - r.y) % 16 ? 4 : 0); x < r.x + r.w - 4; x += 8) rect(ctx, x, y, 2, 1, "#203454");
       }
       neonBorder(ctx, r, P.cyanLo, 2);
+      if (planOf(L) && r.w >= 120) {
+        // A departures-style board along the top: the queue for you.
+        const bw = Math.min(r.w - 70, 120);
+        const bx = r.x + 8;
+        rect(ctx, bx - 1, r.y + 3, bw + 2, 9, OUTLINE);
+        rect(ctx, bx, r.y + 4, bw, 7, "#0c0a14");
+        drawPixelText(ctx, "QUEUE", bx + 3, r.y + 5, P.yel);
+        rect(ctx, bx + 25, r.y + 5, 1, 5, "#3a3458");
+        for (let x = bx + 29, k = 0; x < bx + bw - 6; x += 8, k++) {
+          glyph(200 + k).forEach((row, yy) => {
+            for (let xx = 0; xx < 5; xx++) if (row[xx] === "#" && yy < 5) rect(ctx, x + xx, r.y + 5 + yy, 1, 1, k % 3 === 0 ? P.cyan : "#b88a12");
+          });
+        }
+      }
       break;
     }
     case "kitchen": {
@@ -495,7 +731,7 @@ export function roomSign(room: Room, L: Layout): { x: number; y: number; base: H
   // Not where another room's glass front sits right above.
   if (L.rooms.some((o) => o !== room && o.rect.x < r.x + r.w && o.rect.x + o.rect.w > r.x && o.rect.y + o.rect.h > r.y - 18 && o.rect.y + o.rect.h <= r.y + 2)) return null;
   const s = wordSign(def[0], def[1], 1);
-  let cx = r.x + r.w / 2;
+  let cx = room.kind === "boss" && planOf(L) ? r.x + r.w * 0.68 : r.x + r.w / 2;
   if (room.doorSide === "top" && room.doorX !== undefined && Math.abs(room.doorX - cx) < s.base.width / 2 + 12) cx = r.x + r.w * 0.25;
   return { x: Math.round(cx - s.base.width / 2), y: r.y - 13, base: s.base, color: def[1] };
 }
@@ -524,6 +760,15 @@ function roomWalls(ctx: CanvasRenderingContext2D, room: Room, L: Layout): void {
   }
   const sign = roomSign(room, L);
   if (sign) ctx.drawImage(sign.base, sign.x, sign.y);
+  if (room.kind === "server" && planOf(L) && !atWall) {
+    // The core sits behind a security grille, hazard stripes at the gate.
+    for (let x = r.x - 2; x < r.x + r.w + 1; x++) {
+      for (let y = r.y - 7; y < r.y - 1; y++) if ((x + y) % 4 === 0 || (x - y) % 4 === 0) rect(ctx, x, y, 1, 1, "#7a80a4");
+    }
+    if (room.doorX !== undefined) {
+      for (const gx of [room.doorX - 10, room.doorX + 9]) for (let y = r.y - 8; y < r.y; y++) rect(ctx, gx, y, 1, 1, (y >> 1) % 2 ? P.yel : OUTLINE);
+    }
+  }
 }
 
 // ------------------------------------------------------------------ windows and fixtures

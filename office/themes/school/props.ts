@@ -285,7 +285,7 @@ function glassFront(p: PropPlacement, L: Layout): HTMLCanvasElement {
     }
     if (label) {
       const tw = pixelTextWidth(label);
-      let lx = Math.floor((w - tw) / 2);
+      let lx = room?.kind === "boss" ? w - tw - 30 : Math.floor((w - tw) / 2);
       if (gapX >= 0 && lx + tw + 2 > gapX - 10) lx = Math.max(4, gapX - 12 - tw - 2);
       if (lx >= 2 && lx + tw + 2 < w) {
         g.rect(lx - 2, 2, tw + 4, 7, wood ? "#f2d27a" : C.paper);
@@ -895,6 +895,34 @@ export function schoolProp(p: PropPlacement, L: Layout, classic: () => HTMLCanva
       return null;
   }
 }
+
+// ------------------------------------------------------------------ the teacher's corner
+
+/** The teacher's desk: maple, with an apple, a bell, papers and a mug (48×26). */
+export function teacherDesk(): HTMLCanvasElement {
+  return sprite("teacher-desk", 48, 28, (g) => {
+    // The chair behind it.
+    g.rrect(18, 0, 12, 9, "#3a3a46", 2);
+    g.rect(20, 1, 8, 1, "#55556a");
+    g.rect(1, 8, 46, 10, C.maple);
+    g.rect(1, 8, 46, 1, C.mapleHi);
+    g.rect(1, 18, 46, 7, C.mapleLo);
+    g.rect(1, 18, 46, 1, "#d7aa70");
+    g.rect(4, 19, 12, 5, "#b9864e").rect(9, 21, 2, 1, C.mapleDk);
+    g.rect(32, 19, 12, 5, "#b9864e").rect(37, 21, 2, 1, C.mapleDk);
+    // An apple, papers, a bell and a mug.
+    g.ellipse(6, 11, 2, 2, "#e5544b");
+    g.set(5, 10, "#f2837a").set(6, 8, "#7a5236").set(7, 8, C.green);
+    g.rect(13, 9, 10, 6, "#ffffff").rect(15, 10, 6, 1, "#b9b0a2").rect(15, 12, 5, 1, "#b9b0a2").set(21, 13, C.red);
+    g.ellipse(29, 12, 2.5, 1.6, "#e8c14a");
+    g.set(29, 10, "#e8c14a");
+    g.rect(37, 10, 4, 4, C.blue).set(41, 11, C.blue);
+    g.rect(43, 9, 2, 5, C.red).set(43, 8, C.yellow);
+    g.rect(2, 25, 2, 2, C.mapleDk).rect(44, 25, 2, 2, C.mapleDk);
+  });
+}
+
+export { cubbyStand };
 
 // ------------------------------------------------------------------ speakers
 

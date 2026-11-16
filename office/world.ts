@@ -448,12 +448,12 @@ export class World {
   }
 
   /** Dress the office as another place; everyone stays where they are. */
-  setTheme(theme: Theme): void {
+  setTheme(theme: Theme, repaint = true): void {
     if (theme === this.theme) return;
     this.theme = theme;
     this.themed.clear();
     const L = this.L;
-    if (!L) return;
+    if (!L || !repaint) return;
     this.bg = paintBackground(L, theme);
     this.props = buildProps(L, theme);
   }
@@ -3052,7 +3052,8 @@ export class World {
     if (this.event) items.push(...eventDecor(ctx, this.event, this.time));
     if (this.theme.decor) items.push(...this.theme.decor(ctx, L, info));
     const r = this.roomba;
-    items.push({ z: r.y + 0.2, draw: () => ctx.drawImage(roombaSprite(), Math.round(r.x - 8), Math.round(r.y - 6)) });
+    const robot = this.dressed("roomba", () => this.theme.roomba?.(roombaSprite) ?? roombaSprite());
+    items.push({ z: r.y + 0.2, draw: () => ctx.drawImage(robot, Math.round(r.x - 8), Math.round(r.y - 6)) });
     items.push({ z: this.cat.y + (this.cat.state === "ride" ? 3.5 : 0.3), draw: () => this.drawCat(ctx) });
     items.push({ z: this.dog.y + 0.3, draw: () => this.drawDog(ctx) });
     if (L.pingpong) items.push({ z: L.pingpong.y + 6, draw: () => this.drawBall(ctx) });
@@ -3683,6 +3684,7 @@ export class World {
     }
     const sprite = charSprite({ look: this.npcLookOf("boss"), facing: "front", pose, expr, emblem: "tie" });
     ctx.drawImage(sprite, Math.round(x - ANCHOR_X), Math.round(y - ANCHOR_Y));
+    this.theme.dressVisitor?.(ctx, { x: Math.round(x - ANCHOR_X), y: Math.round(y - ANCHOR_Y), facing: "front", pose, kind: "boss" }, t);
   }
 
   private drawNpc(ctx: CanvasRenderingContext2D, n: Npc): void {
@@ -3728,6 +3730,7 @@ export class World {
     ctx.fillRect(Math.round(n.x - 5), Math.round(n.y - 1), 10, 2);
     if (climb > 0) {
       ctx.drawImage(sprite, x - ANCHOR_X, y - climb - ANCHOR_Y);
+      this.theme.dressVisitor?.(ctx, { x: x - ANCHOR_X, y: y - climb - ANCHOR_Y, facing, pose, kind: n.kind }, t);
       return;
     }
     if (n.kind === "janitor") {
@@ -3755,6 +3758,7 @@ export class World {
       ctx.fillRect(x - 7, y - 1, 2, 1);
     }
     ctx.drawImage(sprite, x - ANCHOR_X, y - ANCHOR_Y);
+    this.theme.dressVisitor?.(ctx, { x: x - ANCHOR_X, y: y - ANCHOR_Y, facing, pose, kind: n.kind }, t);
     if (n.kind === "delivery") {
       // The order, carried in front until it's on the table.
       const ev = this.event;
@@ -3816,7 +3820,8 @@ export class World {
     const blink = Math.floor(t * 10) % 41 === 0;
     ctx.fillStyle = "rgba(40,20,30,0.16)";
     ctx.fillRect(Math.round(d.x - 7), Math.round(d.y - 1), 14, 2);
-    ctx.drawImage(dogSprite(pose, facing, blink), Math.round(d.x - 10), Math.round(d.y - 14));
+    const dog = this.dressed(`pet|dog|${pose}|${facing}|${blink}`, () => this.theme.pet?.("dog", pose, facing, blink, () => dogSprite(pose, facing, blink)) ?? dogSprite(pose, facing, blink));
+    ctx.drawImage(dog, Math.round(d.x - 10), Math.round(d.y - 14));
   }
 
   private drawBubble(ctx: CanvasRenderingContext2D, a: Agent): void {
@@ -4117,7 +4122,8 @@ export class World {
     const blink = Math.floor(this.time * 10) % 37 === 0;
     ctx.fillStyle = "rgba(40,20,30,0.16)";
     ctx.fillRect(Math.round(c.x - 6), Math.round(c.y - 1), 12, 2);
-    ctx.drawImage(catSprite(pose, c.facing, blink), Math.round(c.x - 8), Math.round(c.y - 12));
+    const cat = this.dressed(`pet|cat|${pose}|${c.facing}|${blink}`, () => this.theme.pet?.("cat", pose, c.facing, blink, () => catSprite(pose, c.facing, blink)) ?? catSprite(pose, c.facing, blink));
+    ctx.drawImage(cat, Math.round(c.x - 8), Math.round(c.y - 12));
     if (c.state === "loaf" && this.rand() < 0.01) {
       this.particles.push({ kind: "zzz", x: c.x + 4, y: c.y - 12, vx: 2, vy: -4, life: 0, max: 2, color: "#ffffff" });
     }
@@ -4278,7 +4284,7 @@ export class World {
 
   private drawDoor(ctx: CanvasRenderingContext2D, env: Env): void {
     const d = this.L!.wall.door;
-    if (this.time < this.doorOpenUntil) {
+    if (this.time < this.doorOpenUntil && !this.theme.doorOpen?.(ctx, d, this.paintInfo(env))) {
       ctx.fillStyle = "#2a1e2e";
       ctx.fillRect(d.x, d.y + 1, d.w, d.h - 1);
       ctx.fillStyle = "#4a3a56";
@@ -4689,6 +4695,10 @@ export class World {
   private drawFishTank(ctx: CanvasRenderingContext2D): void {
     const { x, y, w, h } = this.L!.fishtank;
     const t = this.time;
+    if (this.theme.fishTank) {
+      const info = { t, hour: this.hour, night: this.skyColors(this.hour).night, weather: this.weather, date: new Date(), season: this.season };
+      if (this.theme.fishTank(ctx, this.L!.fishtank, { ...info, fish: this.fish, feeding: t < this.feedingUntil })) return;
+    }
     ctx.fillStyle = OUTLINE;
     ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
     ctx.fillStyle = "#cfe9f2";

@@ -5,6 +5,9 @@ import type { Layout, PropPlacement, Rect } from "../../layout.ts";
 import { floorPlan, hash, makeCanvas, mix, OUTLINE, rng } from "../../themekit.ts";
 import { C, cached, Grid } from "./kit.ts";
 import { decorSprite, type DecorKind } from "./decor.ts";
+import { creekShimmer, festoonGlow, festoonLights, forestItems, treeLanterns } from "./forest.ts";
+import { campData } from "./plan.ts";
+import { bindTentCtx, tentItems, tentLights } from "./tents.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -449,7 +452,7 @@ function spots(L: Layout): Spots {
     const wallMin = Math.min(...L.segments.map((s) => s.depth));
     const items: Spots["items"] = [];
     const r = rng(hash(`decor-${L.W}x${L.H}`));
-    const kinds: DecorKind[] = ["ferns", "shrooms", "rock", "stump", "ferns", "cones", "lantern-stake", "woodpile", "ferns", "shrooms"];
+    const kinds: DecorKind[] = ["log", "ferns", "bush", "shrooms", "rock", "ferns", "stump", "bush", "cones", "lantern-stake", "log", "woodpile", "ferns", "shrooms", "bush"];
     const sizes: Record<DecorKind, [number, number]> = {
       ferns: [16, 12],
       shrooms: [10, 8],
@@ -458,16 +461,20 @@ function spots(L: Layout): Spots {
       cones: [8, 6],
       "lantern-stake": [8, 18],
       woodpile: [20, 12],
+      log: [32, 12],
+      bush: [18, 14],
     };
     // Only on open forest floor: not on decks, in tents, cabins or the kitchen.
     const keepOut = L.rooms.filter((rm) => rm.kind !== "lounge" && rm.kind !== "garden" && rm.kind !== "games" && rm.kind !== "library").map((rm) => rm.rect);
     const used: Rect[] = keepOut.map((k) => ({ x: k.x - 8, y: k.y - 14, w: k.w + 10, h: k.h + 14 }));
-    // Leave the gathering spot clear for office events.
+    // Leave the gathering spot clear for office events, and the giants' roots.
     const ev = L.eventArea;
     used.push({ x: ev.x - 10, y: ev.y - 16, w: ev.w + 20, h: ev.h + 26 });
+    for (const t of campData(L)?.trees ?? []) used.push({ x: t.x - 10, y: t.base - 24, w: t.w + 20, h: 30 });
+    for (const c of campData(L)?.creek ? [campData(L)!.strips[1]!] : []) used.push({ x: c.x - 4, y: 0, w: c.w + 8, h: L.H });
     const clash = (q: Rect) => used.some((u) => q.x < u.x + u.w + 6 && q.x + q.w + 6 > u.x && q.y < u.y + u.h + 6 && q.y + q.h + 6 > u.y);
     let ki = 0;
-    for (let tries = 0; tries < 10 && items.length < Math.round((L.W * L.H) / 14000); tries++) {
+    for (let tries = 0; tries < 15 && items.length < Math.round((L.W * L.H) / (campData(L)?.tents ? 8000 : 14000)); tries++) {
       const kind = kinds[ki % kinds.length]!;
       const [w, h] = sizes[kind];
       const found = plan.find(w, h, 400).filter((q) => q.y > wallMin + 6 && !clash(q));
@@ -558,6 +565,7 @@ function fogAmount(info: PaintInfo): number {
 export function underlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
   const t = info.t;
   const wx = info.weather;
+  creekShimmer(ctx, L, t, info.night);
   // Rain running down the canvas walls.
   if (wx === "rain" || wx === "storm" || wx === "drizzle") {
     const heavy = wx === "storm" ? 1.6 : wx === "drizzle" ? 0.5 : 1;
@@ -657,7 +665,8 @@ export function decor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
   const list = cached(`redwoods|decorlist|${L.W}x${L.H}|${L.props.length}|${L.spots.length}`, () =>
     S.items.map((it) => ({ z: it.z, draw: () => ctxNow?.drawImage(decorSprite(it.kind, it.x + it.y), it.x, it.y) }) as Drawable),
   );
-  const out = list.slice();
+  bindTentCtx(ctx);
+  const out = list.concat(forestItems(ctx, L, info.night, info.t), tentItems(ctx, L, info.t, info.night));
   const lit = info.night > 0.35;
   const lamp = deskLamp(lit);
   for (const d of S.deskLamps) out.push({ z: d.z, draw: () => ctx.drawImage(lamp, d.x, d.y) });
@@ -665,6 +674,17 @@ export function decor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
     fireAt = S.fire;
     fireItem.z = S.fire.z;
     out.push(fireItem);
+  }
+  // A doe wanders in to graze at dawn and at dusk.
+  const h = info.hour;
+  if (((h > 5.6 && h < 8.8) || (h > 17.6 && h < 20.4)) && info.weather !== "rain" && info.weather !== "storm") {
+    const at = doeSpot(L);
+    if (at) {
+      const graze = Math.floor(info.t / 3.5) % 3 !== 0;
+      const flick = Math.floor(info.t * 2.3) % 7 === 0;
+      const left = at.x > L.W / 2;
+      out.push({ z: at.y + 13, draw: () => ctx.drawImage(doe(graze, flick, left), at.x, at.y) });
+    }
   }
   // A squirrel dashes along a boardwalk now and then.
   const period = 41;
@@ -695,11 +715,52 @@ function deskLamp(lit: boolean): HTMLCanvasElement {
   });
 }
 
+function doe(graze: boolean, flick: boolean, left: boolean): HTMLCanvasElement {
+  return cached(`redwoods|doe|${graze}|${flick}|${left}`, () => {
+    const g = new Grid(16, 14);
+    const fur = "#a8723e";
+    const lo = "#86562c";
+    const belly = "#e8d4b0";
+    g.rrect(2, 6, 10, 4, fur, 1);
+    g.rect(3, 9, 8, 1, belly);
+    g.rect(2, 6, 3, 1, lo);
+    for (const x of [3, 5, 9, 11]) g.rect(x, 10, 1, 3, lo);
+    g.set(1, 6, belly).set(1, 7, flick ? belly : fur);
+    if (graze) {
+      g.rect(11, 7, 2, 3, fur).rect(12, 9, 2, 3, fur).set(14, 11, OUTLINE).set(12, 8, lo);
+    } else {
+      g.rect(11, 3, 2, 4, fur).rect(12, 1, 3, 3, fur).set(15, 2, OUTLINE).set(13, 2, OUTLINE);
+      g.set(12, 0, lo).set(11, 1, flick ? fur : lo);
+    }
+    g.outline(OUTLINE);
+    return (left ? g.flipped() : g).toCanvas();
+  });
+}
+
+function doeSpot(L: Layout): { x: number; y: number } | null {
+  return cached(`redwoods|doespot|${L.W}x${L.H}|${L.props.length}`, () => {
+    const S = spots(L);
+    const plan = floorPlan(L);
+    const trees = campData(L)?.trees ?? [];
+    const found = plan.find(18, 14, 60).filter(
+      (q) =>
+        q.y > S.wallMin + 30 &&
+        !L.rooms.some((rm) => rm.kind !== "lounge" && rm.kind !== "garden" && rm.kind !== "games" && q.x < rm.rect.x + rm.rect.w + 6 && q.x + 18 > rm.rect.x - 6 && q.y < rm.rect.y + rm.rect.h + 4 && q.y + 14 > rm.rect.y - 10) &&
+        !(campData(L)?.creek && q.x < campData(L)!.strips[1]!.x + campData(L)!.strips[1]!.w + 4 && q.x + 18 > campData(L)!.strips[1]!.x - 4) &&
+        !S.items.some((it) => Math.abs(it.x - q.x) < 22 && Math.abs(it.y - q.y) < 18) &&
+        !trees.some((t) => q.x < t.x + t.w + 12 && q.x + 18 > t.x - 12 && q.y < t.base + 4 && q.y + 14 > t.base - t.h) &&
+        !(q.x < L.eventArea.x + L.eventArea.w && q.x + 18 > L.eventArea.x && q.y < L.eventArea.y + L.eventArea.h && q.y + 14 > L.eventArea.y),
+    );
+    return found.length ? found[Math.floor(found.length / 2)]! : null;
+  });
+}
+
 // ------------------------------------------------------------------ overlay: fireflies, smoke, fog
 
 export function overlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
   const S = spots(L);
   const t = info.t;
+  festoonGlow(ctx, L, info.night, t);
   // Shafts of sun slanting down through the canopy on clear days.
   const sun = info.weather === "clear" ? 1 : info.weather === "partly" ? 0.5 : 0;
   const rayK = sun * Math.max(0, 1 - info.night * 3);
@@ -779,6 +840,9 @@ export function lights(L: Layout, info: PaintInfo): Light[] {
   for (const b of rope(L).bulbs) if (b.lantern && b.x !== null) out.push([b.x, b.y + 5, 16, 0.45, b.color, 0.1]);
   for (const s of S.shrooms) out.push([s.x, s.y, 12, 0.6, "#7fffd0", 0.18]);
   for (const d of S.deskLamps) out.push([d.x + 3, d.y + 4, 24, 0.6, "#ffd27a", 0.14]);
+  for (const [x, y] of tentLights(L)) out.push([x, y, 18, 0.7, "#ffd27a", 0.16]);
+  for (const [x, y] of treeLanterns(L)) out.push([x + 2, y + 2, 24, 0.75, "#ffc864", 0.2]);
+  for (const [x, y] of festoonLights(L)) out.push([x, y + 4, 30, 0.55, "#ffd27a", 0.12]);
   for (const it of S.items) if (it.kind === "lantern-stake") out.push([it.x + 4, it.y + 3, 26, 0.8, "#ffc864", 0.2]);
   const isl = propsOf(L, "kitchen-island")[0];
   if (isl) out.push([isl.x + (isl.w ?? 72) - 10, isl.y + 2, 30, 0.7, "#ffd27a", 0.16]);
@@ -788,6 +852,30 @@ export function lights(L: Layout, info: PaintInfo): Light[] {
   const rec = propsOf(L, "reception")[0];
   if (rec) out.push([rec.x + 30, rec.y + 2, 26, 0.7, "#ffd27a", 0.16]);
   return out;
+}
+
+/** The plank door swung open onto the lit lodge inside. */
+export function doorOpen(ctx: Ctx, d: Rect, info: PaintInfo): boolean {
+  ctx.fillStyle = OUTLINE;
+  ctx.fillRect(d.x, d.y + 1, d.w, d.h - 1);
+  ctx.fillStyle = info.night > 0.5 ? "#4a3018" : "#3a2a1e";
+  ctx.fillRect(d.x + 1, d.y + 2, d.w - 2, d.h - 3);
+  // Lantern light spilling across the floor inside
+  ctx.fillStyle = info.night > 0.5 ? "#c8843a" : "#6a4a2a";
+  ctx.fillRect(d.x + 2, d.y + d.h - 8, d.w - 4, 6);
+  ctx.fillStyle = "#ffd27a";
+  ctx.fillRect(d.x + d.w / 2 - 1, d.y + 8, 3, 4);
+  // The plank leaf swung back against the frame
+  ctx.fillStyle = OUTLINE;
+  ctx.fillRect(d.x - 5, d.y + 1, 5, d.h - 1);
+  ctx.fillStyle = C.deck;
+  ctx.fillRect(d.x - 4, d.y + 2, 3, d.h - 3);
+  ctx.fillStyle = C.deckHi;
+  ctx.fillRect(d.x - 4, d.y + 2, 1, d.h - 3);
+  ctx.fillStyle = C.iron;
+  ctx.fillRect(d.x - 4, d.y + 9, 3, 1);
+  ctx.fillRect(d.x - 4, d.y + d.h - 3, 3, 1);
+  return true;
 }
 
 export function darkness(night: number, _weather: unknown, classic: number): number {

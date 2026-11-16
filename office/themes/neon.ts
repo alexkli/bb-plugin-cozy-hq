@@ -5,10 +5,12 @@
 import type { Theme } from "../theme.ts";
 import { NEON_BACKGROUND } from "./neon/background.ts";
 import { neonChair, neonDesk, neonPlant, neonScreen } from "./neon/desks.ts";
-import { neonDarkness, neonDecor, neonLights, neonOutside, neonOverlay, neonSky, neonUnderlay, neonWallLights } from "./neon/live.ts";
+import { neonDarkness, neonDecor, neonDoorOpen, neonLights, neonOutside, neonOverlay, neonSky, neonUnderlay, neonWallLights } from "./neon/live.ts";
 import { neonProp, neonSpeaker } from "./neon/props.ts";
 import { neonDress, neonLook, neonNpc } from "./neon/people.ts";
 import { NEON_SOUNDS, neonOutdoor } from "./neon/sound.ts";
+import { neonLayout } from "./neon/plan.ts";
+import { neonDressVisitor, neonFishTank, neonPet, neonRoomba } from "./neon/critters.ts";
 
 export const NEON: Theme = {
   id: "neon",
@@ -16,6 +18,7 @@ export const NEON: Theme = {
   blurb: "A cyberpunk loft: neon signs, holo screens and a megacity in the rain",
   icon: "🌃",
 
+  layout: (W, H, opts) => neonLayout(W, H, opts),
   background: NEON_BACKGROUND,
   prop: neonProp,
   speaker: () => neonSpeaker(),
@@ -27,6 +30,7 @@ export const NEON: Theme = {
   sky: (hour) => neonSky(hour),
   outside: neonOutside,
   wallLights: neonWallLights,
+  doorOpen: neonDoorOpen,
   underlay: neonUnderlay,
   decor: neonDecor,
   overlay: neonOverlay,
@@ -42,6 +46,10 @@ export const NEON: Theme = {
   look: neonLook,
   npc: neonNpc,
   dress: neonDress,
+  dressVisitor: neonDressVisitor,
+  pet: (kind, pose, facing, blink) => neonPet(kind, pose, facing, blink),
+  roomba: () => neonRoomba(),
+  fishTank: neonFishTank,
 
   labels: {
     tvNews: "NET NEWS",
@@ -61,7 +69,7 @@ export const NEON: Theme = {
       bin: "Recycler · toss some scrap",
       arcade: "Arcade cabinet · insert a credit",
       pingpong: "Laser pong · serve",
-      fishtank: "Feed the koi",
+      fishtank: "Jellyfish tank · feed them",
       whiteboard: "Holo-board · threads in plan mode",
       server: "The core · the AI cluster · click to train a model",
       couch: "Capsule sofa · bounce on it",
@@ -74,8 +82,9 @@ export const NEON: Theme = {
       janitor: "Cleaning crew · the floors here are always wet",
       technician: "The cyber-mechanic · patching things up",
       delivery: "Noodle courier · lunch for the team",
-      dog: "Biscuit, the office dog (LED collar) · pet",
-      cat: "Pixel, the office cat · pet",
+      dog: "Byte, the office robo-dog · pet",
+      cat: "Pixel, the holo-cat · pet",
+      roomba: "Sweeper drone · keeps the floors clean",
     },
     words: {
       "water cooler": "hydration tap",
@@ -83,6 +92,7 @@ export const NEON: Theme = {
       cooler: "hydration tap",
       kitchen: "noodle bar",
       Kitchen: "Noodle bar",
+      "in the lounge": "on the chill deck",
       lounge: "chill deck",
       Lounge: "Chill deck",
       "server room": "core",
@@ -91,7 +101,9 @@ export const NEON: Theme = {
       "Meeting room": "Holo room",
       "waiting room": "queue lounge",
       "Waiting room": "Queue lounge",
-      "Your office": "Your suite",
+      "Your office": "Your penthouse",
+      "String lights": "Neon tubes",
+      "make them twinkle": "make them flicker",
       whiteboard: "holo-board",
       "making coffee": "brewing a synth-coffee",
       "brewing tea": "steeping matcha",
@@ -102,7 +114,7 @@ export const NEON: Theme = {
       "playing the piano": "playing the synth",
       "playing ping-pong": "playing laser pong",
       "playing darts": "playing laser darts",
-      "watching the fish": "watching the koi",
+      "watching the fish": "watching the jellyfish",
       "watching TV": "watching the net feed",
       napping: "napping in a sleep pod",
       Beanbag: "Sleep pod",

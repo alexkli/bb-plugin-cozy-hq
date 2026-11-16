@@ -7,7 +7,7 @@ import type { CSSProperties, ReactNode } from "react";
 import type { InboxItem, Story, UsageCard, Weather, WeatherKind } from "../contract.ts";
 import { openLine, pickTopic, replyLine, type TalkContext, type Talker } from "./chatter.ts";
 import { lookFor } from "./characters.ts";
-import { buildLayout, MIN_H_WIDE, MIN_W_WIDE, PORTRAIT_MIN_H, PORTRAIT_W, type Layout, type PokeKind, type Rect } from "./layout.ts";
+import { buildLayout, layoutSize, MIN_H_WIDE, MIN_W_WIDE, PORTRAIT_MIN_H, PORTRAIT_W, type Layout, type PokeKind, type Rect } from "./layout.ts";
 import { EVENT_KINDS, type EventKind } from "./life.ts";
 import { SEASON_TITLE, SEASONS, seasonsOf, type Season } from "./seasons.ts";
 import { SAMPLE_NEWS, SAMPLE_WEATHER, sampleRecap, sampleThreads, sampleUsage } from "./sample.ts";
@@ -329,6 +329,17 @@ export function OfficeView(input: OfficeProps) {
     return () => world.setEmit(() => undefined);
   }, [world, sound]);
 
+  // The scenery: the same office dressed as another place, with its own floor plan.
+  const [sceneryId, setSceneryId] = useState(() => readJson(`${storageKey}:scenery`, { id: "classic" }).id);
+  useEffect(() => writeJson(`${storageKey}:scenery`, { id: sceneryId }), [sceneryId, storageKey]);
+  const theme = themeById(debug.scenery ?? sceneryId);
+  // The scenery's words plus the ones that hold for this floor plan only.
+  const named = useMemo(
+    () => (layout?.words ? { ...theme, labels: { ...theme.labels, words: { ...theme.labels?.words, ...layout.words } } } : theme),
+    [theme, layout],
+  );
+  useEffect(() => sound.setRecipes(theme.sounds), [theme, sound]);
+
   // ------------------------------------------------------------ sizing → layout
   useEffect(() => {
     const el = stageRef.current;
@@ -354,10 +365,12 @@ export function OfficeView(input: OfficeProps) {
   const headcount = props.loading ? 8 : Math.ceil(Math.max(4, visible.length) / 4) * 4;
   useEffect(() => {
     if (!fit) return;
-    const L = buildLayout(fit.W, fit.H, { threads: headcount });
-    world.setLayout(L, `${fit.W}x${fit.H}:${headcount}`);
+    const size = layoutSize(fit.W, fit.H);
+    const L = theme.layout?.(size.W, size.H, { threads: headcount, portrait: size.portrait }) ?? buildLayout(fit.W, fit.H, { threads: headcount });
+    world.setTheme(theme, false);
+    world.setLayout(L, `${theme.id}:${fit.W}x${fit.H}:${headcount}`);
     setLayout(world.layout);
-  }, [fit?.W, fit?.H, headcount, world]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fit?.W, fit?.H, headcount, world, theme]); // eslint-disable-line react-hooks/exhaustive-deps
   const byId = useMemo(() => new Map(visible.map((t) => [t.id, t])), [visible]);
   const homeDesks = useRef<Map<string, number>>(
     new Map(Object.entries(readJson<Record<string, number>>(`${storageKey}:desks`, {}))),
@@ -767,14 +780,6 @@ export function OfficeView(input: OfficeProps) {
     }
   };
 
-  // The scenery: the same office dressed as another place.
-  const [sceneryId, setSceneryId] = useState(() => readJson(`${storageKey}:scenery`, { id: "classic" }).id);
-  useEffect(() => writeJson(`${storageKey}:scenery`, { id: sceneryId }), [sceneryId, storageKey]);
-  const theme = themeById(debug.scenery ?? sceneryId);
-  useEffect(() => {
-    world.setTheme(theme);
-    sound.setRecipes(theme.sounds);
-  }, [theme, world, sound]);
 
   // Name tags over everyone's head, when you want them.
   const [labelsOn, setLabelsOn] = useState(() => readJson(`${storageKey}:labels`, { on: false }).on);
@@ -846,7 +851,7 @@ export function OfficeView(input: OfficeProps) {
             </div>
             <div className={`chq-tip-mood chq-mood-${mood}`}>
               {wait ? WAIT_LABEL[wait] : moodLabel(mood)}
-              {mood === "idle" && activity ? ` · ${relabel(theme, activity)}` : ""} · {when}
+              {mood === "idle" && activity ? ` · ${relabel(named, activity)}` : ""} · {when}
               {when === "just now" ? "" : " ago"}
             </div>
           </>
@@ -868,7 +873,7 @@ export function OfficeView(input: OfficeProps) {
             <div className="chq-tip-hint">
               {greeting(now.getHours())} · {now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
             </div>
-            <div className="chq-tip-hint chq-tip-sub">{relabel(theme, officeEvent ? `${officeEvent.title} in progress` : "Click for an office event")}</div>
+            <div className="chq-tip-hint chq-tip-sub">{relabel(named, officeEvent ? `${officeEvent.title} in progress` : "Click for an office event")}</div>
           </>
         );
       case "clock":
@@ -879,7 +884,7 @@ export function OfficeView(input: OfficeProps) {
           </>
         );
       case "dog":
-        return <div className="chq-tip-hint">{theme.labels?.npc?.dog ?? relabel(theme, "Biscuit, the office dog · pet")}</div>;
+        return <div className="chq-tip-hint">{named.labels?.npc?.dog ?? relabel(named, "Biscuit, the office dog · pet")}</div>;
       case "egg": {
         const left = world.eggsLeft();
         return <div className="chq-tip-hint">An Easter egg! {left === 1 ? "The last one" : `${left} hidden around the office`}</div>;
@@ -901,7 +906,7 @@ export function OfficeView(input: OfficeProps) {
           </div>
         );
       case "poke":
-        return <div className="chq-tip-hint">{relabel(theme, theme.labels?.poke?.[hover.poke] ?? pokeTip(hover.poke, waiting, counts))}</div>;
+        return <div className="chq-tip-hint">{relabel(named, theme.labels?.poke?.[hover.poke] ?? pokeTip(hover.poke, waiting, counts))}</div>;
       case "status":
         return (
           <div className="chq-tip-hint">
@@ -909,7 +914,7 @@ export function OfficeView(input: OfficeProps) {
           </div>
         );
       case "cat":
-        return <div className="chq-tip-hint">{theme.labels?.npc?.cat ?? relabel(theme, "Pixel, the office cat · pet")}</div>;
+        return <div className="chq-tip-hint">{named.labels?.npc?.cat ?? relabel(named, "Pixel, the office cat · pet")}</div>;
       case "tv":
         return <div className="chq-tip-hint">Change the channel</div>;
       case "speaker":
@@ -924,9 +929,9 @@ export function OfficeView(input: OfficeProps) {
           </>
         );
       case "roomba":
-        return <div className="chq-tip-hint">The roomba · send it off (or home)</div>;
+        return <div className="chq-tip-hint">{named.labels?.npc?.roomba ?? relabel(named, "The roomba · send it off (or home)")}</div>;
       case "lights":
-        return <div className="chq-tip-hint">{relabel(theme, "String lights · make them twinkle")}</div>;
+        return <div className="chq-tip-hint">{relabel(named, "String lights · make them twinkle")}</div>;
     }
   }, [hover, byId, world, prefs, overflow, waiting, now, counts, officeEvent, weatherLine, theme]);
 
@@ -965,7 +970,7 @@ export function OfficeView(input: OfficeProps) {
               />
               <Tv
                 style={box(layout.tvScreen)}
-                special={officeEvent ? { tag: "TODAY", text: relabel(theme, officeEvent.tv) } : null}
+                special={officeEvent ? { tag: "TODAY", text: relabel(named, officeEvent.tv) } : null}
                 now={now}
                 weather={tvWeather}
                 weatherLine={weatherLine}
@@ -1009,7 +1014,7 @@ export function OfficeView(input: OfficeProps) {
               ) : null}
               {legendOpen ? (
                 <LegendNotes
-                  theme={theme}
+                  theme={named}
                   style={{ left: layout.wall.legendNote.x * scale, top: (layout.wall.legendNote.y + layout.wall.legendNote.h + 4) * scale }}
                   onClose={() => setLegendOpen(false)}
                 />
@@ -1663,6 +1668,11 @@ function SettingsPanel(props: {
       <button type="button" className="chq-sound-test" disabled={!prefs.on} onClick={props.onTest}>
         ♪ Play a test sound
       </button>
+      <label className="chq-sound-amb chq-buddy-opt">
+        <input type="checkbox" checked={props.buddyOn} onChange={(e) => props.onBuddy(e.target.checked)} />
+        <span>Office buddy</span>
+        <small>an agent strolls in a corner of bb wherever you are; click it to come back here</small>
+      </label>
       <div className="chq-settings-label">Scenery</div>
       <div className="chq-scenery-list" role="radiogroup" aria-label="Scenery">
         {THEMES.map((t) => (
@@ -1680,11 +1690,6 @@ function SettingsPanel(props: {
           </button>
         ))}
       </div>
-      <label className="chq-sound-amb chq-buddy-opt">
-        <input type="checkbox" checked={props.buddyOn} onChange={(e) => props.onBuddy(e.target.checked)} />
-        <span>Office buddy</span>
-        <small>an agent strolls in a corner of bb wherever you are; click it to come back here</small>
-      </label>
     </div>
   );
 }

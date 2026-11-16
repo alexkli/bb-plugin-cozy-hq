@@ -3,13 +3,22 @@
 // rooms, frosted glass.
 import type { BackgroundSteps } from "../../theme.ts";
 import type { Layout, Rect, Room, WallSegment } from "../../layout.ts";
-import { blit, Grid, hash, makeCanvas, OUTLINE, pa, rect, rng, shade } from "../../themekit.ts";
+import { blit, drawPixelText, Grid, hash, makeCanvas, OUTLINE, pa, pixelTextWidth, rect, rng, shade } from "../../themekit.ts";
 import { C } from "./kit.ts";
+import { planOf, type SkyPlan } from "./plan.ts";
 
-export type SegKind = "glass" | "media" | "plaster";
+export type SegKind = "glass" | "media" | "plaster" | "core";
 
-/** What a stretch of back wall is: glass (it has windows), the walnut TV wall, or plaster. */
+/** What a stretch of back wall is: glass (it has windows), the elevator core, the walnut wall, or plaster. */
 export function segKind(L: Layout, sg: WallSegment): SegKind {
+  const plan = planOf(L);
+  const i = L.segments.indexOf(sg);
+  if (plan && i >= 0) {
+    const k = plan.segKinds[i];
+    if (k === "core") return "core";
+    if (k === "feature") return "media";
+    if (k === "glass") return "glass";
+  }
   if (L.wall.windows.some((w) => w.x >= sg.x0 && w.x < sg.x1)) return "glass";
   const cx = L.tv.x + L.tv.w / 2;
   if (L.tv.y < sg.depth && cx >= sg.x0 && cx < sg.x1) return "media";
@@ -210,6 +219,189 @@ function glassWall(ctx: CanvasRenderingContext2D, sg: WallSegment, L: Layout): v
   }
   wallBase(ctx, sg.x0, w, d);
   rect(ctx, sg.x0, d - 4, w, 1, C.steelHi);
+}
+
+/** The elevator core: travertine panels, a brass reveal, a second elevator and the floor's name. */
+function coreWall(ctx: CanvasRenderingContext2D, sg: WallSegment, L: Layout): void {
+  const w = sg.x1 - sg.x0;
+  const d = sg.depth;
+  rect(ctx, sg.x0, 0, w, d, "#d9d0c1");
+  const rnd = rng(sg.x0 * 7 + 3);
+  for (let i = 0; i < (w * d) / 30; i++) rect(ctx, sg.x0 + Math.floor(rnd() * w), Math.floor(rnd() * d), rnd() < 0.7 ? 2 : 1, 1, rnd() < 0.6 ? "#cfc5b4" : "#e3dbcd");
+  for (let x = sg.x0 + 30; x < sg.x1 - 6; x += 34) rect(ctx, x, 3, 1, d - 6, "#c6bba8");
+  rect(ctx, sg.x0, Math.round(d * 0.45), w, 1, "#c6bba8");
+  for (let i = 0; i < 12; i++) {
+    ctx.fillStyle = `rgba(255,248,232,${0.3 * (1 - i / 12)})`;
+    ctx.fillRect(sg.x0, 3 + i, w, 1);
+  }
+  // A brass reveal at hand height and the name of the floor up top.
+  rect(ctx, sg.x0, d - 15, w, 1, C.brassLo);
+  rect(ctx, sg.x0, d - 14, w, 1, C.brass);
+  const name = "PENTHOUSE";
+  const pin = L.wall.pinboard;
+  if (pin.y - 4 >= 12) {
+    // Brass letters just above the board, below any festival garlands.
+    const tw = pixelTextWidth(name);
+    const x = Math.round(pin.x + pin.w / 2 - tw / 2);
+    const y = pin.y - 9;
+    rect(ctx, x - 4, y - 2, tw + 8, 9, "#cfc5b3");
+    rect(ctx, x - 4, y + 6, tw + 8, 1, "#b9ad98");
+    drawPixelText(ctx, name, x + 1, y + 1, "#9c8c72");
+    drawPixelText(ctx, name, x, y, C.brassHi);
+  }
+  // A second elevator beside the real one (it never opens).
+  const door = L.wall.door;
+  const busy: [number, number][] = [
+    [pin.x - 6, pin.x + pin.w + 6],
+    [L.wall.calendar.x - 6, L.wall.calendar.x + L.wall.calendar.w + 6],
+    [L.wall.clock.x - 14, L.wall.clock.x + 14],
+    [L.wall.legendNote.x - 4, door.x + door.w + 8],
+    [L.tv.x - 20, L.tv.y < d ? L.tv.x + L.tv.w + 20 : L.tv.x - 20],
+  ];
+  const ex = door.x - 46;
+  if (door.x >= sg.x0 && door.x < sg.x1 && ex > sg.x0 + 6 && !busy.some(([a, z]) => ex - 4 < z && ex + 24 > a)) {
+    const g = new Grid(door.w + 6, door.h + 4);
+    g.rect(0, 1, door.w + 6, door.h + 3, C.steelLo);
+    g.rect(1, 2, door.w + 4, 1, C.steelHi);
+    g.rect(3, 4, door.w, door.h, "#b4bac2");
+    for (let x = 3; x < 3 + door.w; x += 2) g.rect(x, 4, 1, door.h, "#bfc5cc");
+    const mid = 3 + Math.floor(door.w / 2);
+    g.rect(mid - 1, 4, 1, door.h, "#7f858e").rect(mid, 4, 1, door.h, "#dfe3e8");
+    g.outline(OUTLINE);
+    paint(ctx, g, ex - 3, door.y - 3);
+    rect(ctx, ex + door.w / 2 - 4, door.y - 9, 8, 5, "#14181c");
+    rect(ctx, ex + door.w / 2 - 2, door.y - 8, 4, 1, "#e9c46a");
+    rect(ctx, ex + door.w / 2 - 1, door.y - 7, 2, 1, "#e9c46a");
+  }
+  wallBase(ctx, sg.x0, w, d);
+}
+
+/** The hallway and aisles as a honed walkway with brass inlays at its edges. */
+function walkways(ctx: CanvasRenderingContext2D, L: Layout): void {
+  const top = Math.min(...L.segments.map((s) => s.depth));
+  const strip = (x: number, y: number, w: number, h: number) => {
+    ctx.fillStyle = "rgba(255,252,244,0.22)";
+    ctx.fillRect(x, y, w, h);
+  };
+  for (const y of L.net.halls) strip(0, y - 7, L.W, 14);
+  for (const x of L.net.aisles) strip(x - 6, top, 12, L.H - top);
+  ctx.fillStyle = "rgba(200,160,76,0.55)";
+  for (const y of L.net.halls) {
+    ctx.fillRect(0, y - 8, L.W, 1);
+    ctx.fillRect(0, y + 7, L.W, 1);
+  }
+  for (const x of L.net.aisles) {
+    for (const [a, z] of spans(L, top)) {
+      ctx.fillRect(x - 7, a, 1, z - a);
+      ctx.fillRect(x + 6, a, 1, z - a);
+    }
+  }
+}
+
+/** Vertical runs of an aisle between the hallway bands (so the inlays don't cross them). */
+function spans(L: Layout, top: number): [number, number][] {
+  const cuts = [...L.net.halls].sort((a, z) => a - z);
+  const out: [number, number][] = [];
+  let y = top;
+  for (const h of cuts) {
+    if (h - 8 > y) out.push([y, h - 8]);
+    y = h + 8;
+  }
+  if (L.H > y) out.push([y, L.H]);
+  return out;
+}
+
+/** Glass along the panel's edges, the terrace deck and its glass walls, and the drop beyond the rail. */
+function edgesAndTerrace(ctx: CanvasRenderingContext2D, L: Layout, plan: SkyPlan): void {
+  const E = plan.edgeX;
+  const EB = plan.edgeY;
+  // The drop beyond the glass (the live city is drawn over it).
+  for (const b of plan.beyond) rect(ctx, b.x, b.y, b.w, b.h, "#59606c");
+  // Floor-to-ceiling glass seen from above: a pale pane, a lit inner edge, steel mullions.
+  const vGlass = (x: number, y0: number, y1: number) => {
+    rect(ctx, x, y0, 3, y1 - y0, "#b9d0dd");
+    rect(ctx, x + (x < L.W / 2 ? 2 : 0), y0, 1, y1 - y0, "#eaf3f8");
+    rect(ctx, x + (x < L.W / 2 ? 0 : 2), y0, 1, y1 - y0, "#6f8797");
+    for (let y = y0 + 18; y < y1 - 2; y += 40) rect(ctx, x - 1, y, 5, 2, C.steel);
+  };
+  const hGlass = (x0: number, x1: number, y: number) => {
+    rect(ctx, x0, y, x1 - x0, 3, "#b9d0dd");
+    rect(ctx, x0, y, x1 - x0, 1, "#eaf3f8");
+    rect(ctx, x0, y + 2, x1 - x0, 1, "#6f8797");
+    for (let x = x0 + 18; x < x1 - 2; x += 44) rect(ctx, x, y - 1, 2, 5, C.steel);
+  };
+  // Narrow panels: just a band of glass at the very edge.
+  const band = (x: number, y: number, w: number, h: number, vertical: boolean) => {
+    rect(ctx, x, y, w, h, "#9fb7c8");
+    if (vertical) {
+      rect(ctx, x, y, 1, h, "#c9dbe6");
+      rect(ctx, x + w - 1, y, 1, h, C.steel);
+      for (let yy = y + 20; yy < y + h; yy += 44) rect(ctx, x, yy, w, 3, C.steel);
+    } else {
+      rect(ctx, x, y, w, 1, C.steel);
+      rect(ctx, x, y + h - 1, w, 1, "#c9dbe6");
+      for (let xx = x + 20; xx < x + w; xx += 48) rect(ctx, xx, y, 3, h, C.steel);
+    }
+  };
+  for (const [y0, y1] of plan.glassLeft) {
+    if (E >= 8) vGlass(E - 2, y0, Math.min(y1, L.H - EB));
+    else band(0, y0, 5, y1 - y0, true);
+  }
+  for (const [y0, y1] of plan.glassRight) {
+    if (E >= 8) vGlass(L.W - E - 1, y0, Math.min(y1, L.H - EB));
+    else band(L.W - 5, y0, 5, y1 - y0, true);
+  }
+  for (const [x0, x1] of plan.glassBottom) {
+    if (EB >= 8) hGlass(x0, x1, L.H - EB - 2);
+    else band(x0, L.H - 5, x1 - x0, 5, false);
+  }
+  const t = plan.terrace;
+  if (!t) return;
+  // Ipe decking with a lighter grain and dark gaps.
+  for (let y = t.y; y < t.y + t.h; y += 4) {
+    const row = (y - t.y) / 4;
+    rect(ctx, t.x, y, t.w, 3, row % 3 === 0 ? "#8c6a52" : row % 3 === 1 ? "#87654d" : "#916f56");
+    rect(ctx, t.x, y + 3, t.w, 1, "#5f4535");
+    for (let x = t.x + ((row * 23) % 40); x < t.x + t.w; x += 40) rect(ctx, x, y, 1, 3, "#6d503d");
+    for (let x = t.x + ((row * 13) % 17); x < t.x + t.w; x += 17) if (hash(`g${x},${y}`) % 3 === 0) rect(ctx, x, y + 1, 4, 1, "#9b7a60");
+  }
+  // Glass balustrade: a steel cap on frameless glass.
+  for (const r of plan.rails) {
+    rect(ctx, r.x, r.y, r.w, r.h, "#bcd3df");
+    if (r.w > r.h) {
+      rect(ctx, r.x, r.y, r.w, 1, C.steel);
+      rect(ctx, r.x, r.y + r.h - 1, r.w, 1, "#7f95a3");
+    } else {
+      rect(ctx, r.x, r.y, 1, r.h, C.steel);
+      rect(ctx, r.x + r.w - 1, r.y, 1, r.h, "#7f95a3");
+    }
+  }
+  // The glass wall between inside and out, with its sliding doors open.
+  const wall = plan.terraceWall;
+  if (wall) {
+    for (let x = wall.x0; x < wall.x1; x++) {
+      if (wall.gaps.some(([a, z]) => x >= a && x < z)) continue;
+      rect(ctx, x, wall.y - 6, 1, 1, C.steel);
+      rect(ctx, x, wall.y - 5, 1, 5, x % 30 === 0 ? C.steel : "#d6e6ef");
+      rect(ctx, x, wall.y - 3, 1, 1, x % 2 ? "#eef5f9" : "#d6e6ef");
+      rect(ctx, x, wall.y, 1, 1, C.steelLo);
+    }
+    for (const [a, z] of wall.gaps) {
+      rect(ctx, a - 2, wall.y - 7, 2, 8, C.steelLo);
+      rect(ctx, z, wall.y - 7, 2, 8, C.steelLo);
+    }
+    ctx.fillStyle = "rgba(30,28,36,0.14)";
+    ctx.fillRect(wall.x0, wall.y + 1, wall.x1 - wall.x0, 3);
+  }
+  const side = plan.terraceSide;
+  if (side) {
+    for (let y = side.y0; y < side.y1; y++) {
+      if (side.gaps.some(([a, z]) => y >= a && y < z)) continue;
+      rect(ctx, side.x - 1, y, 1, 1, C.steel);
+      rect(ctx, side.x, y, 1, 1, y % 30 === 0 ? C.steel : "#d6e6ef");
+      rect(ctx, side.x + 1, y, 1, 1, C.steelLo);
+    }
+  }
 }
 
 function pillar(ctx: CanvasRenderingContext2D, px: number, d: number): void {
@@ -524,11 +716,17 @@ function clock(ctx: CanvasRenderingContext2D, k: { x: number; y: number; r: numb
 export const BACKGROUND: Partial<BackgroundSteps> = {
   floor(ctx, L) {
     concrete(ctx, { x: 0, y: 0, w: L.W, h: L.H }, 4242);
+    const plan = planOf(L);
+    if (plan) {
+      walkways(ctx, L);
+      edgesAndTerrace(ctx, L, plan);
+    }
   },
   wall(ctx, L) {
     for (const sg of L.segments) {
       const kind = segKind(L, sg);
       if (kind === "glass") glassWall(ctx, sg, L);
+      else if (kind === "core") coreWall(ctx, sg, L);
       else if (kind === "media") mediaWall(ctx, sg);
       else plasterWall(ctx, sg);
     }
@@ -539,14 +737,15 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
     }
   },
   pods(ctx, L) {
-    const pals: [string, string, string, string][] = [
-      ["#55585f", "#686b72", "#9a9ca2", "#6e7178"],
-      ["#4f5866", "#626b79", "#959daa", "#68717f"],
-    ];
-    L.pods.forEach((pod, i) => {
-      const [edge, base, line, weave] = pals[i % pals.length]!;
-      rug(ctx, { x: pod.x - 4, y: pod.y + 2, w: pod.w + 8, h: pod.h - 2 }, edge, base, line, weave);
-    });
+    // The work floor: wide smoked-oak planks framed in walnut, warm against the concrete.
+    for (const pod of L.pods) {
+      const r = { x: pod.x - 4, y: pod.y + 2, w: pod.w + 8, h: pod.h - 2 };
+      rect(ctx, r.x - 1, r.y - 1, r.w + 2, r.h + 2, C.walLo);
+      planks(ctx, r, ["#9c8770", "#958069", "#a38d75", "#8f7b65"], "#7c6a56", 30, 5);
+      rect(ctx, r.x, r.y, r.w, 1, "#b39d84");
+      ctx.fillStyle = "rgba(60,40,20,0.08)";
+      ctx.fillRect(r.x, r.y + r.h - 3, r.w, 3);
+    }
   },
   room: roomFloor,
   roomWalls,

@@ -4,11 +4,15 @@
 // for the hooks; the pieces live in office/themes/skyline/.
 import type { Theme } from "../theme.ts";
 import { BACKGROUND } from "./skyline/background.ts";
+import { skylinePlan } from "./skyline/plan.ts";
 import { skylineChair, skylineDesk, skylinePlant, skylineScreen } from "./skyline/furnish.ts";
 import { skylineDecor, skylineLights, skylineUnderlay, skylineWallLights } from "./skyline/live.ts";
 import { skylineDress, skylineLook, skylineNpc } from "./skyline/people.ts";
 import { skylineProp, skylineSpeaker } from "./skyline/props.ts";
 import { skylineOutside, skylineSky } from "./skyline/view.ts";
+import { terraceOverlay } from "./skyline/terrace.ts";
+import { drawPendants, elevatorOpen } from "./skyline/luxe.ts";
+import { skylineDressVisitor, skylineFishTank, skylinePet, skylineRoomba } from "./skyline/critters.ts";
 import { LABELS, SOUNDS, skylineOutdoor } from "./skyline/words.ts";
 
 export const SKYLINE: Theme = {
@@ -16,6 +20,7 @@ export const SKYLINE: Theme = {
   name: "Sky Loft",
   blurb: "Sleek and modern on the top floor of a New York skyscraper",
   icon: "🏙️",
+  layout: (W, H, opts) => skylinePlan(W, H, opts),
   background: BACKGROUND,
   prop: skylineProp,
   speaker: () => skylineSpeaker(),
@@ -27,7 +32,12 @@ export const SKYLINE: Theme = {
   outside: skylineOutside,
   wallLights: skylineWallLights,
   underlay: skylineUnderlay,
-  decor: (ctx, L) => skylineDecor(ctx, L),
+  decor: skylineDecor,
+  overlay: (ctx, L, info) => {
+    drawPendants(ctx, L, info);
+    terraceOverlay(ctx, L, info);
+  },
+  doorOpen: elevatorOpen,
   lighting: {
     tint: "14,18,40",
     darkness: (_night, _weather, classic) => Math.min(0.66, classic * 1.16),
@@ -38,6 +48,10 @@ export const SKYLINE: Theme = {
   look: skylineLook,
   npc: skylineNpc,
   dress: (ctx, a) => skylineDress(ctx, a),
+  dressVisitor: (ctx, v) => skylineDressVisitor(ctx, v),
+  pet: (kind, pose, facing, blink) => skylinePet(kind, pose, facing, blink),
+  roomba: () => skylineRoomba(),
+  fishTank: skylineFishTank,
   labels: LABELS,
   sounds: SOUNDS,
   outdoor: skylineOutdoor,

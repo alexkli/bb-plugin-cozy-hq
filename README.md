@@ -60,21 +60,22 @@ sushi, burgers, tacos or ramen, and a few bring their own lunchbox.
 
 ## Sceneries
 
-Pick a scenery in the settings (the gear at the top right) to dress the
-office as another place. The people, rooms, events and everything that
-happens stay the same; the look, the sounds and the words change:
+Pick a scenery in the settings (the gear at the top right) to move the
+office to another place. Each scenery has its own floor plan, pets, visitors,
+sounds and words; the people and everything that happens (desks, breaks,
+meetings, lunch, events, gags) stay the same:
 
-![The same corner of the office in all seven sceneries](docs/sceneries.png)
+![The whole office in all seven sceneries, each with its own floor plan](docs/sceneries.png)
 
 | Scenery | |
 | --- | --- |
 | 🏢 Classic office | Wooden floors, a cozy lounge and a city view |
-| 🌃 Neon City | A cyberpunk loft in a rainy megacity |
-| 🌲 Redwood Camp | Glamping among the redwoods |
-| 🏄 Surf Villa | A beach villa with surf vibes |
-| 🏙️ Sky Loft | The top floor of a New York skyscraper |
-| 🗄️ Dusty Annex | A shabby, forgotten office where nothing quite works |
-| 🏫 School | An elementary and middle school |
+| 🌃 Neon City | A city block on two neon streets: capsule desks, a ramen shop, a plaza, food carts and rain; a robo-dog and a holo-cat |
+| 🌲 Redwood Camp | Canvas tents on decks among giant redwoods, trails, a creek, a campfire clearing and a treehouse office; a husky and a raccoon |
+| 🏄 Surf Villa | A villa terrace, a pool deck with a tiki bar, and the beach with umbrellas, a bonfire and the surf; a beach dog and a parrot |
+| 🏙️ Sky Loft | A penthouse around an elevator core, the city far below the glass, a terrace with a hot tub; a French bulldog and a grey cat |
+| 🗄️ Dusty Annex | Patchwork rooms off creaky corridors and stairs, an old hall with a stage, storerooms of junk; an old terrier and an alley cat |
+| 🏫 School | Classrooms off a corridor, the cafeteria, the principal's office, and a schoolyard with a field, swings and a bus stop; a reading dog and the class bunny |
 
 Your pick is kept per browser; the buddy dresses to match.
 
@@ -222,7 +223,8 @@ Only the view changes. Remove the key to go back to normal.
 | `server.ts`, `contract.ts` | Usage aggregation, Hacker News, weather, thread recaps, Work Dashboard inbox |
 | `office/chatter.ts` | Small talk, weather codes, recap lines (pure) |
 | `office/model.ts` | Pure logic: thread mood, spot assignment, office news |
-| `office/layout.ts` | Floor plans (wide and portrait) for the panel size |
+| `office/layout.ts` | The classic floor plans (wide and portrait) and the room builders sceneries reuse |
+| `office/layoutcheck.ts` | What every floor plan must get right (tested for every scenery at many sizes) |
 | `office/world.ts` | Simulation and canvas renderer |
 | `office/life.ts` | Hallway walking and office events |
 | `office/seasons.ts` | Festival calendar, decorations and party decor |
@@ -233,6 +235,10 @@ Only the view changes. Remove the key to go back to normal.
 | `office/sample.ts` | Made-up data for screenshots |
 | `office/theme.ts`, `office/themekit.ts`, `office/themes/` | Sceneries: the hooks, the drawing kit and one file per scenery ([how to write one](office/themes/README.md)) |
 | `preview/` | A standalone preview with made-up data (`npm run preview`, then open `preview/index.html?scenery=neon`) |
+
+## Changes
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## Credits
 

@@ -6,6 +6,9 @@ import type { Drawable, Light, PaintInfo, WallLightsInfo } from "../../theme.ts"
 import type { Layout, Rect } from "../../layout.ts";
 import { wallItems } from "./background.ts";
 import { BOOKS, C, CRAYONS, OUTLINE, sprite } from "./kit.ts";
+import { planOf } from "./plan.ts";
+import { busStop, climberSprite, lampPost, shadeTree, slideSprite, swingBack, swingFront } from "./yard.ts";
+import { cubbyStand, teacherDesk } from "./props.ts";
 
 // ------------------------------------------------------------------ bunting
 
@@ -113,6 +116,12 @@ function staticLights(L: Layout): Light[] {
     for (const ax of L.net.aisles) out.push([ax, Math.round(L.H * 0.72), 30, 0.3, "#fff1cf", 0.05]);
     const exit = wallItems(L).find((it) => it.poster === "exit");
     if (exit) out.push([exit.x + exit.w / 2, exit.y + exit.h / 2, 20, 0.75, "#ff5a4a", 0.38]);
+    const P = planOf(L);
+    if (P?.field) {
+      const f = P.field;
+      for (const x of [f.x + 6, f.x + f.w - 6]) out.push([x, f.y - 22, 48, 0.7, "#fff1c0", 0.14]);
+    }
+    if (P?.gate) out.push([P.gate.x, L.H - 40, 26, 0.55, "#fff1c0", 0.1]);
     for (const p of L.props) {
       if (p.kind === "vending") out.push([p.x + 10, p.y + 20, 24, 0.65, "#e3d2ff", 0.16]);
       if (p.kind === "fridge") out.push([p.x + 10, p.y + 18, 18, 0.55, "#e9f6ff", 0.12]);
@@ -177,7 +186,16 @@ function extras(L: Layout): Extra[] {
       if (!within || placed.has(kind)) continue;
       const [w, h] = SIZES[kind];
       const ev = L.eventArea;
+      // Where the pets like to curl up (kept clear).
+      const pets = [
+        { x: L.couch.x + L.couch.w + 12, y: L.couch.y + 20 },
+        { x: L.waiting.x + 14, y: L.waiting.y + 20 },
+        { x: L.kitchen.x + 20, y: L.kitchen.y + L.kitchen.h - 4 },
+        { x: L.meeting.x + 30, y: L.meeting.y + L.meeting.h - 18 },
+        { x: L.boss.room.x + 28, y: L.boss.room.y + L.boss.room.h - 14 },
+      ];
       const clear = (r: Rect) =>
+        !pets.some((p) => p.x > r.x - 14 && p.x < r.x + r.w + 14 && p.y > r.y - 6 && p.y < r.y + r.h + 14) &&
         !(r.x < ev.x + ev.w && ev.x < r.x + r.w && r.y < ev.y + ev.h && ev.y < r.y + r.h) &&
         !out.some((o) => Math.abs(o.x - r.x) < 30 && Math.abs(o.y - r.y) < 30) &&
         !L.plants.some((pl) => {
@@ -289,8 +307,49 @@ function lostFound(): HTMLCanvasElement {
   });
 }
 
+interface YardThing {
+  sprite: () => HTMLCanvasElement;
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** The play equipment, trees, lamps and the bus stop in the yard. */
+function yardThings(L: Layout): YardThing[] {
+  return cached(`school|yardthings|${L.W}x${L.H}|${L.props.length}`, () => {
+    const P = planOf(L);
+    const out: YardThing[] = [];
+    for (const c of P?.corners ?? []) {
+      // The teacher's corner: the desk on the left, cubbies on the right.
+      out.push({ sprite: teacherDesk, x: c.x + 10, y: c.y + c.h - 30, z: c.y + c.h - 2 });
+      if (c.w >= 150) out.push({ sprite: cubbyStand, x: c.x + c.w - 52, y: c.y + c.h - 24, z: c.y + c.h - 2 });
+    }
+    if (!P?.yard) return out;
+    if (P.swings) {
+      const s = P.swings;
+      out.push({ sprite: swingBack, x: s.x - 2, y: s.y - 2, z: s.y + 2 });
+      out.push({ sprite: swingFront, x: s.x - 2, y: s.y - 2, z: s.y + s.h - 3 });
+    }
+    if (P.slide) out.push({ sprite: slideSprite, x: P.slide.x - 1, y: P.slide.y - 2, z: P.slide.y + P.slide.h - 3 });
+    if (P.playground) {
+      const p = P.playground;
+      if (!P.portable) out.push({ sprite: shadeTree, x: p.x - 4, y: p.y - 10, z: p.y + 40 });
+      if (p.h >= 64) out.push({ sprite: climberSprite, x: p.x + 50, y: p.y + p.h - 28, z: p.y + p.h - 4 });
+    }
+    if (P.garden && P.garden.h >= 110) out.push({ sprite: shadeTree, x: P.garden.x + 50, y: P.garden.y + P.garden.h - 60, z: P.garden.y + P.garden.h - 10 });
+    if (P.gate) out.push({ sprite: busStop, x: P.gate.x - 30, y: L.H - 34, z: L.H - 5 });
+    if (P.field) {
+      const f = P.field;
+      out.push({ sprite: lampPost, x: f.x + 2, y: f.y - 28, z: f.y + 11 });
+      out.push({ sprite: lampPost, x: f.x + f.w - 10, y: f.y - 28, z: f.y + 11 });
+    }
+    return out;
+  });
+}
+
 export function decor(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): Drawable[] {
   const out: Drawable[] = [];
+  for (const y of yardThings(L)) out.push({ z: y.z, draw: () => ctx.drawImage(y.sprite(), y.x, y.y) });
   for (const e of extras(L)) {
     const z = e.y + e.h;
     switch (e.kind) {

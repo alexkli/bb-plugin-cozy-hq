@@ -51,7 +51,7 @@ export function npc(kind: VisitorKind, classic: Look): Look {
       return { ...classic, shirt: "#3f6b4a", pants: "#4a4038", accent: "#c4552d", key: "rw-boss" };
     case "guard":
       // Park ranger: khaki shirt, olive trousers, a ranger's hat.
-      return { ...classic, hairStyle: "cap", shirt: "#b8a070", pants: "#4a5a3a", accent: "#7a6a40", key: "rw-ranger" };
+      return { ...classic, hairStyle: "crop", shirt: "#b8a070", pants: "#4a5a3a", accent: "#7a6a40", key: "rw-ranger" };
     case "janitor":
       // The camp caretaker in green coveralls.
       return { ...classic, hairStyle: "cap", shirt: "#4a6b3a", pants: "#3a5030", accent: "#d9a531", key: "rw-caretaker" };

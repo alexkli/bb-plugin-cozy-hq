@@ -17,17 +17,20 @@ const DESKS: Record<DeskStyle, { top: string; hi: string; lo: string; edge: stri
 
 export function skylineDesk(style: DeskStyle): HTMLCanvasElement {
   const d = DESKS[style];
+  // One length of a long shared bench: the top runs edge to edge so neighbours join up.
   return sprite(`desk-${style}`, 48, 32, (g) => {
-    g.rect(2, 11, 44, 14, d.top);
-    g.rect(2, 11, 44, 1, d.hi);
-    g.rect(2, 11, 1, 14, d.hi);
-    for (const [y, x, w] of [[14, 6, 16], [17, 20, 18], [21, 9, 12], [19, 33, 9]] as const) g.rect(x, y, w, 1, shade(d.top, -0.04));
-    g.rect(2, 24, 44, 1, d.lo);
-    g.rect(2, 25, 44, 1, d.edge);
+    g.rect(0, 10, 48, 1, OUTLINE);
+    g.rect(0, 11, 48, 14, d.top);
+    g.rect(0, 11, 48, 1, d.hi);
+    for (const [y, x, w] of [[14, 2, 20], [17, 20, 22], [21, 6, 14], [19, 33, 13]] as const) g.rect(x, y, w, 1, shade(d.top, -0.04));
+    g.rect(0, 24, 48, 1, d.lo);
+    g.rect(0, 25, 48, 1, d.edge);
+    g.rect(0, 26, 48, 1, OUTLINE);
+    g.rect(47, 12, 1, 12, shade(d.top, -0.08));
     // Sit-stand frame: two columns, a cable tray and T feet.
-    g.rect(6, 26, 2, 5, d.frame).rect(40, 26, 2, 5, d.frame);
-    g.rect(7, 26, 1, 5, d.frameLo).rect(41, 26, 1, 5, d.frameLo);
-    g.rect(10, 26, 28, 1, d.frameLo);
+    g.rect(6, 27, 2, 4, d.frame).rect(40, 27, 2, 4, d.frame);
+    g.rect(7, 27, 1, 4, d.frameLo).rect(41, 27, 1, 4, d.frameLo);
+    g.rect(10, 27, 28, 1, d.frameLo);
     g.rect(3, 30, 8, 1, d.frameLo).rect(37, 30, 8, 1, d.frameLo);
     g.outline(OUTLINE);
   });

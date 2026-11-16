@@ -821,6 +821,50 @@ function woodenChair(name: "WOODEN_CHAIR_BACK" | "WOODEN_CHAIR_FRONT", seed: num
   return shabby(pa(name), seed, 0.08);
 }
 
+/** A waiting-room chair seen from the front, 16×16: plastic, vinyl, an office chair or a kitchen chair. */
+function oddChair(v: number): HTMLCanvasElement {
+  const g = new Grid(16, 16);
+  if (v === 0) {
+    // Moulded orange plastic, stacked once too often.
+    const c = "#b0603a";
+    g.rrect(3, 1, 10, 7, c, 2);
+    g.rect(4, 2, 8, 1, "#c8784c");
+    g.rect(6, 4, 4, 1, "#8e4a2c");
+    g.rrect(2, 8, 12, 4, c, 1);
+    g.rect(3, 8, 10, 1, "#c8784c");
+    g.rect(3, 12, 1, 3, P.metal).rect(12, 12, 1, 3, P.metal);
+    g.set(9, 9, "#8e4a2c");
+  } else if (v === 1) {
+    // Brown vinyl, split and taped.
+    g.rect(3, 1, 10, 7, P.vinylLo);
+    g.rect(4, 2, 8, 5, P.vinyl);
+    g.rect(2, 8, 12, 4, P.vinyl);
+    g.rect(3, 8, 10, 1, P.vinylHi);
+    g.rect(7, 9, 3, 1, P.foam);
+    g.rect(4, 3, 3, 2, P.tape);
+    g.rect(3, 12, 2, 3, P.woodDk).rect(11, 12, 2, 3, P.woodDk);
+  } else if (v === 2) {
+    // An office chair that lost its wheels and its armrests.
+    g.rrect(3, 0, 10, 8, "#4e5560", 2);
+    g.rect(4, 1, 8, 1, "#626a76");
+    g.rect(2, 8, 12, 4, "#5c6470");
+    g.rect(3, 8, 10, 1, "#6e7684");
+    g.rect(7, 12, 2, 2, P.metalDk);
+    g.rect(4, 14, 8, 1, P.metalDk);
+    g.set(10, 10, "#4a5058");
+  } else {
+    // A kitchen chair from somebody's house clearance.
+    g.rect(3, 0, 2, 9, P.wood).rect(11, 0, 2, 9, P.wood);
+    g.rect(3, 1, 10, 2, P.woodHi);
+    g.rect(5, 4, 6, 1, P.woodLo).rect(5, 6, 6, 1, P.woodLo);
+    g.rect(2, 9, 12, 3, P.wood);
+    g.rect(2, 9, 12, 1, P.woodHi);
+    g.rect(3, 12, 1, 3, P.woodDk).rect(12, 12, 1, 3, P.woodDk);
+    g.set(8, 10, P.stain);
+  }
+  return done(g);
+}
+
 // ------------------------------------------------------------------ plants
 
 /** Leaves turned brown and yellow; the cactus is the one survivor. */
@@ -959,8 +1003,11 @@ function propSprite(p: PropPlacement, L: Layout, classic: () => HTMLCanvasElemen
       return k("boss-chair", bossChair);
     case "dog-bed":
       return k("dog-bed", dogBed);
-    case "waiting-chair":
-      return k("waiting-chair", () => shabby(classic(), 11, 0.1));
+    case "waiting-chair": {
+      // No two alike: whatever chairs the building had left over.
+      const v = hash(p.id) % 5;
+      return k(`waiting-chair-${v}`, () => (v === 4 ? shabby(classic(), 11, 0.1) : oddChair(v)));
+    }
     case "bin":
       return k("bin", () => {
         // Overflowing, as ever.

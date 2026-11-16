@@ -21,7 +21,7 @@ export const LABELS: ThemeLabels = {
     clock: "School clock",
     arcade: "Math quiz machine · press start",
     pingpong: "Gym ping-pong table · serve",
-    fishtank: "Feed the class fish",
+    fishtank: "Class aquarium · feed the fish and Shelly the turtle",
     whiteboard: "Chalkboard · threads in plan mode",
     bell: "Front office bell",
     boss: "That's you, the principal · whistle for Biscuit",
@@ -37,8 +37,9 @@ export const LABELS: ThemeLabels = {
     technician: "The IT teacher · fixing things around school",
     delivery: "Pizza day! Lunch delivery for the class",
     kid: "A student on a class visit",
-    dog: "Biscuit, the class dog · pet",
-    cat: "Pixel, the class cat · pet",
+    dog: "Biscuit, the school reading dog · pet",
+    cat: "Clover, the class bunny · pet",
+    roomba: "The ladybug robot · send it off (or home)",
   },
   words: {
     // Places
@@ -68,7 +69,7 @@ export const LABELS: ThemeLabels = {
     "Desk & chair": "School desk & chair",
     // Activities
     "watching TV": "watching the smartboard",
-    "watching the fish": "watching the class fish",
+    "watching the fish": "watching the class turtle",
     "raiding the fridge": "grabbing a milk",
     "picking a snack": "picking a book from the book machine",
     "playing arcade games": "playing math games",

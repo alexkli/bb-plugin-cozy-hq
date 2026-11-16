@@ -4,6 +4,9 @@ import type { BackgroundSteps } from "../../theme.ts";
 import type { Layout, Rect, Room } from "../../layout.ts";
 import { blit, Grid, hash, mix, OUTLINE, pa, parseColor, rect, rng, shade } from "../../themekit.ts";
 import { barkFill, boards, C, hlog, logEnd, plaidFill } from "./kit.ts";
+import { paintBridges, paintCreek, treeCovers, treeShadows } from "./forest.ts";
+import { campData } from "./plan.ts";
+import { paintBellPeak, paintDeskTent, paintTentShells } from "./tents.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -133,6 +136,35 @@ function boardwalk(ctx: Ctx, x: number, y: number, w: number, h: number, vertica
     }
     rect(ctx, x, y, w, 1, C.deckGap);
     rect(ctx, x, y + h - 1, w, 1, C.deckGap);
+  }
+}
+
+/** A packed-dirt forest trail along a hallway or an aisle: wobbly edges, pebbles, roots across it. */
+function dirtTrail(ctx: Ctx, L: Layout, pos: number, vertical: boolean, from: number, seed: number): void {
+  const r = rng(seed);
+  const len = vertical ? L.H - from : L.W;
+  const half = 7;
+  const edge = (i: number) => Math.round(Math.sin(i * 0.071 + seed) * 1.6 + Math.sin(i * 0.19 + seed * 2) * 0.9);
+  for (let i = 0; i < len; i++) {
+    const a = -half + edge(i);
+    const b = half + edge(i + 37);
+    const at = (o: number, n: number, c: string) => (vertical ? rect(ctx, pos + o, from + i, n, 1, c) : rect(ctx, i, pos + o, 1, n, c));
+    at(a - 1, 1, "#4a3826");
+    at(a, b - a, "#8a6c4c");
+    at(a + 2, b - a - 4, "#957652");
+    at(a, 1, "#6e5238");
+    at(b - 1, 1, "#6e5238");
+    // Pebbles, needles and a root now and then
+    if (r() < 0.09) at(a + 2 + Math.floor(r() * (b - a - 4)), 1, r() < 0.5 ? C.stoneHi : "#7a5e40");
+    if (r() < 0.05) at(a + 1 + Math.floor(r() * (b - a - 2)), 1, "#b17845");
+    if (r() < 0.012) {
+      // A root crossing the trail
+      for (let o = a - 2; o < b + 2; o++) {
+        const wob = Math.round(Math.sin(o * 0.6) * 0.8);
+        if (vertical) rect(ctx, pos + o, from + i + wob, 1, 2, C.walnutLo);
+        else rect(ctx, i + wob, pos + o, 2, 1, C.walnutLo);
+      }
+    }
   }
 }
 
@@ -777,24 +809,48 @@ function cuckooClock(ctx: Ctx, k: { x: number; y: number; r: number }): void {
 export const BACKGROUND: Partial<BackgroundSteps> = {
   floor(ctx, L) {
     forestFloor(ctx, L);
+    treeShadows(ctx, L);
+    paintCreek(ctx, L);
     const depth = Math.min(...L.segments.map((s) => s.depth));
-    for (const [i, ax] of L.net.aisles.entries()) boardwalk(ctx, ax - 6, depth, 12, L.H - depth, true, 31 + i);
-    for (const [i, hy] of L.net.halls.entries()) boardwalk(ctx, 0, hy - 7, L.W, 14, false, 17 + i);
+    if (campData(L)?.trails) {
+      for (const [i, ax] of L.net.aisles.entries()) dirtTrail(ctx, L, ax, true, depth, 31 + i);
+      for (const [i, hy] of L.net.halls.entries()) dirtTrail(ctx, L, hy, false, 0, 17 + i);
+      // Plank footbridges where the trails cross the creek.
+      const c = campData(L)?.creek;
+      if (c) {
+        for (const [i, hy] of L.net.halls.entries()) {
+          const cx = c.pts.reduce((best, p) => (Math.abs(p.y - hy) < Math.abs(best.y - hy) ? p : best)).x;
+          boardwalk(ctx, cx - c.w / 2 - 6, hy - 7, c.w + 12, 14, false, 70 + i);
+        }
+      }
+    } else {
+      for (const [i, ax] of L.net.aisles.entries()) boardwalk(ctx, ax - 6, depth, 12, L.H - depth, true, 31 + i);
+      for (const [i, hy] of L.net.halls.entries()) boardwalk(ctx, 0, hy - 7, L.W, 14, false, 17 + i);
+    }
+    paintBridges(ctx, L);
   },
   wall(ctx, L) {
     L.segments.forEach((sg, i) => canvasWall(ctx, sg.x0, sg.x1, sg.depth, i));
     // The wall TV hangs on ropes.
     const seg = L.segments.find((s) => L.tv.x >= s.x0 && L.tv.x < s.x1);
-    if (seg && L.tv.y < seg.depth) {
+    if (seg && L.tv.y < seg.depth && !campData(L)?.screenTrees) {
       for (const rx of [L.tv.x + 10, L.tv.x + L.tv.w - 10]) {
         rect(ctx, rx, 0, 1, L.tv.y + 2, "#8f7b58");
         rect(ctx, rx + 1, 0, 1, L.tv.y + 2, "rgba(40,25,10,0.25)");
       }
     }
-    for (const [i, t] of trunkSpans(L).entries()) trunk(ctx, t.x, t.w, t.depth, 101 + i * 17);
+    for (const [i, t] of trunkSpans(L).entries()) if (!treeCovers(L, t.x, t.w)) trunk(ctx, t.x, t.w, t.depth, 101 + i * 17);
   },
   pods(ctx, L) {
     const pals = [STAINED, GREYED, SMOKED];
+    const tents = campData(L)?.tents;
+    if (tents) {
+      tents.forEach((t, i) => {
+        deck(ctx, { x: t.x - 6, y: t.y - 1, w: t.w + 12, h: t.h + 3 }, pals[i % pals.length]!, 51 + i);
+        paintDeskTent(ctx, t);
+      });
+      return;
+    }
     L.pods.forEach((pod, i) => deck(ctx, { x: pod.x - 4, y: pod.y + 2, w: pod.w + 8, h: pod.h - 2 }, pals[i % pals.length]!, 51 + i));
   },
   room(ctx, room, L) {
@@ -803,6 +859,23 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
       case "meeting":
         deck(ctx, r, PINE, 61, 6);
         wovenRug(ctx, { x: r.x + 6, y: r.y + 8, w: r.w - 12, h: r.h - 20 }, "#d9c49a", "#c9b285", "#b5653a", "#2f6b62");
+        if (campData(L)?.tents) {
+          // An octagonal platform: the corners are forest floor.
+          for (let j = 0; j < 9; j++) {
+            ctx.fillStyle = j === 8 ? C.deckGap : "#5c4631";
+            for (const [cx, cy, dx, dy] of [
+              [r.x, r.y, 1, 1],
+              [r.x + r.w - 1, r.y, -1, 1],
+              [r.x, r.y + r.h - 1, 1, -1],
+              [r.x + r.w - 1, r.y + r.h - 1, -1, -1],
+            ] as const) {
+              const len = 9 - j;
+              ctx.fillRect(dx > 0 ? cx : cx - len + 1, cy + dy * j, len, 1);
+            }
+          }
+          const seg = L.segments.find((sg) => r.x >= sg.x0 && r.x < sg.x1);
+          if (!seg || r.y > seg.depth + 10) paintBellPeak(ctx, r);
+        }
         break;
       case "boss": {
         deck(ctx, r, CABIN, 71, 7);
@@ -816,7 +889,19 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
         for (const { cx, cy } of porchIslands(r)) wovenRug(ctx, { x: cx - 36, y: cy - 22, w: 72, h: 46 }, "#4f7a6a", "#5d8a78", C.cream, "#c4552d");
         break;
       case "kitchen":
-        flagstones(ctx, r);
+        if (campData(L)?.tents) {
+          // An open pavilion: a timber platform under the counter, a flagstone patio round the island.
+          deck(ctx, { x: r.x - 3, y: r.y - 13, w: r.w + 6, h: 36 }, PINE, 91, 5);
+          const patio: Rect = { x: r.x + 4, y: r.y + 24, w: r.w - 8, h: r.h - 22 };
+          flagstones(ctx, patio);
+          // Round off the patio's corners into the forest floor.
+          for (let j = 0; j < 6; j++) {
+            const len = 6 - j;
+            ctx.fillStyle = "#5c4631";
+            ctx.fillRect(patio.x, patio.y + patio.h - 1 - j, len, 1);
+            ctx.fillRect(patio.x + patio.w - len, patio.y + patio.h - 1 - j, len, 1);
+          }
+        } else flagstones(ctx, r);
         break;
       case "games":
         grassLawn(ctx, r);
@@ -840,6 +925,7 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
       default:
         break;
     }
+    paintTentShells(ctx, room, L);
   },
   roomWalls(ctx, room, L) {
     if (!room.walls) return;
