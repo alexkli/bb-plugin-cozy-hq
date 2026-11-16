@@ -4,6 +4,7 @@
 // outdoor terrace with the city far below (where the office gets together).
 import type { Layout, Rect, WallSegment } from "../../layout.ts";
 import {
+  bossToys,
   Builder,
   buildGames,
   buildGarden,
@@ -97,7 +98,7 @@ function buildCornerOffice(b: Builder, r: Rect, hallY: number): Layout["boss"] {
   b.prop("boss-glass", "glass-front", r.x, r.y + r.h - 10, r.y + r.h + 1, r.w);
   b.prop("lamp", "lamp", r.x + 4, r.y + 2, r.y + 52);
   b.poke("lamp", "lamp", { x: r.x + 4, y: r.y + 2, w: 16, h: 52 });
-  return { room: r, seat, desk, dogBed, lamp: { x: r.x + 12, y: r.y + 4 } };
+  return bossToys(b, { room: r, seat, desk, dogBed, lamp: { x: r.x + 12, y: r.y + 4 } });
 }
 
 /** The sparkling water tap, printer and bin in a row, standing at baseY, reached straight from a hall. */
@@ -649,7 +650,7 @@ function buildBossTop(b: Builder, r: Rect, hallY: number): Layout["boss"] {
   b.prop("boss-glass", "glass-front", r.x, r.y + r.h - 10, r.y + r.h + 1, r.w);
   b.prop("lamp", "lamp", r.x + 6, r.y + 4, r.y + 54);
   b.poke("lamp", "lamp", { x: r.x + 6, y: r.y + 4, w: 16, h: 52 });
-  return { room: r, seat, desk, dogBed, lamp: { x: r.x + 14, y: r.y + 6 } };
+  return bossToys(b, { room: r, seat, desk, dogBed, lamp: { x: r.x + 14, y: r.y + 6 } });
 }
 
 /** The Sky Loft floor plan for a panel (null: the classic plan). */

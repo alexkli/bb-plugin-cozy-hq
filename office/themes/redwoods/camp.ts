@@ -87,7 +87,8 @@ export function campBold(W: number, H: number, threads: number): Layout | null {
   tents.push(...deskTents(b, { x: cx + wC - t2w - 2, y: h1 + 12, w: t2w, h: POD_H }, { hallY: h1, aisleX: a2 }));
   const gapC = clamp(W - 6 - cx - 186, 0, 36);
   const bossRoom: Rect = { x: cx + gapC, y: h2 + 12, w: W - 6 - cx - gapC, h: Math.min(170, H - 8 - (h2 + 12)) };
-  const boss = buildBoss(b, bossRoom, h2);
+  // The treehouse giant grows up at the right edge (below): your toys keep clear of it.
+  const boss = buildBoss(b, bossRoom, h2, [{ x: W - edgeR - 2, y: bossRoom.y - 12, w: edgeR, h: 62 }]);
 
   const row3: Rect = { x: A.x, y: h2 + 12, w: A.w, h: H - 6 - (h2 + 12) };
   if (row3.h >= POD_H + 48 && desksWanted > b.desks.length) tents.push(...deskTents(b, { x: A.x, y: row3.y, w: A.w, h: POD_H }, { hallY: h2, aisleX: a1 }));

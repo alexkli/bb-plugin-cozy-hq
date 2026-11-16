@@ -118,7 +118,8 @@ Your pick is kept per browser; the buddy dresses to match.
 
   <img src="docs/technician.png" width="560" alt="The technician up a ladder changing a string-light bulb, and fixing a crashed computer">
 - **You're the boss** at the big desk, with Biscuit the corgi asleep in the
-  corner. Pixel the cat, a roomba, the fish, a cleaning crew in the evening and
+  corner, a Newton's cradle on the desk and, where your office has room, a
+  putting green and a paper-ball hoop over the bin. Pixel the cat, a roomba, the fish, a cleaning crew in the evening and
   a night guard on the occasional round keep the place alive.
 - **Office events**: now and then idle threads gather for a party, birthday
   cake, karaoke, cornhole, darts, a stretch break or bring-your-kids-to-work
@@ -144,7 +145,9 @@ Your pick is kept per browser; the buddy dresses to match.
 - **Click things**: the espresso machine, kettle, microwave, fridge, vending
   machine, piano, dartboard, printer, plants, globe, arcade, couch, beanbags,
   roomba, string lights, your lamp, your own desk (whistles for the dog) and
-  more. Each does something, with a synthesized sound. Open a window to hear
+  more. In your office: the putting green (you walk over and putt: in the
+  hole, lipped out, way short, or under the desk, where the dog fetches it),
+  the paper-ball hoop (a shot from your chair) and the Newton's cradle. Each does something, with a synthesized sound. Open a window to hear
   outside: birds, crickets at night, rain, wind, thunder or a foghorn.
 - **Day and night** follow your clock, with sunsets, stars and lamps. **The
   weather outside is your real local weather**: sun, clouds, fog, drizzle,

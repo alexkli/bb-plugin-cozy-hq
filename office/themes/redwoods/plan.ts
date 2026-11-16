@@ -514,7 +514,8 @@ export function campPortrait(W: number, H: number, threads: number): Layout {
         waiting = { x: rect.x, y: rect.y + 4, w: ww - 4, h: rect.h - 54 };
         buildWaiting(b, waiting, hallY);
         const bossRoom: Rect = { x: rect.x + ww + 4, y: rect.y + 4, w: rect.w - ww - 4, h: Math.min(rect.h - 8, H - 4 - (rect.y + 4)) };
-        boss = buildBoss(b, bossRoom, hallY);
+        // The treehouse giant grows up at the right edge (below): your toys keep clear of it.
+        boss = buildBoss(b, bossRoom, hallY, [{ x: bossRoom.x + bossRoom.w - 32, y: bossRoom.y - 12, w: 30, h: 68 }]);
         break;
       }
     }

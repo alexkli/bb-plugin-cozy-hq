@@ -9,6 +9,13 @@
   - The defaults are the classic boss, so nothing changes until you pick something.
   - For scenery authors: `dressVisitor` gets `v.look` (with the `figure`); `npc("boss", …)` keeps skin, hair and glasses.
 - Curly hair no longer hides the eyes.
+- **Your office** gets toys to click:
+  - A putting green on the floor, where the room has space: you walk over, line up and putt. In the hole (a small cheer and a wiggling flag), lipped out, way short, or sliced under the desk, where the dog fetches it if it's around. Then back to the desk.
+  - A paper-ball hoop over a bin: a shot from your chair, swish or off the rim onto the floor.
+  - A Newton's cradle on the desk: clack, clack.
+  - Their own synth sounds, and the hover texts and remarks use your pronouns ("watch her putt", "He sank it!").
+  - Every scenery gets them; the treehouse keeps them clear of its redwood, and other decor keeps clear of your way to the green.
+  - For scenery authors: props `putting-green`, `cradle`, `hoop` (pokes `putt`, `cradle`, `hoop`), `bossToys()` for your own boss room, and `buildBoss(…, keepOut)`.
 - Redwood Camp has no back wall any more: the forest runs to the top edge.
   - The usage board stands on log posts, and the clock, calendar and status board hang on trunks.
   - The door is a trailhead gate.

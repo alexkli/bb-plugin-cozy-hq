@@ -108,7 +108,10 @@ bring-your-kids-to-work day.
 
 Click a character or a tag to open its thread, the door or an empty desk for a
 new thread, the reception bell for the first thread waiting, the calendar to
-start an office event, and the `?` sticky note for the legend. Most furniture
+start an office event, and the `?` sticky note for the legend. In your office,
+the putting green (where the room has space) sends you over to putt: in the
+hole, lipped out, short, or under the desk, where the dog fetches the ball;
+the paper-ball hoop is a shot from your chair; the Newton's cradle clacks. Most furniture
 does something with a sound when clicked (also the couch, beanbags, roomba,
 string lights and windows); hover the clock for the time and a window for the
 weather.

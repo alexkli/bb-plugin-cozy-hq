@@ -132,5 +132,19 @@ export function checkLayout(L: Layout, opts: { threads: number }): string[] {
       if (w.path.length > 0 || w.x !== to.x || w.y !== to.y) bad(`walking ${from.id} → ${to.id} doesn't arrive`);
     }
   }
+
+  // Your desk toys stay in your office, off the places people sit and stand.
+  const toys = L.boss?.toys;
+  const room = L.boss?.room;
+  if (toys && room) {
+    const g = toys.green;
+    if (g) {
+      const r = g.rect;
+      if (r.x < room.x || r.y < room.y || r.x + r.w > room.x + room.w || r.y + r.h > room.y + room.h) bad(`the putting green is outside your office: ${JSON.stringify(r)}`);
+      for (const q of [g.tee, g.cup, ...g.walk]) if (!within(q.x, q.y, room, 2)) bad(`the putting green's ${JSON.stringify(q)} is outside your office`);
+      for (const s of L.spots) if (s.x > r.x - 4 && s.x < r.x + r.w + 4 && s.y > r.y - 2 && s.y < r.y + r.h + 2) bad(`${s.id} is on the putting green`);
+    }
+    if (toys.hoop && !within(toys.hoop.x, toys.hoop.y, room, 2)) bad(`the hoop is outside your office: ${JSON.stringify(toys.hoop)}`);
+  }
   return out;
 }

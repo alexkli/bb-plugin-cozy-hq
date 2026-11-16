@@ -36,7 +36,7 @@ import { World, type Hit, type LabelAnchor, type SeenState, type SpeechBubble, t
 import { chairToneFor } from "./desks.ts";
 import { relabel, type Theme, type ThemeLabels } from "./theme.ts";
 import { THEMES, themeById } from "./themes/index.ts";
-import { readYou, type You } from "./you.ts";
+import { readYou, withPronouns, type You } from "./you.ts";
 import { YouSettings } from "./YouSettings.tsx";
 
 export const TOPIC_EMOJI: Record<Topic, string> = {
@@ -957,7 +957,7 @@ export function OfficeView(input: OfficeProps) {
           </div>
         );
       case "poke":
-        return <div className="chq-tip-hint">{relabel(named, theme.labels?.poke?.[hover.poke] ?? pokeTip(hover.poke, waiting, counts))}</div>;
+        return <div className="chq-tip-hint">{withPronouns(relabel(named, theme.labels?.poke?.[hover.poke] ?? pokeTip(hover.poke, waiting, counts)), you.pronouns)}</div>;
       case "status":
         return (
           <div className="chq-tip-hint">
@@ -986,7 +986,7 @@ export function OfficeView(input: OfficeProps) {
       case "scenery":
         return <div className="chq-tip-hint">{hover.hover}</div>;
     }
-  }, [hover, byId, visible, world, prefs, overflow, waiting, now, counts, officeEvent, weatherLine, theme]);
+  }, [hover, byId, visible, world, prefs, overflow, waiting, now, counts, officeEvent, weatherLine, theme, you.pronouns]);
 
   const W = (layout?.W ?? MIN_W_WIDE) * scale;
   const H = (layout?.H ?? MIN_H_WIDE) * scale;
@@ -1292,6 +1292,9 @@ const POKE_TIP: Record<PokeKind, string> = {
   beanbag: "Beanbag · squish",
   cornhole: "Cornhole · toss a bag",
   globe: "Spin the globe",
+  putt: "Putting green · watch {them} putt",
+  cradle: "Newton's cradle · clack clack",
+  hoop: "Paper ball hoop · watch {them} shoot",
 };
 
 function pokeTip(kind: PokeKind, waiting: OfficeThread[], counts: Record<Mood, OfficeThread[]>): string {

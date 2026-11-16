@@ -88,7 +88,9 @@ export type CharPose =
   | "present"
   | "draw0"
   | "draw1"
-  | "present-plan";
+  | "present-plan"
+  | "putt0"
+  | "putt1";
 
 export interface CharSpec {
   look: Look;
@@ -354,6 +356,23 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair, short }:
       g.set(armR + 1, bodyTop - 1, sleeve);
       g.rect(armR + 1 + reach, bodyTop - 5 + reach, 1, 4, skin);
       g.set(armR + 1 + reach, bodyTop - 6 + reach, "#3e8ed0");
+      break;
+    }
+    case "putt0":
+    case "putt1": {
+      // Putting, side on: hands together low in front, the putter down to the ball
+      // (putt1 is the follow-through).
+      const through = pose === "putt1";
+      g.rect(armR, bodyTop + 1, 1, 3, sleeve).set(armR + 1, bodyTop + 4, skin);
+      g.rect(armL + 1, bodyTop + 1, 1, 2, shirtLo);
+      const shaft = "#9aa3ad";
+      if (through) {
+        g.line(armR + 2, bodyTop + 4, armR + 5, bodyTop + 9, shaft);
+        g.rect(armR + 5, bodyTop + 10, 2, 1, "#3b3b4a");
+      } else {
+        g.line(armR + 1, bodyTop + 5, armR + 3, bodyTop + 11, shaft);
+        g.rect(armR + 2, bodyTop + 12, 3, 1, "#3b3b4a");
+      }
       break;
     }
     case "slump":

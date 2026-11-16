@@ -762,6 +762,60 @@ function dogBedSprite(): HTMLCanvasElement {
   });
 }
 
+/** A putting mat: mown stripes, a start line and the cup (the flag and the ball are live). */
+function puttingGreenSprite(w: number): HTMLCanvasElement {
+  return cache.get(`putting-green-${w}`, () => {
+    const g = new Grid(w, 14);
+    g.rrect(1, 1, w - 2, 11, "#3f8f47", 2);
+    g.rrect(1, 1, w - 2, 10, "#52ad58", 2);
+    for (let x = 4; x < w - 4; x += 12) g.rect(x, 2, 6, 8, "#5fbb63");
+    g.rect(2, 1, w - 4, 1, "#74cc75");
+    g.rect(9, 3, 1, 6, "#e8f4dc");
+    // The cup, sunk in the turf (the flag stands in it at x w−11).
+    g.rect(w - 13, 5, 5, 3, "#1c2a1d").rect(w - 12, 5, 3, 1, "#0f1810").rect(w - 13, 8, 5, 1, "#8fd88b");
+    g.outline(OUTLINE);
+    return g;
+  });
+}
+
+/** A Newton's cradle for the desk; the two end balls (and their strings) swing live. */
+function cradleSprite(): HTMLCanvasElement {
+  return cache.get("cradle", () => {
+    const g = new Grid(16, 11);
+    // The inside of the frame stays open: keep the outline outside it.
+    const air = "#010203";
+    g.rect(2, 2, 12, 6, air);
+    g.rect(1, 1, 14, 1, "#e6ebf0").vline(1, 2, 6, "#9aa3ad").vline(14, 2, 6, "#9aa3ad");
+    g.rect(1, 8, 14, 2, "#2e2a33").rect(1, 8, 14, 1, "#5a5262");
+    for (const x of [5, 7, 9]) {
+      g.vline(x, 2, 4, "#87909c");
+      g.rect(x, 6, 2, 2, "#c9d1da").set(x, 6, "#ffffff").set(x + 1, 7, "#8d96a3");
+    }
+    g.outline(OUTLINE, { skip: [air, "#87909c"] });
+    for (let y = 2; y < 8; y++) for (let x = 2; x < 14; x++) if (g.get(x, y) === air) g.set(x, y, null);
+    return g;
+  });
+}
+
+/** A wastepaper bin with a little clip-on hoop: backboard, rim and net. */
+function hoopSprite(): HTMLCanvasElement {
+  return cache.get("hoop", () => {
+    const g = new Grid(16, 30);
+    g.rect(7, 8, 2, 10, "#8a8f99");
+    g.rect(2, 1, 12, 8, "#f4f1ea").rect(2, 8, 12, 1, "#cfc8bb");
+    g.rect(5, 3, 6, 4, "#e5484d").rect(6, 4, 4, 2, "#f4f1ea");
+    // The rim (its center is the hoop point, x+8, y+11) and the net under it.
+    g.rect(5, 10, 6, 1, "#f0782f").set(4, 11, "#f0782f").set(11, 11, "#f0782f").rect(5, 11, 6, 1, "#2e2a33").rect(5, 12, 6, 1, "#c4561f");
+    g.rect(5, 13, 6, 1, "#f4f1ea").set(6, 14, "#f4f1ea").set(9, 14, "#f4f1ea").rect(7, 15, 2, 1, "#f4f1ea");
+    // The bin.
+    g.rrect(2, 18, 12, 11, "#9aa3ad", 1);
+    g.rect(3, 18, 10, 2, "#3a3440").rect(2, 20, 12, 1, "#c3cad2");
+    for (let x = 4; x < 13; x += 2) g.vline(x, 21, 7, "#7d8691");
+    g.outline(OUTLINE);
+    return g;
+  });
+}
+
 function cornholeSprite(): HTMLCanvasElement {
   return cache.get("cornhole", () => {
     const g = new Grid(16, 22);
@@ -1230,6 +1284,12 @@ export function classicProp(p: PropPlacement, L: Layout): HTMLCanvasElement {
       return dogBedSprite();
     case "bin":
       return pa("BIN");
+    case "putting-green":
+      return puttingGreenSprite(p.w ?? 80);
+    case "cradle":
+      return cradleSprite();
+    case "hoop":
+      return hoopSprite();
   }
 }
 

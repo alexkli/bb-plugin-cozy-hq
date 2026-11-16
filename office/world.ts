@@ -24,7 +24,7 @@ import {
 } from "./characters.ts";
 import { Crew, drawLanyard, type DeskWork } from "./crew.ts";
 import { buildProps, paintBackground, roombaSprite, speakerSprite, type Prop } from "./furniture.ts";
-import type { Facing, Layout, Point, PokeKind, Rect, Spot } from "./layout.ts";
+import type { Facing, Green, Layout, Point, PokeKind, Rect, Spot } from "./layout.ts";
 import { waitsForYou, type DeskStyle, type Mood, type WaitKind } from "./model.ts";
 import { highlightOf, startsWork, type Highlight } from "./highlight.ts";
 import { chairCanvas, deskCanvas, screenFor, type ChairTone } from "./desks.ts";
@@ -236,6 +236,26 @@ interface Kid extends Walker {
 
 type DogGoal = "bed" | "visit" | "greet" | "boss" | "event";
 
+/** You off to the putting green: walk over, line up, putt, see where it goes, walk back. */
+interface Golf {
+  phase: "out" | "aim" | "roll" | "react" | "fetch" | "back";
+  until: number;
+  outcome: "in" | "lip" | "short" | "desk";
+  /** The ball rolling from `from` (bending through `via`) to `to`, `at` .. `at + dur`. */
+  roll: { from: Point; via: Point | null; to: Point; at: number; dur: number } | null;
+  /** The dog fetching the ball from under the desk: 0 going, 1 sniffing, 2 bringing it back. */
+  fetch: { step: 0 | 1 | 2 } | null;
+  fetched: boolean;
+}
+
+/** A crumpled paper ball for the hoop: wind up, fly, then through the net or off the rim onto the floor. */
+interface Shot {
+  phase: "windup" | "fly" | "drop" | "bounce" | "rest";
+  until: number;
+  swish: boolean;
+  ball: { x: number; y: number; vx: number; vy: number } | null;
+}
+
 interface Dog extends Walker {
   state: "bed" | "walk" | "sit" | "follow";
   goal: DogGoal;
@@ -446,6 +466,13 @@ export class World {
   /** You, the boss, as picked in the settings (before the scenery dresses you). */
   private you: You = DEFAULT_YOU;
   private youBase: Look = youLook(DEFAULT_YOU);
+  /** You up and about (null: at your desk). */
+  private bossAt: Walker | null = null;
+  private golf: Golf | null = null;
+  /** The golf ball where it is or last stopped (null: under the desk, or not out yet). */
+  private golfBall: (Point & { sunk?: boolean }) | null = null;
+  private flagUntil = 0;
+  private shot: Shot | null = null;
 
   constructor(emit: Emit) {
     this.emit = emit;
@@ -590,6 +617,10 @@ export class World {
     this.npcs = [];
     this.kids = [];
     for (const h of this.huddles) if (h.show) h.show.gathering.done = true;
+    this.bossAt = null;
+    this.golf = null;
+    this.golfBall = null;
+    this.shot = null;
     this.huddles = [];
     this.replies = [];
     this.mishap = null;
@@ -936,6 +967,11 @@ export class World {
         this.speech.delete(id);
         continue;
       }
+      if (id === "boss" && this.L) {
+        const p = this.bossAt ?? this.L.boss.seat;
+        out.push({ id, x: Math.round(p.x), y: Math.round(p.y - ANCHOR_Y + 1), text: s.text });
+        continue;
+      }
       const a = this.agents.get(id);
       if (a) {
         const lying = this.mishap?.id === id && this.mishap.phase === "down";
@@ -1234,7 +1270,17 @@ export class World {
       case "boss":
         this.bossWaveUntil = t + 2;
         this.emit("whistle", false);
-        if (this.dog.state !== "follow") this.dogTo("boss");
+        if (this.dog.state !== "follow" && this.golf?.phase !== "fetch") this.dogTo("boss");
+        break;
+      case "putt":
+        this.startPutt();
+        break;
+      case "cradle":
+        this.anim.set("cradle", t + 1.6);
+        this.emit("clack", false);
+        break;
+      case "hoop":
+        this.startShot();
         break;
       case "globe":
         this.anim.set("globe", t + 2.6);
@@ -1349,6 +1395,8 @@ export class World {
     this.updateWeather();
     this.updateBroken(dt);
     this.crew.update(dt, t);
+    this.updateGolf(dt);
+    this.updateShot(dt);
   }
 
   private onArrive(a: Agent, spot: Spot): void {
@@ -1609,6 +1657,8 @@ export class World {
   }
 
   private updateDog(dt: number): void {
+    // Busy fetching your golf ball (updateGolf walks it).
+    if (this.golf?.fetch) return;
     const d = this.dog;
     const L = this.L!;
     const t = this.time;
@@ -1660,6 +1710,259 @@ export class World {
       else this.dogTo("visit");
     }
     void L;
+  }
+
+  // ------------------------------------------------------------------ your desk toys
+
+  /** Off to the putting green (if there is one and you're at your desk). */
+  private startPutt(): void {
+    const L = this.L!;
+    const G = L.boss.toys?.green;
+    if (!G || this.bossAt || this.shot?.ball) return;
+    const r = this.rand();
+    const outcome: Golf["outcome"] = r < 0.3 ? "in" : r < 0.55 ? "lip" : r < 0.8 ? "short" : "desk";
+    const seat = L.boss.seat;
+    this.bossAt = { x: seat.x, y: seat.y, path: G.walk.map((p) => ({ x: p.x, y: p.y })), approach: [], facing: "front", walked: 0 };
+    this.golf = { phase: "out", until: 0, outcome, roll: null, fetch: null, fetched: false };
+  }
+
+  private updateGolf(dt: number): void {
+    const g = this.golf;
+    const b = this.bossAt;
+    const L = this.L!;
+    const G = L.boss.toys?.green;
+    if (!g || !b || !G) return;
+    const t = this.time;
+    switch (g.phase) {
+      case "out":
+        if (step(b, dt, 40)) {
+          // A fresh ball on the line, a moment to line it up.
+          b.facing = "right";
+          this.golfBall = { x: G.tee.x, y: G.tee.y };
+          g.phase = "aim";
+          g.until = t + 1.2;
+        }
+        break;
+      case "aim":
+        if (t >= g.until) this.putt(g, G);
+        break;
+      case "roll": {
+        const k = Math.min(1, (t - g.roll!.at) / g.roll!.dur);
+        this.golfBall = this.rollAt(g, G, k);
+        if (k >= 1) this.putted(g, G);
+        break;
+      }
+      case "fetch":
+        this.fetchBall(g, G, dt);
+        break;
+      case "react":
+        if (t >= g.until) {
+          g.phase = "back";
+          b.path = [...G.walk.slice(0, -1).reverse(), L.boss.seat].map((p) => ({ x: p.x, y: p.y }));
+        }
+        break;
+      case "back":
+        if (step(b, dt, 40)) {
+          this.bossAt = null;
+          this.golf = null;
+        }
+        break;
+    }
+  }
+
+  private putt(g: Golf, G: Green): void {
+    const L = this.L!;
+    const t = this.time;
+    const from = { x: G.tee.x, y: G.tee.y };
+    const d = G.cup.x - from.x;
+    this.emit("putt", false);
+    g.phase = "roll";
+    if (g.outcome === "in") g.roll = { from, via: null, to: { x: G.cup.x, y: G.cup.y }, at: t, dur: 0.6 + d / 60 };
+    else if (g.outcome === "lip") g.roll = { from, via: null, to: { x: G.cup.x + 6, y: G.cup.y + 2 }, at: t, dur: 1 + d / 55 };
+    else if (g.outcome === "short") {
+      const k = 0.35 + this.rand() * 0.25;
+      g.roll = { from, via: null, to: { x: Math.round(from.x + d * k), y: from.y }, at: t, dur: 0.5 + (d * k) / 50 };
+    } else {
+      // Sliced: off the green and under the desk, at the end nearer the green.
+      const desk = L.boss.desk;
+      const right = G.rect.x + G.rect.w / 2 > desk.x + desk.w / 2;
+      const to = { x: right ? desk.x + desk.w - 10 : desk.x + 10, y: desk.y + 16 };
+      g.roll = { from, via: { x: from.x + 24, y: from.y + 2 }, to, at: t, dur: 1.2 };
+    }
+  }
+
+  /** Where the rolling ball is, k = 0..1 of the way. */
+  private rollAt(g: Golf, G: Green, k: number): Point {
+    const r = g.roll!;
+    const lerp = (a: Point, b: Point, e: number) => ({ x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e });
+    if (g.outcome === "lip") {
+      // Up to the cup, round the rim once, and out the other side.
+      const cup = G.cup;
+      const ring = (a: number) => ({ x: cup.x + Math.cos(a) * 2.5, y: cup.y + Math.sin(a) * 1.5 });
+      if (k < 0.55) return lerp(r.from, ring(Math.PI), 1 - (1 - k / 0.55) ** 1.4);
+      if (k < 0.85) return ring(Math.PI + ((k - 0.55) / 0.3) * Math.PI * 2.2);
+      return lerp(ring(Math.PI * 3.2), r.to, 1 - (1 - (k - 0.85) / 0.15) ** 2);
+    }
+    const e = 1 - (1 - k) ** 2;
+    if (!r.via) return lerp(r.from, r.to, e);
+    const u = 1 - e;
+    return { x: u * u * r.from.x + 2 * u * e * r.via.x + e * e * r.to.x, y: u * u * r.from.y + 2 * u * e * r.via.y + e * e * r.to.y };
+  }
+
+  /** The ball stopped: in, lipped out, short, or under the desk (the dog may fetch it). */
+  private putted(g: Golf, G: Green): void {
+    const L = this.L!;
+    const t = this.time;
+    const pick = (lines: string[]) => lines[Math.floor(this.rand() * lines.length)]!;
+    g.phase = "react";
+    g.until = t + 1.8;
+    if (g.outcome === "in") {
+      this.golfBall = { x: G.cup.x, y: G.cup.y, sunk: true };
+      this.emit("cup", false);
+      this.emit("cheer", false);
+      this.flagUntil = t + 1.6;
+      this.burst(G.cup.x, G.cup.y - 16, "sparkle", 6);
+      this.say("boss", pick(["Yes!", "In the hole!", "Still got it."]), 2);
+      this.remark(["Nice putt!", "{They} sank it!", "Hole in one!"]);
+    } else if (g.outcome === "lip") {
+      this.flagUntil = t + 0.5;
+      this.say("boss", pick(["Nooo!", "Lipped out…", "So close!"]), 2);
+      this.remark(["Ooh, {they} almost had it.", "Lipped out!"]);
+    } else if (g.outcome === "short") {
+      this.say("boss", pick(["Hmm. Slow green.", "Bit short."]), 2);
+      this.remark(["Never up, never in!", "Give it some more!"]);
+    } else {
+      this.golfBall = null;
+      const d = this.dog;
+      const room = L.boss.room;
+      const around = d.state !== "follow" && d.path.length === 0 && d.goal !== "event" && inRect(d.x, d.y, { x: room.x, y: room.y - 4, w: room.w, h: room.h + 8 });
+      this.say("boss", around ? "Fore! Fetch!" : pick(["Fore!", "Where did it go?"]), 2.2);
+      this.remark(["It went under the desk!", "Fore!"]);
+      if (around) {
+        // The dog dives under the desk for it and brings it back to you.
+        g.phase = "fetch";
+        g.fetch = { step: 0 };
+        d.state = "walk";
+        d.path = [{ x: g.roll!.to.x, y: L.boss.desk.y + 32 }];
+      }
+    }
+  }
+
+  private fetchBall(g: Golf, G: Green, dt: number): void {
+    const d = this.dog;
+    const t = this.time;
+    const f = g.fetch!;
+    if (f.step === 0) {
+      if (step(d, dt, 44)) {
+        f.step = 1;
+        g.until = t + 1;
+        d.happyUntil = t + 1;
+      }
+    } else if (f.step === 1) {
+      if (t >= g.until) {
+        f.step = 2;
+        d.path = [{ x: G.stand.x + 16, y: G.stand.y + 3 }];
+      }
+    } else if (step(d, dt, 40)) {
+      d.facing = "left";
+      d.state = "sit";
+      d.goal = "boss";
+      d.until = t + 8;
+      d.happyUntil = t + 3;
+      this.golfBall = { x: G.stand.x + 9, y: G.stand.y + 3 };
+      this.hearts(d.x, d.y - 16, 3);
+      this.bark(false);
+      this.say("boss", "Good dog!", 2);
+      g.fetch = null;
+      g.fetched = true;
+      g.phase = "react";
+      g.until = t + 1.6;
+    }
+  }
+
+  /** Someone in your office says something about your putt. */
+  private remark(lines: string[]): void {
+    const room = this.L!.boss.room;
+    const near = [...this.agents.values()].filter((a) => this.settled(a) && inRect(a.x, a.y, room));
+    const who = near[Math.floor(this.rand() * near.length)];
+    if (!who || this.rand() < 0.25) return;
+    const line = lines[Math.floor(this.rand() * lines.length)]!;
+    window.setTimeout(() => this.say(who.id, line, 2.6), 700);
+  }
+
+  /** A crumpled paper ball at the hoop, thrown from your chair. */
+  private startShot(): void {
+    const hoop = this.L!.boss.toys?.hoop;
+    if (!hoop || this.bossAt || (this.shot && this.shot.phase !== "rest")) return;
+    this.shot = { phase: "windup", until: this.time + 0.45, swish: this.rand() < 0.55, ball: null };
+    this.emit("crumple", false);
+  }
+
+  private updateShot(dt: number): void {
+    const s = this.shot;
+    const L = this.L!;
+    const hoop = L.boss.toys?.hoop;
+    if (!s || !hoop) return;
+    const t = this.time;
+    const G = 200;
+    const b = s.ball;
+    if (b && (s.phase === "fly" || s.phase === "drop" || s.phase === "bounce")) {
+      b.vy += G * dt;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+    }
+    const pick = (lines: string[]) => lines[Math.floor(this.rand() * lines.length)]!;
+    switch (s.phase) {
+      case "windup":
+        if (t >= s.until) {
+          // From your raised hand onto the rim (or its near edge).
+          const seat = L.boss.seat;
+          const from = { x: seat.x + 5, y: seat.y - 22 };
+          const side = from.x < hoop.x ? -1 : 1;
+          const to = { x: hoop.x + (s.swish ? 0 : side * 4), y: hoop.y - 1 };
+          const T = 0.55 + Math.abs(to.x - from.x) / 350;
+          s.ball = { x: from.x, y: from.y, vx: (to.x - from.x) / T, vy: (to.y - from.y - 0.5 * G * T * T) / T };
+          s.phase = "fly";
+          s.until = t + T;
+        }
+        break;
+      case "fly":
+        if (t >= s.until && b) {
+          if (s.swish) {
+            this.emit("swish", false);
+            b.x = hoop.x;
+            b.vx = 0;
+            b.vy = 20;
+            s.phase = "drop";
+            if (this.rand() < 0.6) this.say("boss", pick(["Swish!", "Nothing but net."]), 1.8);
+          } else {
+            this.emit("clank", false);
+            b.vx = -Math.sign(b.vx || 1) * 34;
+            b.vy = -46;
+            s.phase = "bounce";
+            if (this.rand() < 0.6) this.say("boss", pick(["Clank.", "Off the rim!"]), 1.8);
+          }
+          s.until = t + 1.3;
+        }
+        break;
+      case "drop":
+        // Through the net into the bin.
+        if (b && b.y >= hoop.y + 7) s.ball = null;
+        if (t >= s.until) this.shot = null;
+        break;
+      case "bounce": {
+        const floor = hoop.y + 18;
+        if (b && b.y >= floor && b.vy > 0) {
+          b.y = floor;
+          s.phase = "rest";
+          s.until = t + 9;
+        }
+        break;
+      }
+      case "rest":
+        if (t >= s.until) this.shot = null;
+        break;
+    }
   }
 
   // ------------------------------------------------------------------ visitors
@@ -3232,7 +3535,13 @@ export class World {
     }
     for (const a of this.agents.values()) items.push({ z: a.y + 0.5, draw: () => this.drawAgent(ctx, a) });
     items.push(...this.crew.items(ctx, this.time, this.dressHelper));
-    items.push({ z: L.boss.seat.y + 0.5, draw: () => this.drawBoss(ctx) });
+    items.push({ z: (this.bossAt ?? L.boss.seat).y + 0.5, draw: () => this.drawBoss(ctx) });
+    const green = L.boss.toys?.green;
+    if (green) items.push({ z: green.cup.y + 0.3, draw: () => this.drawFlag(ctx, green) });
+    const golfBall = this.golfBall;
+    if (golfBall) items.push({ z: golfBall.y + 0.2, draw: () => this.drawGolfBall(ctx, golfBall) });
+    const paper = this.shot?.ball;
+    if (paper) items.push({ z: this.shot!.phase === "rest" ? paper.y : 1e9, draw: () => this.drawShot(ctx, paper) });
     for (const n of this.npcs) items.push({ z: n.y + 0.5, draw: () => this.drawNpc(ctx, n) });
     for (const k of this.kids) items.push({ z: k.y + 0.4, draw: () => this.drawKid(ctx, k) });
     if (this.event) items.push(...eventDecor(ctx, this.event, this.time));
@@ -3270,6 +3579,9 @@ export class World {
     const on = (id: string) => (this.anim.get(id) ?? 0) > t;
     const left = (id: string) => Math.max(0, (this.anim.get(id) ?? 0) - t);
     switch (p.kind) {
+      case "cradle":
+        this.drawCradleEnds(ctx, p.x, p.y, on("cradle") ? 1.6 - left("cradle") : -1);
+        break;
       case "arcade":
         this.drawArcadeScreen(ctx);
         break;
@@ -3910,11 +4222,19 @@ export class World {
   private drawBoss(ctx: CanvasRenderingContext2D): void {
     const L = this.L!;
     const t = this.time;
-    const { x, y } = L.boss.seat;
+    const { x, y } = this.bossAt ?? L.boss.seat;
     const guests = [...this.agents.values()].some((a) => this.settled(a) && a.spot?.kind === "boss-guest");
     let pose: CharPose;
     let expr: Expression = Math.floor(t * 10) % 43 === 0 ? "blink" : "open";
-    if (t < this.bossWaveUntil) {
+    let facing: Facing = "front";
+    const shot = this.shot;
+    if (this.bossAt) ({ pose, facing, expr } = this.awayPose(this.bossAt, expr));
+    else if (shot && shot.phase !== "rest") {
+      // A shot at the hoop from your chair: wind up, watch it, cheer or wince.
+      const watching = shot.phase === "windup" || shot.phase === "fly";
+      pose = watching ? (shot.phase === "windup" ? "raise" : "sit-back") : shot.swish ? (Math.floor(t * 4) % 2 ? "cheer" : "raise") : "sit-back";
+      expr = watching ? "focus" : shot.swish ? "happy" : "worried";
+    } else if (t < this.bossWaveUntil) {
       pose = Math.floor(t * 4) % 2 ? "raise" : "cheer";
       expr = "happy";
     } else if (guests) {
@@ -3925,9 +4245,94 @@ export class World {
       expr = Math.floor(t / 4) % 4 === 0 ? "open" : "focus";
     }
     const look = this.npcLookOf("boss");
-    const sprite = charSprite({ look, facing: "front", pose, expr, emblem: youEmblem(this.you) });
+    const sprite = charSprite({ look, facing, pose, expr, emblem: facing === "back" ? null : youEmblem(this.you) });
     ctx.drawImage(sprite, Math.round(x - ANCHOR_X), Math.round(y - ANCHOR_Y));
-    this.theme.dressVisitor?.(ctx, { x: Math.round(x - ANCHOR_X), y: Math.round(y - ANCHOR_Y), facing: "front", pose, kind: "boss", look }, t);
+    this.theme.dressVisitor?.(ctx, { x: Math.round(x - ANCHOR_X), y: Math.round(y - ANCHOR_Y), facing, pose, kind: "boss", look }, t);
+  }
+
+  /** You away from your desk: walking, putting, reacting to where the ball went. */
+  private awayPose(b: Walker, open: Expression): { pose: CharPose; facing: Facing; expr: Expression } {
+    const t = this.time;
+    const g = this.golf;
+    if (b.path.length > 0 || !g) return { pose: b.path.length > 0 ? (`walk${Math.floor(b.walked / 4) % 4}` as CharPose) : "stand", facing: b.facing, expr: open };
+    if (g.phase === "aim") return { pose: "putt0", facing: "right", expr: "focus" };
+    if (g.phase === "roll") return { pose: t - g.roll!.at < 0.12 ? "putt0" : "putt1", facing: "right", expr: "focus" };
+    if (g.outcome === "in") return { pose: Math.floor(t * 4) % 2 ? "cheer" : "raise", facing: "front", expr: "happy" };
+    if (g.outcome === "desk") return g.fetched || g.fetch ? { pose: "stand", facing: "right", expr: "happy" } : { pose: "stand", facing: "front", expr: "surprised" };
+    return { pose: "stand", facing: "right", expr: "worried" };
+  }
+
+  private drawGolfBall(ctx: CanvasRenderingContext2D, ball: Point & { sunk?: boolean }): void {
+    const x = Math.round(ball.x);
+    const y = Math.round(ball.y);
+    if (ball.sunk) {
+      // Just its top, down in the cup beside the flagstick.
+      ctx.fillStyle = "#f4f1ea";
+      ctx.fillRect(x + 1, y - 1, 1, 1);
+      return;
+    }
+    ctx.fillStyle = OUTLINE;
+    ctx.fillRect(x - 2, y - 2, 4, 4);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(x - 1, y - 1, 2, 2);
+    ctx.fillStyle = "#c9d1da";
+    ctx.fillRect(x, y, 1, 1);
+  }
+
+  /** The flag in the cup: it flaps now and then, and wiggles when a putt drops. */
+  private drawFlag(ctx: CanvasRenderingContext2D, G: Green): void {
+    const t = this.time;
+    const { x, y } = G.cup;
+    const wiggle = t < this.flagUntil ? Math.round(Math.sin(t * 34) * 1.4) : 0;
+    const flap = wiggle !== 0 ? wiggle : Math.floor(t / 0.8) % 2;
+    const top = y - 16;
+    ctx.fillStyle = OUTLINE;
+    ctx.fillRect(x - 1, top - 1, 3, y - top + 1);
+    ctx.fillStyle = "#e8e4dc";
+    ctx.fillRect(x, top, 1, y - top);
+    const fx = x + 1 + (wiggle > 0 ? 1 : 0);
+    // A pennant four rows tall; the second and last rows flap.
+    const row = (i: number) => (i === 0 ? 5 : i === 1 ? 4 + flap : i === 2 ? 3 : 1 + Math.max(0, flap));
+    ctx.fillStyle = OUTLINE;
+    ctx.fillRect(fx, top - 1, 6, 1);
+    for (let i = 0; i < 4; i++) ctx.fillRect(fx, top + i, row(i) + 1, 1);
+    ctx.fillRect(fx, top + 4, 2, 1);
+    ctx.fillStyle = "#e5484d";
+    for (let i = 0; i < 4; i++) ctx.fillRect(fx, top + i, row(i), 1);
+    ctx.fillStyle = "#ff7f84";
+    ctx.fillRect(fx, top, 2, 1);
+  }
+
+  /** The cradle's end balls: hanging still, or swinging out in turn after a click (clack, clack). */
+  private drawCradleEnds(ctx: CanvasRenderingContext2D, x: number, y: number, since: number): void {
+    const half = 0.26;
+    const n = since >= 0 ? Math.floor(since / half) : -1;
+    for (let end = 0; end < 2; end++) {
+      const out = n >= 0 && n < 6 && n % 2 === end ? Math.round(Math.sin(((since - n * half) / half) * Math.PI) * (2.4 - n * 0.25)) : 0;
+      const sx = x + (end ? 11 : 3);
+      const bx = sx + (end ? out : -out);
+      const by = y + 6 - (out >= 2 ? 1 : 0);
+      ctx.fillStyle = "#87909c";
+      for (let yy = y + 2; yy < by; yy++) ctx.fillRect(Math.round(sx + ((bx - sx) * (yy - y - 2)) / Math.max(1, by - y - 2)), yy, 1, 1);
+      ctx.fillStyle = "#c9d1da";
+      ctx.fillRect(bx, by, 2, 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(bx, by, 1, 1);
+      ctx.fillStyle = "#8d96a3";
+      ctx.fillRect(bx + 1, by + 1, 1, 1);
+    }
+  }
+
+  /** The paper ball for the hoop, in the air or lying where it missed. */
+  private drawShot(ctx: CanvasRenderingContext2D, b: { x: number; y: number }): void {
+    const x = Math.round(b.x);
+    const y = Math.round(b.y);
+    ctx.fillStyle = OUTLINE;
+    ctx.fillRect(x - 2, y - 2, 5, 4);
+    ctx.fillStyle = "#fbfaf5";
+    ctx.fillRect(x - 1, y - 1, 3, 2);
+    ctx.fillStyle = "#c9c3b8";
+    ctx.fillRect(x, y - 1, 1, 1);
   }
 
   private drawNpc(ctx: CanvasRenderingContext2D, n: Npc): void {
@@ -4065,6 +4470,15 @@ export class World {
     ctx.fillRect(Math.round(d.x - 7), Math.round(d.y - 1), 14, 2);
     const dog = this.dressed(`pet|dog|${pose}|${facing}|${blink}`, () => this.theme.pet?.("dog", pose, facing, blink, () => dogSprite(pose, facing, blink)) ?? dogSprite(pose, facing, blink));
     ctx.drawImage(dog, Math.round(d.x - 10), Math.round(d.y - 14));
+    if (this.golf?.fetch?.step === 2) {
+      // Your golf ball, in its mouth.
+      const mx = Math.round(d.x + (facing === "left" ? -9 : 8));
+      const my = Math.round(d.y - 8);
+      ctx.fillStyle = OUTLINE;
+      ctx.fillRect(mx - 1, my - 1, 4, 4);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(mx, my, 2, 2);
+    }
   }
 
   private drawBubble(ctx: CanvasRenderingContext2D, a: Agent): void {

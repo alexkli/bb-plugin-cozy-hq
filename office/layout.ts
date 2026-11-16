@@ -153,7 +153,10 @@ export type PropKind =
   | "boss-chair"
   | "guest-chair"
   | "dog-bed"
-  | "bin";
+  | "bin"
+  | "putting-green"
+  | "cradle"
+  | "hoop";
 
 export interface PropPlacement {
   id: string;
@@ -212,7 +215,10 @@ export type PokeKind =
   | "globe"
   | "server"
   | "couch"
-  | "beanbag";
+  | "beanbag"
+  | "putt"
+  | "cradle"
+  | "hoop";
 
 export interface Pokeable {
   id: string;
@@ -243,7 +249,7 @@ export interface Layout {
   pods: Rect[];
   meeting: Rect;
   whiteboard: Rect;
-  boss: { room: Rect; seat: Point; desk: Rect; dogBed: Point; lamp: Point };
+  boss: { room: Rect; seat: Point; desk: Rect; dogBed: Point; lamp: Point; toys?: BossToys };
   waiting: Rect;
   kitchen: Rect;
   lounge: Rect;
@@ -492,7 +498,8 @@ export function buildMeeting(b: Builder, r: Rect, hallY: number): Rect {
   return board;
 }
 
-export function buildBoss(b: Builder, r: Rect, hallY: number): Layout["boss"] {
+/** Your office; `keepOut`: where the scenery will put something of its own (your toys stay clear). */
+export function buildBoss(b: Builder, r: Rect, hallY: number, keepOut: Rect[] = []): Layout["boss"] {
   const doorX = r.x + 16;
   b.rooms.push({ kind: "boss", rect: r, walls: "wood", doorX, doorSide: "top" });
   const deskW = 60;
@@ -527,7 +534,186 @@ export function buildBoss(b: Builder, r: Rect, hallY: number): Layout["boss"] {
   b.prop("boss-glass", "glass-front", r.x, r.y + r.h - 10, r.y + r.h + 1, r.w);
   b.prop("lamp", "lamp", r.x + 6, r.y + 4, r.y + 54);
   b.poke("lamp", "lamp", { x: r.x + 6, y: r.y + 4, w: 16, h: 52 });
-  return { room: r, seat, desk, dogBed, lamp: { x: r.x + 14, y: r.y + 6 } };
+  return bossToys(b, { room: r, seat, desk, dogBed, lamp: { x: r.x + 14, y: r.y + 6 } }, keepOut);
+}
+
+// ------------------------------------------------------------------ your desk toys
+
+/** A putting mat on the floor of your office: you walk to `stand`, putt from `tee` toward `cup`. */
+export interface Green {
+  rect: Rect;
+  tee: Point;
+  cup: Point;
+  stand: Point;
+  /** From your chair to `stand` (walked back the other way). */
+  walk: Point[];
+}
+
+export interface BossToys {
+  /** On the desk, always. */
+  cradle: Point;
+  /** Where there's a free strip of floor, clear of furniture and of where people walk. */
+  green: Green | null;
+  /** A bin with a clip-on hoop: the rim's center, where there's room for it. */
+  hoop: Point | null;
+}
+
+/** Classic sprite sizes of what stands in your office, for finding free floor. */
+const SPRITE_SIZE: Partial<Record<PropKind, [number, number]>> = {
+  "boss-chair": [22, 26],
+  "guest-chair": [16, 32],
+  "library-shelf": [32, 32],
+  "dog-bed": [26, 14],
+  lamp: [16, 52],
+  cradle: [16, 11],
+  hoop: [16, 30],
+};
+
+function spriteBox(p: PropPlacement): Rect {
+  const [w, h] = p.kind === "boss-desk" ? [(p.w ?? 60) + 2, 30] : (SPRITE_SIZE[p.kind] ?? [16, 16]);
+  return { x: p.x, y: p.y, w, h };
+}
+
+const GREEN_H = 14;
+const overlaps = (a: Rect, b: Rect, m = 0) => a.x < b.x + b.w + m && b.x < a.x + a.w + m && a.y < b.y + b.h + m && b.y < a.y + a.h + m;
+
+/**
+ * Your desk toys: a Newton's cradle on the desk, and where the room has
+ * space a putting green on the floor and a paper-ball hoop over a bin. Call
+ * it last in a boss-room builder (it works around what's already there and
+ * the paths people and the dog walk in the room).
+ */
+export function bossToys(b: Builder, boss: Layout["boss"], keepOut: Rect[] = []): Layout["boss"] {
+  const { room: r, desk, seat } = boss;
+  // The cradle stands on the desk top between the papers and the mug.
+  const cradle = { x: desk.x + 36, y: desk.y - 3 };
+  b.prop("cradle", "cradle", cradle.x, cradle.y, desk.y + 22.5);
+  b.poke("cradle", "cradle", { x: cradle.x + 3, y: cradle.y - 2, w: 12, h: 12 });
+
+  const inRoom = (q: Rect) => overlaps(q, r);
+  const props = b.props.filter((p) => p.kind !== "glass-front" && p.kind !== "cradle" && inRoom(spriteBox(p)));
+  const plants = b.plants
+    .map((pl) => ({ x: pl.x, y: pl.y, w: pl.sprite === "LARGE_PLANT" ? 32 : 16, h: pl.sprite === "LARGE_PLANT" ? 48 : pl.sprite === "POT" ? 16 : 32 }))
+    .filter(inRoom);
+  // What's on the floor and on top of things (the globe sits on its shelf).
+  const sprites = [...props.map(spriteBox), ...plants, ...keepOut, ...b.pokeables.filter((p) => p.kind !== "boss" && p.kind !== "cradle" && inRoom(p.rect)).map((p) => p.rect)];
+  // Where people and the dog walk in here: the guests' paths, the dog's way to its bed and to you.
+  const lines: [Point, Point][] = [];
+  const guests = b.spots.filter((sp) => sp.kind === "boss-guest");
+  for (const sp of guests) for (let i = 1; i < sp.path.length; i++) lines.push([sp.path[i - 1]!, sp.path[i]!]);
+  const lane = guests[0]?.path[2];
+  if (lane) {
+    lines.push([lane, { x: boss.dogBed.x, y: lane.y }], [{ x: boss.dogBed.x, y: lane.y }, boss.dogBed]);
+    lines.push([lane, { x: desk.x - 4, y: lane.y }], [{ x: desk.x - 4, y: lane.y }, { x: desk.x - 4, y: desk.y + 34 }]);
+  }
+  const nearLine = (q: Rect, m: number) =>
+    lines.some(([a, c]) => overlaps(q, { x: Math.min(a.x, c.x), y: Math.min(a.y, c.y), w: Math.abs(c.x - a.x) + 1, h: Math.abs(c.y - a.y) + 1 }, m));
+  // Feet can't go through furniture, only past its base (you start from your chair behind the desk).
+  const base = (q: Rect, d = 12) => ({ x: q.x, y: q.y + q.h - d, w: q.w, h: d });
+  const feet = [
+    ...props
+      .filter((p) => p.kind !== "boss-chair")
+      .map((p) => {
+        const q = spriteBox(p);
+        return p.kind === "boss-desk" ? { x: q.x, y: q.y + 6, w: q.w, h: q.h - 6 } : base(q, p.kind === "lamp" ? 6 : 12);
+      }),
+    ...plants.map((q) => base(q)),
+    ...keepOut,
+  ];
+  const walkable = (a: Point, c: Point) => {
+    const n = Math.max(1, Math.ceil(Math.hypot(c.x - a.x, c.y - a.y) / 2));
+    for (let i = 0; i <= n; i++) {
+      const x = a.x + ((c.x - a.x) * i) / n;
+      const y = a.y + ((c.y - a.y) * i) / n;
+      if (x < r.x + 6 || x > r.x + r.w - 6 || y > r.y + r.h - 12) return false;
+      if (feet.some((q) => x > q.x - 3 && x < q.x + q.w + 3 && y > q.y && y < q.y + q.h + 2)) return false;
+    }
+    return true;
+  };
+  const walkTo = (stand: Point): Point[] | null => {
+    let best: Point[] | null = null;
+    let cost = Infinity;
+    for (const cx of [desk.x - 8, desk.x + desk.w + 8]) {
+      const path = [{ x: cx, y: seat.y }, { x: cx, y: stand.y }, stand];
+      let prev: Point = seat;
+      let ok = true;
+      let len = 0;
+      for (const q of path) {
+        // Behind the desk to the side of it, then out in the open.
+        if (prev !== seat && !walkable(prev, q)) ok = false;
+        len += Math.abs(q.x - prev.x) + Math.abs(q.y - prev.y);
+        prev = q;
+      }
+      if (ok && len < cost) {
+        cost = len;
+        best = path;
+      }
+    }
+    return best;
+  };
+
+  // The green: the longest free strip of floor (52–110 px), lower down if it's a tie. Best
+  // where nobody walks; in narrow rooms people may cross its middle, not where you
+  // stand or the flag.
+  const findGreen = (crossable: boolean): Green | null => {
+    let best: Green | null = null;
+    let score = -Infinity;
+    for (let y = r.y + 30; y + GREEN_H <= r.y + r.h - 14; y += 2) {
+      const band = { x: r.x, y, w: r.w, h: GREEN_H };
+      const cuts: [number, number][] = [];
+      const crossings: number[] = [];
+      for (const q of sprites) if (overlaps(band, q, 2)) cuts.push([q.x - 3, q.x + q.w + 3]);
+      for (const [a, c] of lines) {
+        const q = { x: Math.min(a.x, c.x), y: Math.min(a.y, c.y), w: Math.abs(c.x - a.x) + 1, h: Math.abs(c.y - a.y) + 1 };
+        if (!overlaps(band, q, 6)) continue;
+        if (crossable && a.x === c.x && q.y < y - 6 && q.y + q.h > y + GREEN_H + 6) crossings.push(a.x);
+        else cuts.push([q.x - 7, q.x + q.w + 7]);
+      }
+      cuts.sort((p, q) => p[0] - q[0]);
+      let x = r.x + 6;
+      for (const [a, c] of [...cuts, [r.x + r.w - 6, Infinity] as [number, number]]) {
+        for (let gx = x; a - gx >= 52; gx += 2) {
+          const len = Math.min(110, Math.floor(a - gx));
+          // Toward the middle of a long free stretch when nobody crosses it.
+          const at = crossings.length === 0 ? Math.round(gx + Math.max(0, (a - gx - len) / 2)) : gx;
+          if (crossings.some((cx) => (cx > at - 10 && cx < at + 24) || cx > at + len - 20)) continue;
+          const stand = { x: at + 6, y: y + 8 };
+          const walk = walkTo(stand);
+          const sc = len * 2 + (y - r.y) * 0.2;
+          if (walk && sc > score) {
+            score = sc;
+            best = { rect: { x: at, y, w: len, h: GREEN_H }, tee: { x: at + 16, y: y + 7 }, cup: { x: at + len - 11, y: y + 7 }, stand, walk };
+          }
+          break;
+        }
+        x = Math.max(x, c);
+      }
+    }
+    return best;
+  };
+  const green = findGreen(false) ?? findGreen(true);
+  if (green) {
+    const g = green.rect;
+    b.prop("putting-green", "putting-green", g.x, g.y, g.y, g.w);
+    b.poke("putt", "putt", { x: g.x, y: g.y - 8, w: g.w, h: g.h + 8 });
+    sprites.push(g);
+  }
+
+  // The hoop: by the right wall or left of the desk, near the height of the desk, clear of
+  // everything (your way to the green too).
+  let hoop: Point | null = null;
+  const route = green ? [seat, ...green.walk] : [];
+  const onRoute = (q: Rect) => route.some((a, i) => i > 0 && overlaps(q, { x: Math.min(a.x, route[i - 1]!.x), y: Math.min(a.y, route[i - 1]!.y) - 24, w: Math.abs(a.x - route[i - 1]!.x) + 1, h: Math.abs(a.y - route[i - 1]!.y) + 25 }, 4));
+  const spots: Rect[] = [];
+  for (let y = desk.y; y + 30 <= r.y + r.h - 12; y += 2) spots.push({ x: r.x + r.w - 21, y, w: 16, h: 30 }, { x: desk.x - 30, y, w: 16, h: 30 });
+  for (const q of spots) {
+    if (q.x < r.x + 4 || sprites.some((s2) => overlaps(q, s2, 2)) || nearLine(q, 6) || onRoute(q)) continue;
+    b.prop("hoop", "hoop", q.x, q.y, q.y + 28);
+    b.poke("hoop", "hoop", { x: q.x, y: q.y, w: 16, h: 30 });
+    hoop = { x: q.x + 8, y: q.y + 11 };
+    break;
+  }
+  return { ...boss, toys: { cradle, green, hoop } };
 }
 
 export function buildWaiting(b: Builder, r: Rect, hallY: number): void {

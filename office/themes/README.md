@@ -22,7 +22,7 @@ Think of what each place *is* in your scenery, then dress it:
 | `pod` + desks/chairs/screens | Desk pods on carpets: workstations |
 | `meeting` (glass walls) + whiteboard, meeting table | Glass meeting room: planning |
 | `waiting` + waiting sofas, armchairs, lounge tables, reception | Waiting room: threads waiting for you |
-| `boss` (wood walls) + boss desk/chair, guest chairs, lamp, dog bed, shelf | Your office |
+| `boss` (wood walls) + boss desk/chair, guest chairs, lamp, dog bed, shelf, putting green, cradle, hoop | Your office |
 | `kitchen` + counter, espresso, fridge, vending, island, stools | Kitchen: short breaks |
 | `lounge` + TV, couch, coffee table, piano, fishtank, armchairs, beanbags | Lounge: longer breaks |
 | `games` + ping-pong, arcade, dartboard, beanbags, cornhole | Games room |
@@ -62,6 +62,9 @@ Think of what each place *is* in your scenery, then dress it:
   - `vending`: the window x+3..16, y+5..33 and the flap at x+17, y+18.
   - `printer`: paper comes out on top; `dartboard`: darts; `boss-desk`:
     papers on top; `library-shelf` `boss-shelf`: a globe on top.
+  - `putting-green`: the flag stands in the cup at x w−11, y+7, the ball
+    starts at x+16; `cradle`: the end balls hang at x+3 and x+11 (y+6) and
+    swing; `hoop`: the paper ball drops through the rim at x+8, y+11.
 - **Windows**: the glass is cleared before `background.window` runs; paint
   the frame and at most thin mullions over the glass. The view is `outside`.
   Outdoors they needn't be windows at all (Redwood Camp's are gaps in the
@@ -119,7 +122,8 @@ with the same spot kinds and ids:
 | --- | --- |
 | `buildPods(b, r, { hallY, aisleX })` | desk pods: rows of 48 px desk pairs, `POD_H` (104) tall per row |
 | `buildMeeting(b, r, hallY)` | glass room, door bottom right: the hallway must be **below** it |
-| `buildBoss(b, r, hallY)` | wood room (you, guest chairs, dog bed, lamp), door top left: hallway **above** |
+| `buildBoss(b, r, hallY, keepOut?)` | wood room (you, guest chairs, dog bed, lamp, your desk toys), door top left: hallway **above**; `keepOut`: rects your toys stay clear of (a tree you'll add) |
+| `bossToys(b, boss, keepOut?)` | the cradle on the desk, and where there's room the putting green and the hoop: call it last in your own boss room |
 | `buildWaiting(b, r, hallY)` | reception and seats (fill order in `b.seats`): hallway **above** |
 | `buildKitchen(b, r, access)` | counter (espresso, kettle, microwave) along the top, fridge, vending, island, stools |
 | `buildLounge(b, r, access, wallTv, naps)` | TV (on the wall if `wallTv`, else standing), couch, piano, fish tank (beanbags if `naps`) |

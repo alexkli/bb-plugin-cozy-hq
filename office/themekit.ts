@@ -182,6 +182,12 @@ export function floorPlan(L: Layout): FloorPlan {
         prev = q;
       }
     }
+    // Your way from the desk to the putting green.
+    const walk = L.boss.toys?.green?.walk ?? [];
+    walk.forEach((q, i) => {
+      const p = i > 0 ? walk[i - 1]! : L.boss.seat;
+      mark(Math.min(p.x, q.x) - 10, Math.min(p.y, q.y) - 26, Math.abs(q.x - p.x) + 20, Math.abs(q.y - p.y) + 28);
+    });
     for (const hy of L.net.halls) mark(0, hy - 8, L.W, 16);
     for (const ax of L.net.aisles) mark(ax - 8, 0, 16, L.H);
     for (const r of L.rooms) if (r.walls) {
@@ -219,6 +225,7 @@ export function floorPlan(L: Layout): FloorPlan {
 
 export {
   Builder,
+  bossToys,
   buildBoss,
   buildGames,
   buildGarden,
@@ -241,5 +248,5 @@ export {
   utilities,
   via,
 } from "./layout.ts";
-export type { Access, Desk, Facing, LayoutOptions, Network, Point, Room, RoomKind, Spot, SpotGroup, SpotKind, WallSegment } from "./layout.ts";
+export type { Access, BossToys, Desk, Facing, Green, LayoutOptions, Network, Point, Room, RoomKind, Spot, SpotGroup, SpotKind, WallSegment } from "./layout.ts";
 export { checkLayout } from "./layoutcheck.ts";

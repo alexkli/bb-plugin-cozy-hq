@@ -67,7 +67,12 @@ export type SoundName =
   | "fixed"
   | "beep"
   | "twinkle"
-  | "dingdong";
+  | "dingdong"
+  | "putt"
+  | "cup"
+  | "clack"
+  | "clank"
+  | "swish";
 
 /** Quiet background sounds play softer than event sounds. */
 const AMBIENT = new Set<SoundName>(["pingpong", "bubble", "coffee", "roomba", "purr", "door", "marker", "toss", "giggle", "whistle", "walkie", "wrench", "drill", "fixed"]);
@@ -286,6 +291,33 @@ export class Sound {
         // The delivery's here.
         tone(784, 0, 0.5, "triangle", 0.16);
         tone(622.3, 0.32, 0.7, "triangle", 0.15);
+        break;
+      case "putt":
+        // A putter tapping a golf ball.
+        tone(1250, 0, 0.035, "triangle", 0.16, 900);
+        noise(0, 0.03, 0.08, 3200);
+        break;
+      case "cup":
+        // The ball drops and rattles round the bottom of the cup.
+        tone(240, 0, 0.09, "sine", 0.22, 150);
+        [0.08, 0.15, 0.2, 0.24, 0.27].forEach((t0, i) => tone(1700 - i * 120, t0, 0.025, "square", 0.04 - i * 0.006));
+        break;
+      case "clack":
+        // Newton's cradle: clack… clack… dying away.
+        for (let i = 0; i < 6; i++) {
+          tone(2900 - (i % 2) * 180, i * 0.26, 0.018, "square", 0.07 * (1 - i * 0.13));
+          noise(i * 0.26, 0.02, 0.07 * (1 - i * 0.13), 4500);
+        }
+        break;
+      case "clank":
+        // The paper ball hits the rim.
+        tone(560, 0, 0.3, "triangle", 0.1, 500);
+        tone(1130, 0, 0.18, "sine", 0.05, 1060);
+        noise(0, 0.04, 0.06, 2500);
+        break;
+      case "swish":
+        // Nothing but net.
+        swell(0, 0.22, 0.09, 5200, 2600, 0.7);
         break;
       case "twinkle":
         [1318.5, 1568, 1975.5, 2637, 1975.5, 2637].forEach((f, i) => tone(f, i * 0.08, 0.25, "sine", 0.07));
