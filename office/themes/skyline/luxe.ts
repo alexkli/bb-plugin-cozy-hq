@@ -4,17 +4,17 @@
 import type { PaintInfo } from "../../theme.ts";
 import type { Layout, Rect } from "../../layout.ts";
 import { cached, makeCanvas, mix, OUTLINE, rect } from "../../themekit.ts";
-import { C, sprite } from "./kit.ts";
+import { C, clamp, sprite } from "./kit.ts";
 
 // ------------------------------------------------------------------ pendants
 
-interface Globe {
+export interface Globe {
   x: number;
   y: number;
   top: number;
 }
 
-function pendants(L: Layout): Globe[] {
+export function pendants(L: Layout): Globe[] {
   return cached(`skyline|pendants|${L.W}x${L.H}|${L.props.length}`, () => {
     const table = L.props.find((p) => p.kind === "meeting-table");
     if (!table) return [];
@@ -52,23 +52,46 @@ function glow(): HTMLCanvasElement {
   );
 }
 
+/** Someone's on the dimmer: when the show started (by PaintInfo.t). */
+export const dimmer = { t0: -1e9 };
+export const DIM_SHOW = 6.4;
+
+/**
+ * How bright globe i is (0 … 1): steady (lit at night, off by day), or in a
+ * show they light one by one (dim one by one at night), pulse in a wave and
+ * settle back.
+ */
+export function globeLevel(i: number, t: number, night: number): number {
+  const base = night > 0.3 ? Math.min(1, night) : 0;
+  const k = t - dimmer.t0;
+  if (k < 0 || k > DIM_SHOW) return base;
+  const away = base > 0.5 ? 0.12 : 1;
+  const first = clamp((k - i * 0.4) / 0.3, 0, 1);
+  const back = clamp((k - 4.8 - i * 0.35) / 0.3, 0, 1);
+  if (k < 1.6) return base + (away - base) * first;
+  if (k < 4.8) return 0.55 + 0.45 * Math.sin((k - 1.6) * 5 - i * 1.3);
+  return away + (base - away) * back;
+}
+
 /** The statement light over the boardroom table (drawn over everyone: it hangs from the ceiling). */
 export function drawPendants(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): void {
   const globes = pendants(L);
   if (globes.length === 0) return;
-  const lit = info.night > 0.3;
-  for (const g of globes) {
+  const show = info.t - dimmer.t0 <= DIM_SHOW;
+  for (const [i, g] of globes.entries()) {
     for (let y = g.top; y < g.y; y++) {
       ctx.fillStyle = `rgba(30,32,38,${(0.15 + (0.75 * (y - g.top)) / Math.max(1, g.y - g.top)).toFixed(2)})`;
       ctx.fillRect(g.x, y, 1, 1);
     }
-    ctx.drawImage(globeSprite(lit), g.x - 3, g.y);
+    ctx.drawImage(globeSprite(show ? globeLevel(i, info.t, info.night) > 0.45 : info.night > 0.3), g.x - 3, g.y);
   }
-  if (lit) {
+  if (show || info.night > 0.3) {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    ctx.globalAlpha = Math.min(1, info.night) * 0.7;
-    for (const g of globes) ctx.drawImage(glow(), g.x - 10, g.y - 6);
+    for (const [i, g] of globes.entries()) {
+      ctx.globalAlpha = globeLevel(i, info.t, info.night) * 0.7;
+      if (ctx.globalAlpha > 0.02) ctx.drawImage(glow(), g.x - 10, g.y - 6);
+    }
     ctx.restore();
   }
 }

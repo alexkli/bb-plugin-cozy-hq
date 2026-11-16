@@ -6,6 +6,16 @@ import { cached, hash, makeCanvas, OUTLINE } from "../../themekit.ts";
 import { C, clamp, sprite } from "./kit.ts";
 import { planOf } from "./plan.ts";
 
+/** Someone turned the fire table up: when (by PaintInfo.t). */
+export const flare = { t0: -1e9 };
+
+/** How hard the fire table is roaring (0 … 1): up fast, a few seconds high, then back down. */
+export function fireBoost(t: number): number {
+  const k = t - flare.t0;
+  if (k < 0 || k > 6) return 0;
+  return k < 0.35 ? k / 0.35 : k < 3.5 ? 1 : 1 - (k - 3.5) / 2.5;
+}
+
 function fireTable(w: number): HTMLCanvasElement {
   return sprite(`fire-table-${w}`, w + 2, 18, (g) => {
     // A long concrete trough with a black burner channel and glass guards.
@@ -178,10 +188,12 @@ export function terraceDecor(ctx: CanvasRenderingContext2D, L: Layout, info: Pai
       z: f.y + 14,
       draw: () => {
         ctx.drawImage(spr, f.x - 1, f.y - 2);
-        // Flames dancing along the burner.
+        // Flames dancing along the burner (taller when someone turns it up).
         const t = info.t;
+        const boost = fireBoost(t);
         for (let x = f.x + 4; x < f.x + f.w - 4; x += 2) {
-          const h = 1 + ((hash(`fl${x}|${Math.floor(t * 9 + x * 0.7)}`) % 4) + (Math.sin(t * 6 + x) > 0.4 ? 1 : 0));
+          const h0 = 1 + ((hash(`fl${x}|${Math.floor(t * 9 + x * 0.7)}`) % 4) + (Math.sin(t * 6 + x) > 0.4 ? 1 : 0));
+          const h = boost > 0 ? Math.round(h0 * (1 + boost * 1.8)) : h0;
           ctx.fillStyle = "#ff8a2a";
           ctx.fillRect(x, f.y + 1 - h, 2, h);
           ctx.fillStyle = "#ffd25a";
@@ -245,7 +257,8 @@ export function terraceLights(L: Layout, info: PaintInfo): Light[] {
   const f = T.fire;
   if (f) {
     const flick = 0.82 + Math.sin(info.t * 9) * 0.06 + Math.sin(info.t * 3.7) * 0.08;
-    out.push([f.x + f.w / 2, f.y + 4, Math.max(40, f.w * 0.9), flick, "#ff9a45", 0.28]);
+    const boost = fireBoost(info.t);
+    out.push([f.x + f.w / 2, f.y + 4 - boost * 4, Math.max(40, f.w * 0.9) * (1 + boost * 0.5), Math.min(1, flick + boost * 0.25), "#ff9a45", 0.28 + boost * 0.2]);
   }
   for (const [i, b] of T.bulbs.entries()) if (i % 3 === 1) out.push([b.x, b.y + 16, 26, 0.45, "#ffd9a0", 0.06]);
   const tub = planOf(L)?.tub;

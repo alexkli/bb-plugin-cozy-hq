@@ -121,6 +121,185 @@ export const SOUNDS: Record<string, SoundRecipe> = {
   },
 };
 
+// ------------------------------------------------------------------ things to click
+
+/** Hover texts, activities and lines for the loft's things to click. Cues are [seconds after everyone's there, who (by spot), words, sound]. */
+export const SKY = {
+  hover: {
+    tub: "Hot tub · turn on the jets",
+    fire: "Fire table · turn it up",
+    scope: "Telescope · what's down there?",
+    scopeIn: "Telescope · spy on the city",
+    glass: "The city, sixty floors down · look out",
+    edge: "The drop past the glass · look down",
+    pendants: "Glass pendants · the dimmer",
+    stair: "Spiral stair · up to the roof",
+  },
+  activity: {
+    soak: "soaking in the hot tub",
+    smores: "toasting marshmallows at the fire table",
+    cocoa: "sipping cocoa by the fire",
+    look: "looking through the telescope",
+    fireworks: "watching the fireworks",
+  },
+  soak: [
+    [0.6, 0, "Ahh…"],
+    [2.8, 1, "Best meeting room in the building."],
+    [6.6, 0, "Wake me at five."],
+    [10.4, 1, "Shouldn't we be working?"],
+    [12.6, 0, "We are. Deep thinking."],
+  ],
+  duck: [
+    [0.4, 0, "Ahh…"],
+    [2, 1, "Wait. Who brought a duck?", "sky-duck"],
+    [4.8, 0, "He's on the team now."],
+    [8.6, 1, "Quack."],
+    [11, 0, "He has a better view than my desk."],
+  ],
+  soakNight: [
+    [0.6, 0, "Ahh…"],
+    [3, 1, "Look at all those lights."],
+    [7, 0, "Somebody pinch me."],
+    [11, 1, "Best office ever."],
+  ],
+  smores: [
+    [0.4, 0, "Marshmallows, sixty floors up."],
+    [3.4, 2, "Turn it slowly… golden…"],
+    [6.6, 1, "Mine's flambé now.", "sky-whoosh"],
+    [8.4, 0, "Very penthouse."],
+    [11.2, 2, "A perfect one. Who wants it?"],
+    [12.8, 1, "Me!"],
+  ],
+  cocoa: [
+    [0.5, 0, "Ooh, toasty."],
+    [3.4, 1, "It's chilly up here at night."],
+    [6.8, 2, "Extra marshmallows in mine."],
+    [10.2, 0, "I could stay out here all night."],
+  ],
+  fireworks: [
+    [0.6, 0, "Ooooh!"],
+    [2.4, 1, "Aaaah!"],
+    [5, 2, "Best seats in town."],
+    [8.2, 0, "Was that a heart?!"],
+    [11, 1, "Encore!"],
+  ],
+  flare: ["Whoa!", "Easy on the dial!", "Toasty!"],
+  jets: ["Ooh, bubbles!", "Jets on!", "Now we're talking."],
+  look: ["Let's see…", "Hm, where's it pointed…"],
+  /** What the telescope finds: the line when it comes into view, then one more. */
+  scope: {
+    falcon: ["A peregrine falcon! Right on that ledge.", "They nest up here, you know."],
+    parade: ["There's a parade down there!", "Balloons and a whole marching band."],
+    party: ["Rooftop party across the street.", "We're not invited."],
+    proposal: ["Someone's proposing on that roof!", "They said yes!"],
+    waver: ["Someone in that tower is waving at me.", "Hi! Hello!"],
+    moon: ["You can see the craters!", "Hello, moon."],
+  },
+  heli: ["Traffic chopper!", "That one's flying low.", "Wave at the helicopter!"],
+  blimp: ["A blimp! Haven't seen one in years.", "Is that a blimp? Up here?"],
+  washer: ["Morning!", "They missed a spot.", "Brave job, that."],
+  ooh: ["Fireworks!", "Ooh!", "Over the river!"],
+  dimDay: ["Ooh, mood lighting.", "Presentation mode!"],
+  dimNight: ["Who's on the dimmer?", "Fancy."],
+  slinky: ["Ha! A slinky.", "Who's up on the roof?", "Again! Again!"],
+  plane: ["It says: ‘Roof, five o'clock. Bring snacks.’", "A note from the roof: ‘Wave!’", "Nice fold. Ten out of ten."],
+} as const;
+
+const crackle = (k: Parameters<SoundRecipe>[0], from: number, dur: number, n: number, vol: number) => {
+  for (let i = 0; i < n; i++) k.noise(from + ((i * 0.6180339) % 1) * dur, 0.025, vol * (0.6 + ((i * 7) % 5) / 10), 2400 + ((i * 13) % 7) * 300);
+};
+
+/** The synth sounds for the things to click. */
+export const CLICK_SOUNDS: Record<string, SoundRecipe> = {
+  // The hot tub's jets: a rush of water and bubbles popping.
+  "sky-jets": (k) => {
+    k.swell(0, 2.6, 0.08, 600, 900, 0.7, "lowpass");
+    k.swell(0.1, 2.4, 0.04, 2400, 3200, 1.2);
+    for (let i = 0; i < 16; i++) k.tone(700 + ((i * 197) % 900), 0.15 + ((i * 0.6180339) % 1) * 2.3, 0.05, "sine", 0.025, 1500 + ((i * 131) % 500));
+  },
+  // A rubber duck's squeak.
+  "sky-duck": (k) => {
+    k.tone(1450, 0, 0.09, "square", 0.02, 1850);
+    k.tone(1400, 0.16, 0.13, "square", 0.02, 1750);
+  },
+  // The fire table flaring up.
+  "sky-whoosh": (k) => {
+    k.swell(0, 0.9, 0.11, 220, 1400, 1.1);
+    k.swell(0.4, 2.2, 0.05, 520, 400, 0.6, "lowpass");
+    crackle(k, 0.3, 2.2, 14, 0.06);
+  },
+  // A peregrine's call: kek-kek-kek.
+  "sky-falcon": (k) => {
+    for (let i = 0; i < 5; i++) k.tone(2300, 0.1 + i * 0.13, 0.06, "square", 0.012, 1900);
+  },
+  // A helicopter close by the glass.
+  "sky-chopper": (k) => {
+    k.swell(0, 4.5, 0.05, 140, 240, 0.7, "lowpass");
+    for (let i = 0; i < 60; i++) {
+      const env = Math.sin((i / 60) * Math.PI);
+      k.noise(i * 0.075, 0.04, 0.03 + env * 0.12, 220 + env * 160);
+    }
+    k.tone(72, 0, 4.4, "sawtooth", 0.012, 64);
+  },
+  // A blimp's engines droning by.
+  "sky-blimp": (k) => {
+    k.tone(58, 0, 3.6, "sawtooth", 0.014, 60);
+    k.tone(116, 0.2, 3.2, "sine", 0.03, 118);
+    k.swell(0, 3.6, 0.03, 180, 260, 0.6, "lowpass");
+  },
+  // A window washer's winch, then the squeegee.
+  "sky-winch": (k) => {
+    k.tone(180, 0, 1.6, "sawtooth", 0.012, 300);
+    k.swell(0, 1.6, 0.03, 500, 900, 2);
+    for (let i = 0; i < 3; i++) k.tone(1900, 2.4 + i * 0.5, 0.18, "sine", 0.03, 2600);
+  },
+  // Fireworks over the river: thumps, whistles and crackling.
+  "sky-fireworks": (k) => {
+    for (const [i, s] of [0, 0.9, 1.6, 2.7, 3.3, 4.4].entries()) {
+      k.tone(900 + i * 80, s, 0.45, "sine", 0.012, 1600);
+      k.tone(110, s + 0.5, 0.35, "sine", 0.12, 45);
+      k.noise(s + 0.5, 0.12, 0.08, 900);
+      crackle(k, s + 0.7, 0.8, 8, 0.03);
+    }
+  },
+  // A soft chime as the pendants come up, and again as they settle.
+  "sky-dimmer": (k) => {
+    [1047, 1319, 1568].forEach((f, i) => k.tone(f, i * 0.4, 0.8, "sine", 0.05, f));
+    [1568, 1319, 1047].forEach((f, i) => k.tone(f, 4.8 + i * 0.35, 0.8, "sine", 0.035, f));
+    k.tone(120, 0, 5.6, "sine", 0.01, 124);
+  },
+  // A slinky stepping down the stairs.
+  "sky-slinky": (k) => {
+    for (let i = 0; i < 12; i++) k.tone(520 - i * 18, 0.05 + i * 0.26, 0.16, "sine", 0.05, 900 - i * 30);
+  },
+  // A paper plane gliding down.
+  "sky-glide": (k) => {
+    k.swell(0, 2.6, 0.04, 2200, 700, 1.5);
+    k.noise(2.7, 0.06, 0.04, 2500);
+  },
+  // Looking through the telescope: a click and a little whirr.
+  "sky-scope": (k) => {
+    k.noise(0, 0.03, 0.08, 3000);
+    k.tone(600, 0.05, 0.35, "triangle", 0.015, 900);
+  },
+  // Far below: a marching band and a crowd.
+  "sky-parade": (k) => {
+    const tune = [392, 440, 494, 523, 494, 440, 392, 330];
+    tune.forEach((f, i) => k.tone(f, i * 0.32, 0.26, "sawtooth", 0.012, f));
+    for (let i = 0; i < 8; i++) k.tone(i % 2 ? 147 : 98, i * 0.32, 0.18, "square", 0.012, i % 2 ? 147 : 98);
+    k.swell(0, 2.8, 0.03, 900, 1300, 0.8);
+  },
+  // A party across the street: a muffled beat.
+  "sky-party": (k) => {
+    for (let i = 0; i < 8; i++) k.tone(70, i * 0.36, 0.14, "sine", 0.12, 45);
+    for (let i = 0; i < 4; i++) k.tone(330, 0.18 + i * 0.72, 0.12, "square", 0.01, 330);
+  },
+  // Aww: a little rising sparkle.
+  "sky-aww": (k) => {
+    [784, 988, 1175, 1568].forEach((f, i) => k.tone(f, i * 0.09, 0.3, "triangle", 0.03, f));
+  },
+};
+
 export function skylineOutdoor(weather: WeatherKind, night: boolean): string {
   switch (weather) {
     case "storm":

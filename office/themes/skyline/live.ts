@@ -260,8 +260,18 @@ function sculpture(): HTMLCanvasElement {
   });
 }
 
+type DecorKind = "telescope" | "umbrellas" | "stair" | "vase" | "sculpture";
+
+const DECOR: Record<DecorKind, { w: number; h: number; sprite: () => HTMLCanvasElement }> = {
+  telescope: { w: 16, h: 26, sprite: telescope },
+  umbrellas: { w: 12, h: 20, sprite: umbrellaStand },
+  stair: { w: 32, h: 50, sprite: spiralStair },
+  vase: { w: 14, h: 30, sprite: floorVase },
+  sculpture: { w: 14, h: 28, sprite: sculpture },
+};
+
 interface DecorPlan {
-  items: { canvas: HTMLCanvasElement; x: number; y: number; z: number }[];
+  items: { kind: DecorKind; x: number; y: number; z: number }[];
 }
 
 function plan(L: Layout): DecorPlan {
@@ -273,39 +283,49 @@ function plan(L: Layout): DecorPlan {
     const apart = (r: Rect, o: Rect, m: number) => r.x + r.w < o.x - m || r.x > o.x + o.w + m || r.y + r.h < o.y - m || r.y > o.y + o.h + m;
     const closed = [...L.rooms.filter((room) => room.walls).map((room) => room.rect), ...outdoors(L)];
     const clearOfEvents = (r: Rect) => apart(r, ev, 8) && closed.every((c) => apart(r, c, 4));
-    const place = (c: HTMLCanvasElement, within: Rect | undefined, pick: "first" | "last" = "first", anywhere = false) => {
+    const place = (kind: DecorKind, within: Rect | undefined, pick: "first" | "last" = "first", anywhere = false) => {
+      const { w, h } = DECOR[kind];
       const spots = fp
-        .find(c.width + 2, c.height, 24, within)
+        .find(w + 2, h, 24, within)
         .filter((r) => (anywhere ? apart(r, ev, 8) && outdoors(L).every((o) => apart(r, o, 4)) : clearOfEvents(r)) && !taken.some((o) => Math.abs(o.x - r.x) < 48 && Math.abs(o.y - r.y) < 48));
       const r = pick === "first" ? spots[0] : spots[spots.length - 1];
       if (!r) return false;
       taken.push(r);
-      items.push({ canvas: c, x: r.x + 1, y: r.y, z: r.y + c.height - 1 });
+      items.push({ kind, x: r.x + 1, y: r.y, z: r.y + h - 1 });
       return true;
     };
     // A telescope by the glass, umbrellas by the elevator.
     for (const win of L.wall.windows) {
       const sg = L.segments.find((s) => win.x >= s.x0 && win.x < s.x1);
-      if (sg && place(telescope(), { x: win.x - 10, y: sg.depth + 2, w: win.w + 20, h: 40 }, "first", true)) break;
+      if (sg && place("telescope", { x: win.x - 10, y: sg.depth + 2, w: win.w + 20, h: 40 }, "first", true)) break;
     }
     const d = L.wall.door;
     const dseg = L.segments.find((s) => d.x >= s.x0 && d.x < s.x1);
-    place(umbrellaStand(), { x: d.x - 34, y: (dseg?.depth ?? 64) + 1, w: d.w + 68, h: 30 });
+    place("umbrellas", { x: d.x - 34, y: (dseg?.depth ?? 64) + 1, w: d.w + 68, h: 30 });
     // A spiral stair up to the roof: in the lounge, else by the reception or anywhere open.
-    if (!place(spiralStair(), { x: L.lounge.x, y: L.lounge.y, w: L.lounge.w, h: L.lounge.h })) {
-      if (!place(spiralStair(), { x: L.waiting.x, y: L.waiting.y, w: L.waiting.w, h: L.waiting.h })) place(spiralStair(), undefined, "last");
+    if (!place("stair", { x: L.lounge.x, y: L.lounge.y, w: L.lounge.w, h: L.lounge.h })) {
+      if (!place("stair", { x: L.waiting.x, y: L.waiting.y, w: L.waiting.w, h: L.waiting.h })) place("stair", undefined, "last");
     }
-    place(floorVase(), { x: L.lounge.x, y: L.lounge.y, w: L.lounge.w, h: L.lounge.h });
-    place(sculpture(), { x: L.waiting.x, y: L.waiting.y, w: L.waiting.w, h: L.waiting.h }, "last");
-    if (!items.some((it) => it.canvas === floorVase())) place(floorVase(), undefined, "last");
+    place("vase", { x: L.lounge.x, y: L.lounge.y, w: L.lounge.w, h: L.lounge.h });
+    place("sculpture", { x: L.waiting.x, y: L.waiting.y, w: L.waiting.w, h: L.waiting.h }, "last");
+    if (!items.some((it) => it.kind === "vase")) place("vase", undefined, "last");
     return { items };
   });
+}
+
+/** Where the telescope by the glass or the spiral stair stands (top left, sprite size), if the loft has one. */
+export function decorAt(L: Layout, kind: "telescope" | "stair"): Rect | null {
+  const it = plan(L).items.find((i) => i.kind === kind);
+  return it ? { x: it.x, y: it.y, w: DECOR[kind].w, h: DECOR[kind].h } : null;
 }
 
 export function skylineDecor(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): Drawable[] {
   const P = plan(L);
   const out: Drawable[] = terraceDecor(ctx, L, info);
-  for (const it of P.items) out.push({ z: it.z, draw: () => ctx.drawImage(it.canvas, it.x, it.y) });
+  for (const it of P.items) {
+    const spr = DECOR[it.kind].sprite();
+    out.push({ z: it.z, draw: () => ctx.drawImage(spr, it.x, it.y) });
+  }
   return out;
 }
 

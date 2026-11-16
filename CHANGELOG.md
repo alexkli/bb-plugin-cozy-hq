@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- In the Sky Loft you can click the hot tub, the fire table, the telescopes, the glass with the city below, the globe pendants and the spiral stair.
+  - The hot tub: the jets come on, idle people climb in for a soak ("Ahh…"), and now and then a rubber duck bobs about.
+  - The fire table roars up; people come over to toast marshmallows (one goes flambé) or, on cold nights, to sip cocoa.
+  - The telescopes: someone takes a look, and a round lens view shows what they spotted: a peregrine falcon on a ledge, a parade with a giant balloon, a rooftop party, a proposal ("They said yes!"), someone waving from the tower across the street, or the moon.
+  - The glass: a helicopter flies close by (with a searchlight after dark), a blimp drifts past with a light board, the window washers' cradle rises past and they wave; at night, fireworks over the city, in the windows and seen from above in the glass below, while people watch from the terrace.
+  - The globe pendants put on a dimmer show; a slinky walks down the spiral stair, or a paper plane with a note glides down from the roof.
+  - Each with its own synth sounds.
 - Every scenery calls its pets by their own names everywhere: Juniper in Redwood Camp gets the whistle from your desk, not Biscuit, and people's small talk names the scenery's dog and cat (`labels.pets` for scenery authors).
 - **You** in the settings: pick how the boss at the big desk (you) looks.
   - A compact row under the office buddy: a small preview, the figure (woman, man or nonbinary) and **Customize…**, which opens the look editor with a big preview from the front and the back (it fits a phone too).
