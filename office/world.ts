@@ -25,6 +25,7 @@ import {
 import { buildProps, paintBackground, roombaSprite, speakerSprite, type Prop } from "./furniture.ts";
 import type { Facing, Layout, Point, PokeKind, Rect, Spot } from "./layout.ts";
 import { waitsForYou, type DeskStyle, type Mood, type WaitKind } from "./model.ts";
+import { highlightOf, startsWork, type Highlight } from "./highlight.ts";
 import { chairCanvas, deskCanvas, screenFor, type ChairTone } from "./desks.ts";
 import { hash, mix, rng } from "./pixel.ts";
 import { drawPixelText, pixelTextWidth } from "./pixelfont.ts";
@@ -77,6 +78,8 @@ export interface WorldThread {
   chairTone: ChairTone;
   /** Works in a Vision Pro instead of on monitors. */
   visionPro: boolean;
+  /** Finished (or waiting on you) and you haven't opened it since: a warm glow. */
+  unopened?: boolean;
 }
 
 /** What a thread was doing the last time you looked at the office. */
@@ -119,6 +122,8 @@ export interface LabelAnchor {
   y: number;
   mood: Mood;
   kind: WaitKind | null;
+  /** New for you (the warm glow): the tag gets a matching accent. */
+  unopened: boolean;
 }
 
 export type Hit =
@@ -157,6 +162,8 @@ interface Agent extends Walker {
   huddle: number | null;
   /** Shuffling along after a mishap. */
   slow: boolean;
+  /** On the way to start new work: a cool glow until seated. */
+  starting: boolean;
 }
 
 type HuddleKind = "coffee" | "cooler" | "chat" | "couch" | "pingpong" | "darts";
@@ -336,6 +343,10 @@ const NPC_SPEED = 24;
 const KID_SPEED = 40;
 
 const inRect = (x: number, y: number, r: Rect) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+
+/** The two highlight tints, warm gold and cool sky blue: a saturated rim that shows on pale floors, and a lighter haze around it. */
+const GLOW: Record<Highlight, string> = { finished: "#ffb23c", started: "#4fb8ff" };
+const GLOW_HAZE: Record<Highlight, string> = { finished: "#ffdf80", started: "#a0e8ff" };
 
 const SEATED_KINDS = new Set(["desk", "couch", "beanbag", "armchair", "meeting-seat", "review", "boss-guest", "stool", "bench"]);
 
@@ -728,6 +739,7 @@ export class World {
           nextHobby: this.time + 4 + (hash(t.id) % 7),
           huddle: null,
           slow: false,
+          starting: false,
           // Everyone walks a little differently: their own lane, corner cutting and pace.
           lane: { x: ((hash(t.id) >>> 2) % 11) - 5, y: ((hash(t.id) >>> 6) % 9) - 4 },
           cut: 7 + ((hash(t.id) >>> 9) % 10),
@@ -741,13 +753,17 @@ export class World {
         else if (instant && spot && before) {
           // Changed while you were away: from where they were to where they go now.
           this.place(a, before);
-          if (before.id !== spot.id) this.walkTo(a, spot);
+          if (before.id !== spot.id) {
+            this.walkTo(a, spot);
+            a.starting = startsWork(was?.mood ?? null, t.mood);
+          }
         } else if (spot) {
           this.emit("door", true);
           this.emit("arrive");
           this.doorOpenUntil = this.time + 1.6;
           this.burst(L.entrance.x, L.entrance.y - 16, "sparkle", 8);
           this.walkTo(a, spot);
+          a.starting = startsWork(was?.mood ?? null, t.mood);
           if (this.dog.state !== "follow" && this.dog.goal !== "event" && this.rand() < 0.35) this.dogTo("greet");
         }
         continue;
@@ -756,6 +772,7 @@ export class World {
       a.thread = t;
       if (prevMood !== t.mood) {
         a.moodSince = this.time;
+        a.starting = !instant && startsWork(prevMood, t.mood);
         if (!instant) this.onMoodChange(a, prevMood, t.mood);
       }
       a.leaving = false;
@@ -794,6 +811,7 @@ export class World {
     a.target = null;
     a.path = [];
     a.approach = [...spot.path];
+    a.starting = false;
   }
 
   private walkTo(a: Agent, spot: Spot): void {
@@ -858,7 +876,7 @@ export class World {
     for (const a of this.agents.values()) {
       if (a.leaving || !this.settled(a)) continue;
       const lying = this.mishap?.id === a.id && this.mishap.phase === "down";
-      out.push({ id: a.id, x: Math.round(a.x), y: Math.round(lying ? a.y - 22 : this.headTop(a)), mood: a.thread.mood, kind: a.thread.waitKind });
+      out.push({ id: a.id, x: Math.round(a.x), y: Math.round(lying ? a.y - 22 : this.headTop(a)), mood: a.thread.mood, kind: a.thread.waitKind, unopened: a.thread.unopened === true });
     }
     // Ones waiting on you claim the best spots first.
     const rank = (l: LabelAnchor) => (l.kind && l.kind !== "drafting" ? 0 : 1);
@@ -3357,6 +3375,8 @@ export class World {
       ctx.fillStyle = "rgba(40,20,30,0.18)";
       ctx.fillRect(Math.round(a.x - 5), Math.round(a.y - 1), 10, 2);
     }
+    const glow = this.glowOf(a);
+    if (glow) this.drawGlow(ctx, a, glow, sprite, y, seated === true);
     ctx.drawImage(sprite, Math.round(a.x - ANCHOR_X), Math.round(y - ANCHOR_Y));
     if (this.theme.dress && m?.phase !== "zap") {
       const seatedNow = onChair === true || (settled && s !== null && SEATED_KINDS.has(s.kind));
@@ -3443,6 +3463,58 @@ export class World {
         ctx.fillStyle = "#86e07f";
         ctx.fillRect(x, y + 1, 4, 1);
     }
+  }
+
+  private rims = new WeakMap<HTMLCanvasElement, Map<Highlight, HTMLCanvasElement>>();
+
+  /** Warm for a new finish you haven't opened, cool for one off to start work (see highlight.ts). */
+  private glowOf(a: Agent): Highlight | null {
+    if (a.leaving) return null;
+    return highlightOf(a.thread.mood, a.thread.unopened === true, a.starting, !this.settled(a));
+  }
+
+  /** A faint rim of light around them (and a soft pool at their feet when standing), breathing slowly. */
+  private drawGlow(ctx: CanvasRenderingContext2D, a: Agent, glow: Highlight, sprite: HTMLCanvasElement, y: number, seated: boolean): void {
+    const breath = 0.5 + 0.5 * Math.sin(this.time * 2.1 + (a.seed % 7));
+    ctx.save();
+    if (!seated) {
+      const x = Math.round(a.x);
+      const fy = Math.round(a.y);
+      ctx.fillStyle = GLOW[glow];
+      ctx.globalAlpha = 0.18 + 0.14 * breath;
+      ctx.fillRect(x - 9, fy - 1, 19, 2);
+      ctx.fillRect(x - 6, fy - 2, 13, 4);
+      ctx.fillRect(x - 4, fy - 1, 9, 2);
+    }
+    ctx.globalAlpha = 0.6 + 0.4 * breath;
+    ctx.drawImage(this.rimOf(sprite, glow), Math.round(a.x - ANCHOR_X) - 2, Math.round(y - ANCHOR_Y) - 2);
+    ctx.restore();
+  }
+
+  /** The figure grown by a crisp pixel and a fainter second one in the glow color (the figure covers the inside). */
+  private rimOf(sprite: HTMLCanvasElement, glow: Highlight): HTMLCanvasElement {
+    let byGlow = this.rims.get(sprite);
+    if (!byGlow) this.rims.set(sprite, (byGlow = new Map()));
+    const hit = byGlow.get(glow);
+    if (hit) return hit;
+    const grown = (ring: readonly (readonly [number, number])[], color: string) => {
+      const c = document.createElement("canvas");
+      c.width = sprite.width + 4;
+      c.height = sprite.height + 4;
+      const x = c.getContext("2d")!;
+      for (const [dx, dy] of ring) x.drawImage(sprite, 2 + dx, 2 + dy);
+      x.globalCompositeOperation = "source-in";
+      x.fillStyle = color;
+      x.fillRect(0, 0, c.width, c.height);
+      return c;
+    };
+    const rim = grown([[-1, 0], [1, 0], [0, -1], [0, 1]], GLOW[glow]);
+    const x = rim.getContext("2d")!;
+    x.globalCompositeOperation = "destination-over";
+    x.globalAlpha = 0.5;
+    x.drawImage(grown([[-2, 0], [2, 0], [0, -2], [0, 2], [-1, -1], [1, -1], [-1, 1], [1, 1]], GLOW_HAZE[glow]), 0, 0);
+    byGlow.set(glow, rim);
+    return rim;
   }
 
   private xrays = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
@@ -4808,6 +4880,11 @@ export class World {
       }
     }
     if (lit?.lights) lights.push(...lit.lights(L, this.paintInfo(env)));
+    // The glow stays gentle at night: a small pool of light goes with them.
+    for (const a of this.agents.values()) {
+      const glow = this.glowOf(a);
+      if (glow) lights.push([a.x, a.y - 10, 22, 0.5, GLOW_HAZE[glow], 0.14]);
+    }
     for (const [x, y, r, k] of lights) if (r > 0) hole(x, y, r, k);
     ctx.drawImage(d, 0, 0);
     ctx.save();

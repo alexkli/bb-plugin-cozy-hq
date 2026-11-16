@@ -52,6 +52,15 @@ The office keeps going while you're elsewhere in bb, and it remembers what
 everyone was doing when you last looked: coming back, only the threads whose
 state changed since then get up and walk.
 
+A soft glow picks out what's new. A warm gold glow means a thread finished,
+failed or started waiting on you and you haven't opened it since: it glows
+on its way to the waiting room (or the whiteboard, with a plan) and while it
+waits there, and its name tag gets a matching halo. Opening the thread once
+ends it; marking it unread again to keep it around as a reminder doesn't
+bring it back, only a new finish does. A cool blue glow means a thread just
+started new work and is on its way to its desk (or the meeting room to
+plan); it fades once it sits down.
+
 Idle threads get together every minute or so for a coffee, water-cooler
 talk, a hallway chat, the couch, ping-pong or darts, mostly with comic speech
 bubbles: small talk, a tech headline, or what the thread actually did last.
@@ -196,8 +205,8 @@ by its own title. None needs an account or a key.
   it off with `workTalk false`.
 - Only `http`/`https` links from headlines and inbox items are opened.
 - Preferences (sound, the buddy's position, remembered desks, what everyone
-  was doing when you last looked, recent office news) stay in your browser's
-  local storage.
+  was doing when you last looked, which threads you opened, recent office
+  news) stay in your browser's local storage.
 
 ## Develop
 
@@ -224,6 +233,9 @@ localStorage["bb-plugin:cozy-hq:debug"] = '{"hour":20,"sample":true,"event":"lan
   screenshots use it); with it, `news` set to `mix` or `feed` shows headlines
   from several sources or from a plain feed. `demo` dresses your first twelve
   threads up in every state instead.
+- `patch` changes sample threads by id to try out state changes, e.g.
+  `{"sample-13": {"status": "active", "indicator": "runtime"}}` sends one to
+  work (with its cool glow).
 - `event` keeps an office event running: `party`, `birthday`, `baby-shower`,
   `lunch`, `karaoke`, `cornhole`, `darts`, `kids`, `yoga`, `ice-cream`, or a
   festival: `snowday`, `lunarnewyear`, `valentines`, `carnival`, `stpatricks`,

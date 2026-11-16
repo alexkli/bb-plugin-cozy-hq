@@ -9,6 +9,10 @@
   - The weather falls on the whole camp: rain with puddles, snow that settles, fog between the trunks, storm gusts and cloud shadows.
 - For scenery authors: an `openWindow` hook, and the "Open the window" hover text goes through `labels.words`.
 - Tech news on the TV from more sources: pick Hacker News, Lobsters, Techmeme, The Verge, Ars Technica, DEV Community, Slashdot, the GitHub Blog, a mix of the first five, or any RSS or Atom feed (`newsSource`, `newsFeed`). The TECH channel names its source, and in a mix each headline's.
+- A soft glow picks out what's new:
+  - Warm gold around a thread that finished, failed or asked you something and that you haven't opened since, walking to the waiting room and sitting there; its name tag gets a matching halo.
+  - Opening the thread once ends it. Marking it unread again to keep as a reminder doesn't bring it back; only a new finish does.
+  - Cool blue around a thread that just started new work, while it walks to its desk.
 
 ## 0.4.0 (2026-11-15)
 

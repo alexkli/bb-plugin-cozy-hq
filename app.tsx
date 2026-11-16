@@ -15,6 +15,7 @@ import type { InboxItem, RpcContract, Story, UsageCard, Weather } from "./contra
 import { lookKey, OfficeView, type OfficeThread } from "./office/OfficeView.tsx";
 import { Buddy, freshSince, newsLevel, readLook } from "./office/Buddy.tsx";
 import { visibleThreads, type InteractionKind } from "./office/model.ts";
+import { updateOpened } from "./office/highlight.ts";
 
 const PROJECT_HUES = [205, 340, 145, 32, 268, 175, 8, 295, 55, 225];
 
@@ -226,14 +227,27 @@ function threadOnPage(threads: OfficeThread[], path: string): string | null {
   return null;
 }
 
+/**
+ * Note which thread you have open, wherever you are in bb, for the office's
+ * glow: bb forgets you opened a thread once you mark it unread (and doesn't
+ * note opening one that has a question), this record doesn't.
+ */
+function useNoteOpened(storageKey: string, threads: OfficeThread[], openId: string | null, loading: boolean): void {
+  useEffect(() => {
+    if (!loading) updateOpened(storageKey, visibleThreads(threads), Date.now(), openId);
+  }, [storageKey, threads, openId, loading]);
+}
+
 function BuddyOverlay() {
   const pluginId = experimental_usePluginId();
   const navigate = useBbNavigate();
-  const { threads } = useOfficeThreads(false);
+  const { threads, loading } = useOfficeThreads(false);
   const [buddyOn] = useBuddySetting();
   const path = usePathname();
   const onOffice = path.startsWith(`/plugins/${pluginId}/office`);
   const currentId = useMemo(() => (onOffice ? null : threadOnPage(threads, path)), [threads, path, onOffice]);
+  // Even with the buddy turned off.
+  useNoteOpened(`bb-plugin:${pluginId}`, threads, currentId, loading);
   if (!buddyOn) return null;
   return (
     <Buddy

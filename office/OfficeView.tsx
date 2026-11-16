@@ -28,6 +28,7 @@ import {
   type OfficeEvent,
   type ThreadLike,
 } from "./model.ts";
+import { isUnopened, NO_RECORD, noteOpened, updateOpened, type OpenedRecord } from "./highlight.ts";
 import { hash } from "./pixel.ts";
 import { Sound, type SoundName } from "./sound.ts";
 import { World, type Hit, type LabelAnchor, type SeenState, type SpeechBubble, type Talk, type WorldThread } from "./world.ts";
@@ -134,6 +135,8 @@ interface DebugPrefs {
   season?: string;
   /** With `sample`: headlines from a "mix" of sources or a plain "feed" instead of Hacker News. */
   news?: string;
+  /** Change sample threads by id to try out state changes, e.g. {"sample-1": {"indicator": "unread-success"}}. */
+  patch?: Record<string, Partial<OfficeThread>>;
 }
 
 function readJson<T>(key: string, fallback: T): T {
@@ -284,7 +287,7 @@ export function OfficeView(input: OfficeProps) {
     const news = sampleNews(debug.news, now);
     return {
       ...input,
-      threads: sampleThreads(now),
+      threads: sampleThreads(now).map((t) => ({ ...t, ...debug.patch?.[t.id] })),
       loading: false,
       usage: sampleUsage(now),
       usageLoading: false,
@@ -295,7 +298,7 @@ export function OfficeView(input: OfficeProps) {
       weather: SAMPLE_WEATHER,
       onRecap: async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, sampleRecap(id)]).filter((e): e is [string, string] => e[1] !== null)),
     };
-  }, [input, debug.sample, debug.news]);
+  }, [input, debug.sample, debug.news, debug.patch]);
   const { threads } = props;
   useEffect(() => {
     if (debug.expose) (window as unknown as { __cozyHq?: unknown }).__cozyHq = worldRef.current;
@@ -385,6 +388,7 @@ export function OfficeView(input: OfficeProps) {
   const synced = useRef(false);
   const prevMoods = useRef<Map<string, Mood> | null>(null);
   const titles = useRef(new Map<string, string>());
+  const pretendOpened = useRef<OpenedRecord>(NO_RECORD);
 
   const syncWorld = useCallback(
     (instant: boolean) => {
@@ -413,6 +417,10 @@ export function OfficeView(input: OfficeProps) {
         const live = new Set(visible.map((t) => t.id));
         writeJson(`${storageKey}:desks`, Object.fromEntries([...homeDesks.current].filter(([id]) => live.has(id)).slice(-80)));
       }
+      // New for you since you last opened them (the overlay notes the thread you open, wherever you are in bb).
+      const opened = pretend
+        ? (pretendOpened.current = noteOpened(pretendOpened.current, visible, Date.now(), null))
+        : updateOpened(storageKey, visible, Date.now(), null);
       // One or two people work in a Vision Pro.
       const vision = new Set(
         visible
@@ -437,6 +445,7 @@ export function OfficeView(input: OfficeProps) {
           deskStyle: deskStyleFor(t.model, t.providerId),
           chairTone: chairToneFor(t.providerId),
           visionPro: vision.has(t.id),
+          unopened: isUnopened(t, opened),
         });
       }
       world.sync(list, instant, lastSeen);
@@ -1102,6 +1111,8 @@ interface TagBox {
   icon: string;
   tone: string;
   unread: boolean;
+  /** Finished and not opened since: a warm accent, like the glow. */
+  unopened: boolean;
   title: string;
   label: string;
   left: number;
@@ -1138,7 +1149,7 @@ function placeTags(anchors: LabelAnchor[], byId: Map<string, OfficeThread>, scal
     const unread = t.isUnread || o.kind === "done" || o.kind === "error";
     const icon = o.kind ? WAIT_ICON[o.kind] : (MOOD_ICON[o.mood] ?? "·");
     const tone = o.kind ?? o.mood;
-    const label = `${o.kind ? WAIT_LABEL[o.kind] : moodLabel(o.mood)} · ${unread ? "unread" : "read"}: ${title}`;
+    const label = `${o.kind ? WAIT_LABEL[o.kind] : moodLabel(o.mood)} · ${unread ? "unread" : "read"}${o.unopened ? ", new" : ""}: ${title}`;
     let done = false;
     for (let tier = 0; tier < 5 && !done; tier++) {
       for (const shift of [0, -0.6, 0.6, -1.15, 1.15]) {
@@ -1147,7 +1158,7 @@ function placeTags(anchors: LabelAnchor[], byId: Map<string, OfficeThread>, scal
         if (top < 2) continue;
         const box = { left, top, w, h: TAG_H };
         if (hits(box)) continue;
-        placed.push({ id: o.id, icon, tone, unread, title, label, ...box, ax, ay });
+        placed.push({ id: o.id, icon, tone, unread, unopened: o.unopened, title, label, ...box, ax, ay });
         done = true;
         break;
       }
@@ -1171,7 +1182,7 @@ function NameTags(props: { tags: TagBox[]; width: number; height: number; onOpen
         <button
           key={t.id}
           type="button"
-          className={`chq-tag chq-tag-${t.tone} ${t.unread ? "is-unread" : "is-read"}`}
+          className={`chq-tag chq-tag-${t.tone} ${t.unread ? "is-unread" : "is-read"}${t.unopened ? " is-new" : ""}`}
           style={{ left: t.left, top: t.top, width: t.w }}
           onClick={() => props.onOpen(t.id)}
           title={t.label}
@@ -1249,6 +1260,7 @@ const LEGEND: { title: string; text: string; color: string; icon: string }[] = [
   { title: "Waiting room · rain cloud", text: "Hit an error", color: "#ffd6e5", icon: "☁" },
   { title: "Desk & chair", text: "Desk = model, chair = provider", color: "#ffe9c7", icon: "◧" },
   { title: "Name tags", text: "Solid = unread, outlined = read", color: "#fff3a3", icon: "▸" },
+  { title: "A soft glow", text: "Warm: finished, not opened yet · cool: off to work", color: "#ffe9c7", icon: "✧" },
   { title: "Shirt badge", text: "What the thread is about", color: "#d9f7c9", icon: "★" },
   { title: "Kitchen · cooler", text: "Idle under 20 min", color: "#ffe9c7", icon: "☕" },
   { title: "Office events", text: "Idle agents join in", color: "#ffd6e5", icon: "★" },

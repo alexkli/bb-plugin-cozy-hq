@@ -769,6 +769,8 @@
 .chq-tag.is-read i { background: #fffaf0; color: var(--chq-tag); box-shadow: inset 0 0 0 1.5px var(--chq-tag); }
 .chq-tag.is-read { font-weight: 500; background: #f6f1e7; }
 .chq-tag.is-read span { opacity: 0.85; }
+/* New for you: a warm halo to match the glow around the figure. */
+.chq-tag.is-new { box-shadow: 0 0 0 1px #ffb23c, 0 0 6px 1px rgba(255, 178, 60, 0.7), 1px 1px 0 rgba(42, 30, 46, 0.35); }
 
 /* The settings gear, top right (the panel opens below it). */
 .chq-gear-btn {
