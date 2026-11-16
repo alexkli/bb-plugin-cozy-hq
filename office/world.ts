@@ -32,7 +32,7 @@ import { hash, mix, rng } from "./pixel.ts";
 import { drawPixelText, pixelTextWidth } from "./pixelfont.ts";
 import type { SoundName } from "./sound.ts";
 import { CLASSIC } from "./themes/classic.ts";
-import { withPets, type GatherCue, type GatherSpot, type Gathering, type Light, type PaintInfo, type SceneryClickable, type Theme, type VisitorKind } from "./theme.ts";
+import { withPets, type GatherCue, type GatherSpot, type Gathering, type Light, type PaintInfo, type SceneryActions, type SceneryClickable, type Theme, type VisitorKind } from "./theme.ts";
 import { DEFAULT_YOU, dressYou, withPronouns, youEmblem, youLook, type You } from "./you.ts";
 import {
   drawAccessory,
@@ -453,6 +453,10 @@ export class World {
   private darts: { x: number; y: number; color: string }[] = [];
   private lampOn = true;
   private bossWaveUntil = 0;
+  /** When the scenery's tick runs next (theme.tick). */
+  private nextSceneryTick = 0;
+  /** This frame's PaintInfo, for hooks asked while drawing people (theme.pose). */
+  private info: PaintInfo = { t: 0, hour: 12, night: 0, weather: "clear", date: new Date(), season: null };
   private labeled = new Set<string>();
   private event: LiveEvent | null = null;
   private season: Season | null = null;
@@ -1144,7 +1148,13 @@ export class World {
   clickScenery(id: string, x: number, y: number): void {
     const L = this.L;
     if (!L || !this.theme.click) return;
-    const sound = this.theme.click(id, {
+    const sound = this.theme.click(id, this.sceneryActions(L, x, y));
+    if (sound) this.emit(sound, false);
+  }
+
+  /** What a scenery can do with the people in the office, from a click or its own tick. */
+  private sceneryActions(L: Layout, x: number, y: number): SceneryActions {
+    return {
       t: this.time,
       hour: this.hour,
       night: this.skyColors(this.hour).night,
@@ -1164,8 +1174,7 @@ export class World {
         else this.say(who, text, seconds);
       },
       play: (name) => this.emit(name, false),
-    });
-    if (sound) this.emit(sound, false);
+    };
   }
 
   /** Native point above an agent's head, for tooltips. */
@@ -1460,6 +1469,10 @@ export class World {
     }
     this.particles = this.particles.filter((p) => p.life < p.max);
 
+    if (this.theme.tick && t >= this.nextSceneryTick) {
+      this.nextSceneryTick = t + 0.5;
+      this.theme.tick(this.sceneryActions(L, 0, 0));
+    }
     this.updateCat(dt);
     this.updateDog(dt);
     this.updateRoomba(dt);
@@ -3686,6 +3699,7 @@ export class World {
     this.drawSky(ctx, env);
     ctx.drawImage(this.bg, 0, 0);
     const info = this.paintInfo(env);
+    this.info = info;
     this.theme.underlay?.(ctx, L, info);
     this.drawSunbeam(ctx, env);
     this.drawOpenWindows(ctx, info);
@@ -4063,7 +4077,14 @@ export class World {
   }
 
   private drawAgent(ctx: CanvasRenderingContext2D, a: Agent): void {
-    const { pose, expr, facing, seated: onChair } = this.poseOf(a);
+    const picked = this.poseOf(a);
+    const onChair = picked.seated;
+    let { pose, expr, facing } = picked;
+    if (this.theme.pose) {
+      const spot = this.settled(a) ? a.spot!.kind : null;
+      const p = this.theme.pose({ kind: "agent", id: a.id, seed: a.seed, x: a.x, y: a.y, spot, pose, expr, facing }, this.info);
+      if (p) ({ pose, expr, facing = facing } = p);
+    }
     let sprite = charSprite({ look: this.lookOf(a.thread.look, a.id), facing, pose, expr, emblem: a.thread.emblem, seated: onChair });
     let y = this.drawY(a);
     const s = a.spot;
@@ -4473,6 +4494,8 @@ export class World {
       pose = Math.floor(t * 5) % 2 ? "type1" : "type0";
       expr = Math.floor(t / 4) % 4 === 0 ? "open" : "focus";
     }
+    const fancy = !this.bossAt && !(shot && shot.phase !== "rest") && this.theme.pose?.({ kind: "boss", id: "boss", seed: 0, x, y, spot: null, pose, expr, facing }, this.info);
+    if (fancy) ({ pose, expr, facing = facing } = fancy);
     const look = this.npcLookOf("boss");
     const sprite = charSprite({ look, facing, pose, expr, emblem: facing === "back" ? null : youEmblem(this.you) });
     const phase = this.bossAt?.path.length === 0 ? this.visit?.phase : undefined;

@@ -136,6 +136,49 @@ export const CLICK_LINES = {
   ] as ClickLine[],
 };
 
+/** Bad habits (habits.ts): what the boss grumbles, and what the staff say while they're at it. */
+export const HABIT_LINES = {
+  /** You, clicked. */
+  poke: [
+    "What.",
+    "Do I look busy? Good. I am.",
+    "If it's about the heating, no.",
+    "Knock. It's a door. You knock.",
+    "It was like that when I got here.",
+    "Go and do something useful. Or don't. Just go.",
+    "I'm thinking. Don't interrupt.",
+    "Is it lunch? It feels like lunch.",
+  ],
+  /** You, clicked while dozing behind the paper. */
+  pokeNap: ["I was resting my eyes.", "I'm awake. I'm reading.", "Who let you in?"],
+  /** You, when someone sits down across the desk. */
+  guests: [
+    "Sit. Don't touch anything.",
+    "Shut the door, you're letting the warm out.",
+    "Make it quick. I'm very important.",
+    "Oh, it's you. Fine.",
+    "Mind the ashtray. It's a filing system.",
+    "If it's about the fish, it wasn't me.",
+  ],
+  /** You, after a noise nobody will mention again. */
+  parp: ["Wasn't me.", "Old building. The pipes.", "That's the chair. It does that.", "Better out than in."],
+  /** Your guests, getting up. */
+  parpGuests: ["Oh, come ON.", "I'll… come back later.", "Is that the drains?", "My eyes are watering."],
+  smoke: ["Just the one.", "Don't tell facilities.", "Doesn't count. It's out the window."],
+  pigeon: ["There you go, my lovely.", "Same time tomorrow, sir.", "He's the only one who listens."],
+  blinds: ["That car's been there all week.", "Don't look. Don't all look.", "Same van. Different hat.", "We're being watched. Or it's the bins."],
+  fishCook: ["Two minutes. Tops.", "Lovely bit of haddock, this."],
+  fishNose: ["Who's doing fish?!", "That's a crime, that is.", "Open a window. Open ALL the windows.", "It's in my jumper now."],
+};
+
+/** What people are up to, in their tooltips. */
+export const HABIT_ACTIVITY = {
+  smoke: "having a crafty smoke out the window",
+  pigeon: "feeding the pigeons",
+  blinds: "keeping an eye on the street",
+  fish: "microwaving fish (again)",
+};
+
 // ------------------------------------------------------------------ sounds
 
 const sounds: Record<string, (k: SynthKit) => void> = {
@@ -180,6 +223,33 @@ const sounds: Record<string, (k: SynthKit) => void> = {
 };
 
 // The things to click: drips, gushes, tubes, thuds, the urn, the radiator, the stairs.
+// The bad habits: a lighter, a microwave, a snore, a pigeon, and a noise from the chair.
+const habitSounds: Record<string, (k: SynthKit) => void> = {
+  "annex-lighter"(k) {
+    k.noise(0, 0.03, 0.14, 5200);
+    k.noise(0.09, 0.03, 0.1, 5200);
+    k.swell(0.12, 0.5, 0.05, 700, 500, 0.6, "lowpass");
+  },
+  "annex-ping"(k) {
+    for (let i = 0; i < 3; i++) k.tone(1980, i * 0.32, 0.16, "square", 0.025);
+  },
+  "annex-snore"(k) {
+    k.swell(0, 1.1, 0.07, 180, 320, 2, "lowpass");
+    k.tone(64, 0.1, 0.9, "sawtooth", 0.018, 58);
+  },
+  "annex-coo"(k) {
+    k.tone(430, 0, 0.2, "sine", 0.07, 390);
+    k.tone(380, 0.24, 0.3, "sine", 0.06, 340);
+  },
+  /** Short, brassy and never mentioned again. */
+  "annex-parp"(k) {
+    k.tone(98, 0, 0.42, "sawtooth", 0.06, 74);
+    k.tone(104, 0.03, 0.36, "square", 0.025, 78);
+    k.swell(0, 0.42, 0.04, 260, 180, 1.2, "lowpass");
+    k.tone(150, 0.4, 0.07, "square", 0.02, 120);
+  },
+};
+
 const clickSounds: Record<string, (k: SynthKit) => void> = {
   "annex-drips"(k) {
     for (let i = 0; i < 9; i++) k.tone(1500 - i * 25, i * (0.26 - i * 0.015), 0.05, "sine", 0.08, 800);
@@ -288,6 +358,6 @@ export const WORDS: Pick<Theme, "labels" | "sounds" | "outdoor"> = {
     poke,
     npc,
   },
-  sounds: { ...sounds, ...clickSounds },
+  sounds: { ...sounds, ...clickSounds, ...habitSounds },
   outdoor,
 };

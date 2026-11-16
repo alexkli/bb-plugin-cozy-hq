@@ -5,9 +5,9 @@
 // office/themes/README.md for how to write one.
 
 import type { WeatherKind } from "../contract.ts";
-import type { CatPose, CharPose, DogPose, Look } from "./characters.ts";
+import type { CatPose, CharPose, DogPose, Expression, Look } from "./characters.ts";
 import type { ChairTone, Screen } from "./desks.ts";
-import type { Facing, Layout, LayoutOptions, PlantPlacement, Point, PokeKind, Pose, PropPlacement, Rect, Room } from "./layout.ts";
+import type { Facing, Layout, LayoutOptions, PlantPlacement, Point, PokeKind, Pose, PropPlacement, Rect, Room, SpotKind } from "./layout.ts";
 import type { Drawable, Season } from "./life.ts";
 import type { DeskStyle } from "./model.ts";
 
@@ -105,10 +105,28 @@ export interface SceneryActions extends PaintInfo {
   gather(spots: GatherSpot[], seconds: number, cues?: GatherCue[], min?: number): Gathering | null;
   /** People within `r` px of a point, nearest first. */
   near(x: number, y: number, r: number): { id: string; x: number; y: number }[];
-  /** A speech bubble over someone (an id from `near`), `delay` seconds from now. */
+  /** A speech bubble over someone (an id from `near`, or "boss" for you), `delay` seconds from now. */
   say(id: string, text: string, seconds: number, delay?: number): void;
   /** A sound now: a name from the theme's `sounds` or a built-in. */
   play(sound: string): void;
+}
+
+/** Someone about to be drawn, and the pose the office picked for them (see `Theme.pose`). */
+export interface PoseOf {
+  /** "agent": one of your threads; "boss": you, at your desk. */
+  kind: "agent" | "boss";
+  /** The thread id; "boss" for you. */
+  id: string;
+  /** Stable per person (0 for you). */
+  seed: number;
+  /** Feet position (native px). */
+  x: number;
+  y: number;
+  /** The kind of spot they're settled at ("desk", "boss-guest", "huddle", …); null while walking, and for you. */
+  spot: SpotKind | null;
+  pose: CharPose;
+  expr: Expression;
+  facing: Facing;
 }
 
 /** A light at night: [x, y, radius, strength 0..1, color "#rrggbb", glow 0..1]. */
@@ -304,6 +322,16 @@ export interface Theme {
    * ("woman", "man", "nonbinary"): keep your extras right for it.
    */
   dressVisitor?(ctx: CanvasRenderingContext2D, v: { x: number; y: number; facing: Facing; pose: CharPose; kind: VisitorKind; look?: Look }, t: number): void;
+  /**
+   * Another pose for someone, where they already are: dozing off at the
+   * desk, feet up, turning away from a smell. Asked every frame for each
+   * agent, and for you at your desk (not while you're away or shooting at
+   * the hoop; while you wave back after a click, the office's pick is
+   * "raise" or "cheer"). Return null to keep the office's pick; keep it
+   * cheap. `dress` and `dressVisitor` get the pose you return, so draw
+   * things in hand there. Your look (from the settings) is kept either way.
+   */
+  pose?(p: PoseOf, info: PaintInfo): { pose: CharPose; expr: Expression; facing?: Facing } | null;
 
   // ------------------------------------------------------------ things to click
   /**
@@ -318,6 +346,13 @@ export interface Theme {
    * lines. Return a sound to play now, or null.
    */
   click?(id: string, act: SceneryActions): string | null;
+  /**
+   * Called about twice a second with what a click gets (`at` is 0, 0), so
+   * the scenery can start something on its own now and then: someone pops
+   * out for a smoke, a remark from the boss. Keep it cheap and rare;
+   * gatherings fail during office events.
+   */
+  tick?(act: SceneryActions): void;
 
   // ------------------------------------------------------------ words and sounds
   labels?: ThemeLabels;

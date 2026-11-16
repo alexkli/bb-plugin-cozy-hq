@@ -6,9 +6,11 @@ import type { Light, OutsideInfo, PaintInfo, SkyColors, Theme, WallLightsInfo, D
 import type { Layout, Rect } from "../../layout.ts";
 import { Grid, OUTLINE, cached, classicProp, floorPlan, hash, makeCanvas, mix, rng } from "../../themekit.ts";
 import { P, papers } from "./pal.ts";
-import { planOf } from "./plan.ts";
+import { planOf, siteOf, type Site } from "./plan.ts";
 import { leakTop, tubes, urnOf, type Tube } from "./fixtures.ts";
 import { clickDecor, clickLights, clickOverlay, clickUnderlay, tubeKick, type ClutterSpots } from "./clicks.ts";
+import { habitDecor, habitLights, habitOverlay } from "./habits.ts";
+import { streetLights, surroundingsRain } from "./street.ts";
 
 // ------------------------------------------------------------------ sky
 
@@ -532,6 +534,24 @@ function rolledCarpet(): HTMLCanvasElement {
   });
 }
 
+/** One or two boxes, low enough to stack along a corridor without tripping anyone (16×12). */
+function lowBoxes(seed: number): HTMLCanvasElement {
+  return cached(`annex|deco|lowbox|${seed % 4}`, () => {
+    const g = new Grid(18, 12);
+    const files = seed % 4 === 3;
+    if (files) {
+      // Box files on their sides, spines out.
+      for (let i = 0; i < 4; i++) g.rect(1 + i * 4, 3, 4, 8, ["#6a7a5a", "#5a6470", "#8a6a3a", "#6a5a70"][i]!).rect(2 + i * 4, 5, 2, 1, P.paper);
+    } else {
+      g.rect(1, 4, 15, 7, "#9a7a50").rect(1, 4, 15, 2, "#ad8c5e").rect(7, 4, 2, 2, P.tape);
+      g.rect(3, 7, 5, 3, P.paperOld);
+      if (seed % 2) g.rect(4, 0, 12, 5, P.card).rect(4, 0, 12, 1, P.cardHi).rect(9, 1, 2, 1, P.tape);
+    }
+    g.outline(OUTLINE);
+    return g.toCanvas();
+  });
+}
+
 function bucket(): HTMLCanvasElement {
   return cached("annex|deco|bucket", () => {
     const g = new Grid(12, 11);
@@ -570,9 +590,10 @@ function clutter(L: Layout): Item[] {
           return r.x < x1 && r.x + r.w > x0 && r.y < y1 && r.y + r.h > y0;
         }),
       );
+    const site = siteOf(L);
     const add = (kind: Item["kind"], canvas: HTMLCanvasElement, at: Rect) => {
       const r = { x: at.x, y: at.y, w: canvas.width, h: canvas.height };
-      if (r.x < 6 || r.x + r.w > L.W - 6 || r.y + r.h > L.H - 3) return false;
+      if (r.x < site.x + 6 || r.x + r.w > site.x + site.w - 6 || r.y + r.h > site.h - 4) return false;
       if (overlap(r, ev, 6) || nearWalk(r)) return false;
       if (clash(r) || !plan.isFree(r)) return false;
       taken.push(r);
@@ -597,6 +618,23 @@ function clutter(L: Layout): Item[] {
     const boss = L.boss.room;
     for (const s of plan.find(18, 12, 3, boss)) add("pile", pile(hash(`bp${s.x}`)), s);
     for (const s of plan.find(20, 22, 1, boss)) add("boxes", boxStack(hash(`bb${s.x}`)), s);
+    // Beside the desks, where a pod would have gone: filing cabinets shoulder to shoulder, boxes on top.
+    for (const c of building?.cells ?? []) {
+      if (c.kind !== "junk") continue;
+      const rs = rng(hash(`junk-${c.r.x}-${c.r.y}`));
+      for (let bottom = c.r.y + Math.min(32, c.r.h); bottom <= c.r.y + c.r.h; bottom += 34) {
+        for (let x = c.r.x + c.r.w - 1; x > c.r.x + 2; ) {
+          const k = rs();
+          const seed = Math.floor(rs() * 1000);
+          const canvas = k < 0.5 ? cabinet(seed) : k < 0.8 ? boxStack(seed) : k < 0.9 ? crtStack(seed) : pile(seed);
+          const kind: Kind = k < 0.5 ? "cabinet" : k < 0.8 ? "boxes" : k < 0.9 ? "crts" : "pile";
+          if (x - canvas.width < c.r.x + 1) break;
+          const at = { x: x - canvas.width, y: bottom - canvas.height, w: canvas.width, h: canvas.height };
+          if (add(kind, canvas, at)) x -= canvas.width - 1;
+          else x -= 6;
+        }
+      }
+    }
     // The storerooms, crammed: boxes, cabinets and dead equipment in rows.
     for (const c of building?.cells ?? []) {
       if (c.kind !== "storage") continue;
@@ -619,8 +657,36 @@ function clutter(L: Layout): Item[] {
       if (c.kind !== "hall") continue;
       for (let y = c.r.y + 36; y + 26 <= c.r.y + c.r.h - 4; y += 30) add("chairs", chairStack(), { x: c.r.x + 5, y, w: 16, h: 26 });
     }
-    // And everywhere else: whatever fits.
-    const n = Math.max(3, Math.min(9, Math.round((L.W * L.H) / 40000)));
+    // Every room's walls lined with whatever came out of the last office move.
+    const lining: Kind[] = ["cabinet", "boxes", "pile", "boxes", "crts", "cabinet", "deadplant", "boxes", "chair", "pile", "coatstand", "cabinet"];
+    const sprite = (kind: Kind, seed: number) =>
+      kind === "boxes" ? boxStack(seed) : kind === "cabinet" ? cabinet(seed) : kind === "pile" ? pile(seed) : kind === "crts" ? crtStack(seed) : kind === "chair" ? brokenChair() : kind === "deadplant" ? deadPlant() : coatStand();
+    for (const c of building?.cells ?? []) {
+      if (!["break", "kitchen", "hall", "waiting", "games", "archive", "nook"].includes(c.kind)) continue;
+      const rl = rng(hash(`line-${c.kind}-${c.r.x}-${c.r.y}`));
+      let k = Math.floor(rl() * lining.length);
+      const next = () => {
+        const kind = lining[k++ % lining.length]!;
+        return { kind, canvas: sprite(kind, Math.floor(rl() * 1000)) };
+      };
+      // Along the bottom, then up both sides.
+      const floorY = Math.min(c.r.y + c.r.h - 1, site.h - 5);
+      for (let x = c.r.x + 4; x < c.r.x + c.r.w - 8; ) {
+        const { kind, canvas } = next();
+        if (add(kind, canvas, { x, y: floorY - canvas.height, w: canvas.width, h: canvas.height })) x += canvas.width + 1 + Math.floor(rl() * 4);
+        else x += 5;
+      }
+      for (const left of [true, false]) {
+        for (let bottom = floorY - 25; bottom > c.r.y + 34; ) {
+          const { kind, canvas } = next();
+          const x = left ? c.r.x + 4 : c.r.x + c.r.w - 4 - canvas.width;
+          if (add(kind, canvas, { x, y: bottom - canvas.height, w: canvas.width, h: canvas.height })) bottom -= canvas.height - 6;
+          else bottom -= 6;
+        }
+      }
+    }
+    // And everywhere else: whatever fits, and plenty of it.
+    const n = Math.max(6, Math.min(30, Math.round((site.w * site.h) / 11000)));
     // Clutter collects against walls and furniture, not in the middle of the floor.
     const all = plan.find(20, 30, 160);
     const solids: Rect[] = [];
@@ -635,7 +701,7 @@ function clutter(L: Layout): Item[] {
       solids.push({ x: q.x - 3, y: q.y - 3, w: q.w + 6, h: 3 }, { x: q.x - 3, y: q.y, w: 3, h: q.h }, { x: q.x + q.w, y: q.y, w: 3, h: q.h }, { x: q.x - 3, y: q.y + q.h, w: q.w + 6, h: 3 });
     }
     for (const sg of L.segments) solids.push({ x: sg.x0, y: 0, w: sg.x1 - sg.x0, h: sg.depth });
-    solids.push({ x: -10, y: 0, w: 10, h: L.H }, { x: L.W, y: 0, w: 10, h: L.H }, { x: 0, y: L.H, w: L.W, h: 10 });
+    solids.push({ x: site.x - 10, y: 0, w: 10, h: site.h }, { x: site.x + site.w, y: 0, w: 10, h: site.h }, { x: site.x, y: site.h, w: site.w, h: 10 });
     const hugs = (s: Rect) => solids.some((o) => s.x - 5 < o.x + o.w && s.x + s.w + 5 > o.x && s.y - 5 < o.y + o.h && s.y + s.h + 5 > o.y);
     const spots = all.filter(hugs).sort((a, b) => (hash(`${a.x},${a.y}`) % 97) - (hash(`${b.x},${b.y}`) % 97));
     const r = rng(hash(`annex-clutter-${L.W}x${L.H}`));
@@ -651,8 +717,53 @@ function clutter(L: Layout): Item[] {
       const at = { x: s.x + Math.floor((20 - canvas.width) / 2), y: s.y + 30 - canvas.height, w: canvas.width, h: canvas.height };
       if (add(kind, canvas, at)) placed++;
     }
+    items.push(...corridorBoxes(L, site, taken));
     return items;
   });
+}
+
+/**
+ * Boxes stacked along the corridors, against the partitions on both sides:
+ * not across doorways, junctions, the windows at the ends or the way in.
+ */
+function corridorBoxes(L: Layout, site: Site, taken: Rect[]): Item[] {
+  const out: Item[] = [];
+  const walks = [...L.spots.map((s) => s.path), ...(planOf(L)?.extra ?? [])];
+  const crosses = (x0: number, x1: number, y0: number, y1: number) =>
+    walks.some((path) =>
+      path.some((p, i) => {
+        const q = path[i + 1];
+        if (!q || Math.abs(p.x - q.x) >= 1) return false;
+        return p.x > x0 - 10 && p.x < x1 + 10 && Math.min(p.y, q.y) < y1 && Math.max(p.y, q.y) > y0;
+      }),
+    );
+  const solid: Rect[] = [];
+  for (const p of L.props) {
+    const c = classicProp(p, L);
+    solid.push({ x: p.x, y: p.y, w: c.width, h: c.height });
+  }
+  for (const d of L.desks) solid.push({ x: d.x, y: d.y - 12, w: 48, h: 50 });
+  for (const pl of L.plants) if (pl.sprite !== "HANGING_PLANT") solid.push({ x: pl.x, y: pl.y, w: 16, h: 32 });
+  const hit = (r: Rect) => [...solid, ...taken].some((o) => r.x < o.x + o.w + 2 && r.x + r.w + 2 > o.x && r.y < o.y + o.h && r.y + r.h > o.y);
+  L.net.halls.forEach((hy, h) => {
+    for (const up of [true, false]) {
+      const r = rng(hash(`annex-corr-${hy}-${up}-${L.W}`));
+      for (let x = site.x + 30 + Math.floor(r() * 20); x + 18 < site.x + site.w - 30; x += 18 + Math.floor(r() * 46)) {
+        if (r() < 0.25) continue;
+        const canvas = up && r() < 0.5 ? boxStack(Math.floor(r() * 1000)) : lowBoxes(Math.floor(r() * 1000) + h);
+        const y = up ? hy - 3 - canvas.height : hy + 11 - canvas.height;
+        const box = { x, y, w: canvas.width, h: canvas.height };
+        if (L.net.aisles.some((ax) => x < ax + 14 && x + box.w > ax - 14)) continue;
+        if (Math.abs(x + box.w / 2 - L.entrance.x) < 26) continue;
+        if (crosses(x, x + box.w, up ? hy - 12 : hy, up ? hy : hy + 12)) continue;
+        if (hit(box)) continue;
+        taken.push(box);
+        out.push({ kind: "boxes", x, y, canvas, z: up ? hy - 3 : hy + 10 });
+        x += box.w;
+      }
+    }
+  });
+  return out;
 }
 
 /** Where the leak's bucket and the dead photocopiers ended up (things to click). */
@@ -711,6 +822,7 @@ function decor(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): Drawa
     });
   }
   out.push(...clickDecor(ctx, L, info));
+  out.push(...habitDecor(ctx, L, info));
   return out;
 }
 
@@ -787,6 +899,8 @@ function overlay(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): voi
       }
     });
   }
+  habitOverlay(ctx, L, info);
+  surroundingsRain(ctx, L, info);
   // A gloomy vignette.
   // (One full-size canvas, rebuilt only when the office changes size.)
   if (!vignette || vignette.width !== L.W || vignette.height !== L.H) {
@@ -820,7 +934,8 @@ function lights(L: Layout, info: PaintInfo): Light[] {
       const rad = Math.max(26, Math.min(70, Math.min(c.r.w, c.r.h) * 0.6));
       out.push([c.r.x + c.r.w / 2, c.r.y + c.r.h / 2, rad, (store ? 0.32 : 0.45) * blink, store ? "#ffd890" : "#e6e8c8", store ? 0.08 : 0.05]);
     });
-    for (const hy of L.net.halls) for (let x = 60; x < L.W; x += 140) out.push([x, hy, 30, 0.38, "#ece6c0", 0.05]);
+    const site = siteOf(L);
+    for (const hy of L.net.halls) for (let x = site.x + 50; x < site.x + site.w; x += 140) out.push([x, hy, 30, 0.38, "#ece6c0", 0.05]);
   }
   // A bare bulb over the kitchenette, a glow off the vending machine.
   const k = L.kitchen;
@@ -829,6 +944,7 @@ function lights(L: Layout, info: PaintInfo): Light[] {
   if (v) out.push([v.x + 10, v.y + 20, 20, 0.45, "#a8c0c8", 0.08]);
   // Sodium street light leaking in through the windows at night.
   if (info.night > 0.3) for (const w of L.wall.windows) out.push([w.x + w.w / 2, w.y + w.h, 30, 0.3, "#ffb060", 0.1]);
+  out.push(...streetLights(L), ...habitLights(L, info));
   return out;
 }
 

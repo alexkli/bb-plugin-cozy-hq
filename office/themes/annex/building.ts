@@ -7,6 +7,7 @@ import type { Layout, Point, Rect } from "../../layout.ts";
 import { hash, rect, rng, shade } from "../../themekit.ts";
 import { planOf, type AnnexPlan, type Cell } from "./plan.ts";
 import { stageOf } from "./fixtures.ts";
+import { paintSurroundings } from "./street.ts";
 
 type Gap = [number, number];
 
@@ -83,25 +84,29 @@ function corridors(ctx: CanvasRenderingContext2D, L: Layout, plan: AnnexPlan): v
     rect(ctx, r.x, r.y, r.w, r.h, "#77745f");
     speck(ctx, r, ["#6a6754", "#86826b", "#5f5c4b"], 0.18, seed);
   };
-  for (const ax of L.net.aisles) lino({ x: ax - HALF, y: top(ax), w: HALF * 2, h: L.H - top(ax) }, ax);
+  const site = plan.site;
+  const x0 = site.x;
+  const x1 = site.x + site.w;
+  const w = site.w;
+  for (const ax of L.net.aisles) lino({ x: ax - HALF, y: top(ax), w: HALF * 2, h: site.h - top(ax) }, ax);
   for (const hy of L.net.halls) {
-    lino({ x: 0, y: hy - HALF, w: L.W, h: HALF * 2 }, hy);
+    lino({ x: x0, y: hy - HALF, w, h: HALF * 2 }, hy);
     // A faded red runner down the corridor, frayed, a hole worn through here and there.
     const ry = hy - 4;
-    rect(ctx, 0, ry, L.W, 8, "#6a3a30");
-    rect(ctx, 0, ry + 1, L.W, 6, "#7a4436");
-    for (let x = 3; x < L.W; x += 6) rect(ctx, x, ry + 2, 2, 1, "#8a5240");
-    for (let x = 0; x < L.W; x += 3) {
+    rect(ctx, x0, ry, w, 8, "#6a3a30");
+    rect(ctx, x0, ry + 1, w, 6, "#7a4436");
+    for (let x = x0 + 3; x < x1; x += 6) rect(ctx, x, ry + 2, 2, 1, "#8a5240");
+    for (let x = x0; x < x1; x += 3) {
       if (hash(`fr${x}${hy}`) % 3 === 0) rect(ctx, x, ry - 1, 1, 1, "#8a6a52");
       if (hash(`fb${x}${hy}`) % 3 === 0) rect(ctx, x, ry + 8, 1, 1, "#8a6a52");
     }
     const r = rng(hash(`runner${hy}`));
-    for (let k = 0; k < L.W / 120; k++) {
-      const x = Math.floor(r() * (L.W - 20));
+    for (let k = 0; k < w / 120; k++) {
+      const x = x0 + Math.floor(r() * (w - 20));
       rect(ctx, x, ry + 2, 8 + Math.floor(r() * 10), 4, "#8c6a58");
     }
-    rect(ctx, 0, hy - HALF, L.W, 1, "#5a5848");
-    rect(ctx, 0, hy + HALF - 1, L.W, 1, "#5a5848");
+    rect(ctx, x0, hy - HALF, w, 1, "#5a5848");
+    rect(ctx, x0, hy + HALF - 1, w, 1, "#5a5848");
   }
   for (const f of plan.flights) stairs(ctx, f, L, f.x + f.w / 2);
 }
@@ -220,12 +225,8 @@ export function corridorsFor(ctx: CanvasRenderingContext2D, L: Layout): boolean 
   const plan = planOf(L);
   if (!plan) return false;
   corridors(ctx, L, plan);
-  // The building's own walls round the edge of the panel.
-  rect(ctx, 0, 0, 3, L.H, "#3e3024");
-  rect(ctx, L.W - 3, 0, 3, L.H, "#3e3024");
-  rect(ctx, 0, L.H - 3, L.W, 3, "#3e3024");
-  rect(ctx, 3, 0, 1, L.H, "#5a4836");
-  rect(ctx, L.W - 4, 0, 1, L.H, "#2a2018");
+  // The building's own walls, and what's round it.
+  paintSurroundings(ctx, L);
   return true;
 }
 

@@ -56,6 +56,13 @@
   - The storerooms: an avalanche of boxes, a drawer spitting paper, a cloud of dust, a mouse; a dead photocopier there jams in a fountain of paper.
   - The old hall: the tea urn draws a queue of mugs and complaints, and the stage puts on a one-person show in a spotlight for an audience of two or three (or the PA squeals, or the curtain comes off its rail).
   - The radiators clank, hiss or sit stone cold, and a stair gives way and gets taped over.
+- The Dusty Annex is smaller and more cramped, and everyone in it has bad habits:
+  - A narrow building squeezed in between a neighbour's brick wall with a rusty fire escape, the street (a lamp post, bin bags, a parked car) and a back yard of wheelie bins, pallets and a dumped armchair. Rain falls on the street, not indoors.
+  - Only as many desks as people, shoved against filing cabinets where a desk would have gone; fewer waiting chairs; every room lined with boxes, cabinets and dead equipment, and boxes stacked along the corridors (never in anyone's way).
+  - You, at your desk, take turns: smoking over an overflowing ashtray (a haze in your office, a glowing tip in the dark), feet up on the desk, takeaway with chopsticks, a packet of crisps, a nap with the paper over your face. A stained mug and half a sandwich never leave the desk. Your look from the settings stays.
+  - You grumble when someone sits down across the desk, and when clicked ("I was resting my eyes."). Now and then, with company, there's a noise from your chair; your visitors get up fanning the air.
+  - The staff, one at a time now and then: a crafty smoke out of the corridor window onto the fire escape, feeding the pigeons on the pavement, peeking at the street through the blinds ("Same van. Different hat."), fish in the microwave with everyone nearby complaining and fanning. Some doze off on the keyboard; a few desks have a tower of files.
+- For scenery authors: `pose(p, info)` gives someone (an agent, or you at your desk) another pose where they are, and `tick(act)` lets a scenery start things on its own; see "Habits" in `office/themes/README.md`.
 - In Neon City you can click the street and what's on it.
   - The food carts: the cook flips the wok into a tall flame, it steams, or idle people line up and order.
   - The holo billboard: a giant holo koi swims down the street, or the ad glitches into static and comes back as a new one.

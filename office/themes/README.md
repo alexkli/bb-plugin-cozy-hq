@@ -182,6 +182,27 @@ gathering when it returns null (everyone's busy). `act.near` and `act.say`
 are for a quick word from whoever's close. Redwood Camp's campfire, trees
 and creek are an example (`redwoods/clicks.ts`).
 
+## Habits
+
+Two hooks let people do odd things on their own, without a click:
+
+- `pose(p, info)`: another pose and expression (and facing) for someone,
+  where they already are. It's asked every frame for each agent (`p.spot`
+  is the kind of spot they're settled at, null while walking) and for you
+  at your desk (not while you're away or shooting at the hoop; your wave
+  after a click comes in as "raise" or "cheer"). Return null to keep the
+  office's pick, and keep it cheap. `dress` and `dressVisitor` get the pose
+  you returned, so draw what's in hand there; your look from the settings
+  stays as it is.
+- `tick(act)`: called about twice a second with the same `act` as a click
+  (`at` is 0, 0), to start something now and then: a gathering, a word, a
+  sound. Pick from the clock rather than at random, keep it rare, and expect
+  `gather` to fail during office events and when nobody's free.
+
+The Dusty Annex is the example (`annex/habits.ts`): the boss smokes, puts
+their feet up and naps behind the paper; the staff pop out for a smoke,
+feed the pigeons and microwave fish.
+
 ## Preview
 
 Work in your copy of the repository. It shares `node_modules`.
