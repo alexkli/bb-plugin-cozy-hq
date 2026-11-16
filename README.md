@@ -103,7 +103,8 @@ meetings, lunch, events, gags) stay the same:
 | 🏠 Startup House | A suburban ranch house turned founders' office: desks on the living-room carpet, an energy-drink pyramid, servers in the garage, a slightly green pool and a hammock out back; a bulldog and a backyard hen |
 | 🏔️ Mountain Cabin | A timber lodge above the treeline: a fieldstone fireplace, a mudroom, a sun deck with a sauna, snowy peaks, a chairlift and skiers through the windows; a mountain dog and a marmot |
 | 🌋 Villain's Lair | A secret base inside a volcano: a control room under a blinking world map, a countdown to the next coffee, a shark tank, a big red button and a monorail over the lava; a robot hound and a white cat |
-| 🚀 Spaceship | A deck on a long-haul starship: crew stations, a bridge viewscreen, a galley with a food synthesizer, hydroponics, an engine core and an airlock, with space drifting by; a robot dog and a fluffy critter |
+| 🚀 Spaceship | A deck on a long-haul starship: a grand bridge with your captain's chair under a huge viewscreen, crew stations, a galley with a food synthesizer, hydroponics, an engine core and an airlock; the crew in space suits; a robot dog and a fluffy critter |
+| ☕ Coffee Shop | A neighborhood café on a street corner: laptops at bistro tables, a communal table and a window bar, baristas at the espresso bar, your raised snug with a wingback chair, a fireplace and an open-mic stage; a café dog and a shop cat |
 
 Your pick is kept per browser; the buddy dresses to match.
 
