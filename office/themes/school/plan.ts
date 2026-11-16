@@ -399,7 +399,7 @@ function portrait(W: number, H: number, threads: number): Layout {
       }
       case "lounge":
         lounge = rect;
-        tvParts = buildLounge(b, rect, acc, null, !rows.some((r) => r.kind === "games" || r.kind === "library"));
+        tvParts = buildLounge(b, rect, acc, null, !rows.some((r) => r.kind === "games" || r.kind === "library"), !rows.some((r) => r.kind === "games"));
         open.push({ x: rect.x - 2, y: rect.y - 4, w: rect.w + 4, h: rect.h + 6 });
         break;
       case "games":

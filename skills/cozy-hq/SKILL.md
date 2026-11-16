@@ -119,7 +119,7 @@ start an office event, and the `?` sticky note for the legend. In your office,
 the putting green (where the room has space) sends you over to putt: in the
 hole, lipped out, short, or under the desk, where the dog fetches the ball;
 the paper-ball hoop is a shot from your chair; the Newton's cradle clacks. The
-arcade (in the games room, where the floor plan has one) opens an arcade cabinet
+arcade (in the games room, else the lounge; Dusty Annex's is in the old hall) opens an arcade cabinet
 over the office with four small games (Noodle, Inbox Zero, Desk Rally, Bug
 Hunt; keys or a touch pad, a high score per game kept per browser), and you
 walk over and play along, cheering a win or sulking under a rain cloud after a

@@ -33,8 +33,8 @@
   - Arrow keys or WASD, space or Enter, P to pause, Esc to quit; on a phone a d-pad and an A button, or swipe and tap the screen. It pauses when you click away, and the bleeps go through the office's synth (sound settings apply).
   - Meanwhile you get up from your desk, walk over through the hallways and play along at the arcade, its screen flickering. Win and you jump for joy under confetti; lose and you hang your head under a little rain cloud, each with a line. Someone idle nearby may come and watch. Close the cabinet and you walk back.
   - Busy out on the green? You come over once you're done. Whoever was playing the arcade finds something else to do.
-  - Floor plans without a games room have no arcade, so nothing changes there.
-  - For scenery authors: `bossToys()` sets `L.boss.way` (your way out through your door), the arcade poses `arcade0`, `arcade1` and `mope`, and `node --test` walks you to the arcade and back in every plan.
+  - Every office has a cabinet now: in the games room, else in the lounge beside the piano or the fish tank (in a narrow lounge in its top corner or out on its floor), and in Dusty Annex's old hall by the stage. A test checks every scenery has one on desktop and phone panels; only the narrowest, shortest plans (Redwood Camp and Dusty Annex at 600 px wide and 300 to 426 tall, with few threads) have no room for one.
+  - For scenery authors: `bossToys()` sets `L.boss.way` (your way out through your door), the arcade poses `arcade0`, `arcade1` and `mope`, and `node --test` walks you to the arcade and back in every plan. `buildArcade()` puts the office's one cabinet anywhere (`arcadeFromAbove()` against the top of an open room under a hallway), `buildLounge(…, arcade)` adds one unless told a games room comes later, and `L.arcade` is wherever it went.
 - Redwood Camp has no back wall any more: the forest runs to the top edge.
   - The usage board stands on log posts, and the clock, calendar and status board hang on trunks.
   - The door is a trailhead gate.

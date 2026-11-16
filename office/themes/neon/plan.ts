@@ -134,7 +134,9 @@ function neonBlocks(W: number, H: number): Layout {
   const lounge: Rect = { x: c2x, y: d2, w: c2w, h: T - d2 - 2 };
   const arcadeDeck = lounge.h >= 166 && c2w >= 150;
   const loungeTop: Rect = arcadeDeck ? { ...lounge, h: 80 } : lounge;
-  const tvParts = buildLounge(b, loungeTop, { hallY: hy1, aisleX: a23 }, wallTv, false);
+  // The arcade on the deck or down the alley when there's one, else in the lounge.
+  const alleyGames = !arcadeDeck && botEnd - botTop >= 74 && c2w >= 150;
+  const tvParts = buildLounge(b, loungeTop, { hallY: hy1, aisleX: a23 }, wallTv, false, !arcadeDeck && !alleyGames);
   let games: Rect | null = null;
   let gamesParts: ReturnType<typeof buildGames> | null = null;
   if (arcadeDeck) {
@@ -272,7 +274,7 @@ function neonWide(W: number, H: number, threads: number): Layout {
   const nook = !arcadeDeck && lounge.h >= 200;
   const loungeTop: Rect = arcadeDeck ? { ...lounge, h: 80 } : nook ? { ...lounge, h: lounge.h - 94 } : lounge;
   const centerAcc: Access = { hallY: hy, aisleX: a23 };
-  const tvParts = buildLounge(b, loungeTop, centerAcc, wallTv, games === null && !nook && !arcadeDeck);
+  const tvParts = buildLounge(b, loungeTop, centerAcc, wallTv, games === null && !nook && !arcadeDeck, !arcadeDeck);
   if (nook) buildLibrary(b, { x: c2x, y: lounge.y + lounge.h - 80, w: c2w, h: 80 }, centerAcc);
   if (arcadeDeck) {
     games = { x: c2x, y: lounge.y + 88, w: c2w, h: lounge.h - 92 };
@@ -427,7 +429,7 @@ function neonPortrait(W: number, H: number, threads: number): Layout {
       }
       case "lounge":
         lounge = rect;
-        tvParts = buildLounge(b, rect, acc, null, !rows.some((r) => r.kind === "games" || r.kind === "library"));
+        tvParts = buildLounge(b, rect, acc, null, !rows.some((r) => r.kind === "games" || r.kind === "library"), !rows.some((r) => r.kind === "games"));
         break;
       case "games":
         games = rect;

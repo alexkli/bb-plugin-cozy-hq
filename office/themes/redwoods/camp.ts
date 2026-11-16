@@ -143,6 +143,9 @@ export function campBold(W: number, H: number, threads: number): Layout | null {
     const tops = L.props.filter((p) => (p.kind === "piano" || p.kind === "fishtank-stand") && p.y < h1).map((p) => p.z);
     const roof = Math.max(lounge.y + 20, ...tops) + 4;
     for (const [i, sx] of [lounge.x + 2, lounge.x + lounge.w - side + 2].entries()) {
+      // Not over the arcade cabinet when it stands at the side of the clearing.
+      const cab = tvParts.arcade;
+      if (cab && cab.x < sx + side && cab.x + cab.w > sx) continue;
       trees.push(...stripTrees(L, { x: sx, y: roof + 40, w: side - 4, h: h1 - 4 - roof - 40 }, openBlock, 60 + i * 9, { roof, spacing: 100, max: 1, w: side - 6, maxH: 110 }).map((t) => ({ ...t, role: "clearing" as const })));
     }
   }

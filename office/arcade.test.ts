@@ -245,3 +245,20 @@ test("you can walk to the arcade and back in every scenery that has one", () => 
     assert.ok(walked > 0, `${theme.id} has an arcade at one of the sizes`);
   }
 });
+
+test("every scenery has an arcade at the sizes people use", () => {
+  // Native sizes: desktop panels (1000×711 and 1400×900 at 2×, 1350×630, wider ones) and phones.
+  const sizes = [[666, 474], [700, 450], [675, 315], [900, 420], [1200, 520], [390, 844], [375, 812], [340, 737], [345, 640]] as const;
+  for (const theme of THEMES) {
+    for (const [w, h] of sizes) {
+      for (const threads of [4, 12, 20, 28]) {
+        const size = layoutSize(w, h);
+        const L = theme.layout?.(size.W, size.H, { threads, portrait: size.portrait }) ?? buildLayout(w, h, { threads });
+        const where = `${theme.id} at ${w}×${h} with ${threads} threads`;
+        assert.ok(L.arcade, `${where} has an arcade`);
+        assert.equal(L.spots.filter((s) => s.kind === "arcade").length, 1, `${where}: one cabinet`);
+        assert.ok(L.pokeables.some((p) => p.kind === "arcade"), `${where}: you can click it`);
+      }
+    }
+  }
+});

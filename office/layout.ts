@@ -900,14 +900,46 @@ export function buildKitchen(b: Builder, r: Rect, acc: Access): void {
   }
 }
 
-export function buildLounge(b: Builder, r: Rect, acc: Access, wallTv: Rect | null, naps = false): { tv: Rect; screen: Rect; speakers: Rect[]; couch: Rect; fishtank: Rect } {
+/**
+ * The lounge: a TV (on the wall if `wallTv`, else standing), couch, piano and fish tank;
+ * beanbags if `naps`, and the office's arcade cabinet when there's none yet and room for
+ * it (`arcade` false: a games room built later has it).
+ */
+export function buildLounge(
+  b: Builder,
+  r: Rect,
+  acc: Access,
+  wallTv: Rect | null,
+  naps = false,
+  arcade = true,
+): { tv: Rect; screen: Rect; speakers: Rect[]; couch: Rect; fishtank: Rect; arcade: Rect | null } {
   b.rooms.push({ kind: "lounge", rect: r });
+  const couchW = 82;
+  const standW = Math.min(128, r.w - 70);
+  // The arcade: against the back wall beside the piano, or beside the fish tank when people
+  // come in from the left (the couch lane runs along the top), with the couch moved over a
+  // little if need be; in a narrow room under a hallway, in the top corner with the TV
+  // moved over; in a narrow room under the wall TV, on the floor below the piano when
+  // it's tall enough.
+  const roomy = r.w >= 201 && (wallTv !== null || (r.w - standW) / 2 - 14 >= 70);
+  const cabinetAt: "piano" | "fish" | "corner" | "floor" | null =
+    !arcade || hasArcade(b)
+      ? null
+      : roomy
+        ? wallTv && acc.aisleX < r.x + r.w / 2
+          ? "fish"
+          : "piano"
+        : !wallTv && acc.hallY < r.y && r.w - 34 >= standW + 28
+          ? "corner"
+          : wallTv && r.h >= 170
+            ? "floor"
+            : null;
   let tv: Rect;
   if (wallTv) {
     tv = wallTv;
   } else {
-    const tvW = Math.min(128, r.w - 70);
-    tv = { x: r.x + Math.round((r.w - tvW) / 2), y: r.y + 2, w: tvW, h: Math.round(tvW * 0.56) };
+    const left = cabinetAt === "corner" ? 34 : 0;
+    tv = { x: r.x + left + Math.round((r.w - left - standW) / 2), y: r.y + 2, w: standW, h: Math.round(standW * 0.56) };
   }
   const { x: tvX, y: tvY, w: tvW, h: tvH } = tv;
   const screen: Rect = { x: tvX + 4, y: tvY + 4, w: tvW - 8, h: tvH - 8 };
@@ -916,8 +948,8 @@ export function buildLounge(b: Builder, r: Rect, acc: Access, wallTv: Rect | nul
     { x: tvX - 14, y: tvY + tvH - 26, w: 10, h: 26 },
     { x: tvX + tvW + 4, y: tvY + tvH - 26, w: 10, h: 26 },
   ];
-  const couchW = 82;
-  const couchX = r.x + Math.round((r.w - couchW) / 2);
+  const centered = r.x + Math.round((r.w - couchW) / 2);
+  const couchX = cabinetAt === "piano" ? Math.max(centered, r.x + 70) : cabinetAt === "fish" ? Math.min(centered, r.x + r.w - 161) : centered;
   const couchY = wallTv ? r.y + 30 : tvY + tvH + 34;
   const couch: Rect = { x: couchX, y: couchY, w: couchW, h: 26 };
   b.prop("couch", "couch", couchX - 1, couchY - 1, couchY + 26);
@@ -937,7 +969,20 @@ export function buildLounge(b: Builder, r: Rect, acc: Access, wallTv: Rect | nul
   b.prop("fishtank-stand", "fishtank-stand", fishtank.x - 1, fishtank.y + 24, fishtank.y + 44);
   b.poke("fishtank", "fishtank", { x: fishtank.x, y: fishtank.y, w: 40, h: 44 });
   b.spot({ id: "fishtank", kind: "fishtank", group: "lounge", x: fishtank.x + 20, y: fishtank.y + 54, facing: "back", pose: "stand", path: via(acc, fishtank.y + 58, fishtank.x + 20, fishtank.y + 54), activity: "watching the fish" });
-  if (r.w >= 220) b.plant("LARGE_PLANT", r.x + 34, r.y + 2);
+  // Beside the piano (in the big plant's place) it's reached along the piano's lane, beside
+  // the fish tank along the tank's.
+  const top = wallTv ? r.y - 4 : r.y + 2;
+  const cabinet =
+    cabinetAt === "piano"
+      ? buildArcade(b, r.x + 38, top, via(acc, py + 46, r.x + 50, top + 58))
+      : cabinetAt === "fish"
+        ? buildArcade(b, r.x + r.w - 73, top, via(acc, fishtank.y + 58, r.x + r.w - 61, top + 58))
+        : cabinetAt === "corner"
+          ? arcadeFromAbove(b, r.x + 4, r.y, acc.hallY)
+          : cabinetAt === "floor"
+            ? buildArcade(b, r.x + 4, r.y + 78, via(acc, r.y + 140, r.x + 16, r.y + 136))
+            : null;
+  if (r.w >= 220 && cabinetAt !== "piano") b.plant("LARGE_PLANT", r.x + 34, r.y + 2);
   // No games room or library: beanbags in the lounge corners for long naps.
   const by = r.y + r.h - 8;
   if (naps && by - (fishtank.y + 58) >= 30) {
@@ -947,7 +992,7 @@ export function buildLounge(b: Builder, r: Rect, acc: Access, wallTv: Rect | nul
       b.spot({ id: `beanbag-${i + 1}`, kind: "beanbag", group: "nap", x: bx, y: by, facing: "front", pose: "nap", path: via(acc, by + 5, bx, by), activity: "napping" });
     }
   }
-  return { tv, screen, speakers, couch, fishtank };
+  return { tv, screen, speakers, couch, fishtank, arcade: cabinet };
 }
 
 export function buildGames(b: Builder, r: Rect, acc: Access): { pingpong: Rect | null; arcade: Rect | null } {
@@ -966,12 +1011,7 @@ export function buildGames(b: Builder, r: Rect, acc: Access): { pingpong: Rect |
     b.spot({ id: "pingpong-l", kind: "pingpong", group: "lounge", x: pingpong.x - 11, y: pingpong.y + 18, facing: "right", pose: "paddle", path: via(acc, pingpong.y + 28, pingpong.x - 11, pingpong.y + 18), activity: "playing ping-pong" });
     b.spot({ id: "pingpong-r", kind: "pingpong", group: "lounge", x: pingpong.x + ppW + 11, y: pingpong.y + 18, facing: "left", pose: "paddle", path: via(acc, pingpong.y + 28, pingpong.x + ppW + 11, pingpong.y + 18), activity: "playing ping-pong" });
   }
-  if (r.w >= 150) {
-    arcade = { x: r.x + r.w - 26, y: r.y - 4, w: 24, h: 46 };
-    b.prop("arcade", "arcade", arcade.x - 1, arcade.y - 1, arcade.y + 46);
-    b.poke("arcade", "arcade", arcade);
-    b.spot({ id: "arcade", kind: "arcade", group: "lounge", x: arcade.x + 12, y: arcade.y + 58, facing: "back", pose: "stand", path: via(acc, arcade.y + 62, arcade.x + 12, arcade.y + 58), activity: "playing arcade games" });
-  }
+  if (r.w >= 150) arcade = buildArcade(b, r.x + r.w - 26, r.y - 4, via(acc, r.y + 58, r.x + r.w - 14, r.y + 54));
   if (r.h >= 70) {
     const by = r.y + r.h - 8;
     for (const [i, bx] of [r.x + 22, r.x + r.w - 22].entries()) {
@@ -981,6 +1021,29 @@ export function buildGames(b: Builder, r: Rect, acc: Access): { pingpong: Rect |
     }
   }
   return { pingpong, arcade };
+}
+
+const hasArcade = (b: Builder) => b.spots.some((s) => s.kind === "arcade");
+
+/**
+ * An arcade cabinet (24×46, top-left at x, y) with a player's spot in front of it at
+ * (x + 12, y + 58), reached by `path` (from a hallway point to the spot). One per office
+ * (null when there's one already): the games room has it, else the lounge (buildLounge)
+ * or a place of the plan's own.
+ */
+export function buildArcade(b: Builder, x: number, y: number, path: Point[]): Rect | null {
+  if (hasArcade(b)) return null;
+  const arcade: Rect = { x, y, w: 24, h: 46 };
+  b.prop("arcade", "arcade", x - 1, y - 1, y + 46);
+  b.poke("arcade", "arcade", arcade);
+  b.spot({ id: "arcade", kind: "arcade", group: "lounge", x: x + 12, y: y + 58, facing: "back", pose: "stand", path, activity: "playing arcade games" });
+  return arcade;
+}
+
+/** A cabinet at x against the top edge of an open room, reached straight down from the hallway above it. */
+export function arcadeFromAbove(b: Builder, x: number, top: number, hallY: number): Rect | null {
+  const y = top + 2;
+  return buildArcade(b, x, y, [{ x: x - 8, y: hallY, c: true }, { x: x - 8, y: y + 58 }, { x: x + 12, y: y + 58 }]);
 }
 
 export function buildLibrary(b: Builder, r: Rect, acc: Access): void {
@@ -1127,7 +1190,8 @@ export function finish(
     entrancePath: [{ x: aisle0, y: hall0, c: true }, entrance],
     patrol,
     fishtank: parts.tvParts.fishtank,
-    arcade: parts.gamesParts?.arcade ?? null,
+    // Wherever buildArcade put it: the games room, the lounge or a place of the plan's own.
+    arcade: b.pokeables.find((p) => p.kind === "arcade")?.rect ?? null,
     pingpong: parts.gamesParts?.pingpong ?? null,
     server: b.server,
     couch: parts.tvParts.couch,
@@ -1211,7 +1275,7 @@ export function buildWide(W: number, H: number, opts: LayoutOptions): Layout {
   const nook = lounge.h >= 260;
   const loungeTop: Rect = nook ? { ...lounge, h: lounge.h - 94 } : lounge;
   const centerAcc: Access = { hallY: hy, aisleX: a23 };
-  const tvParts = buildLounge(b, loungeTop, centerAcc, wallTv, games === null && !nook);
+  const tvParts = buildLounge(b, loungeTop, centerAcc, wallTv, games === null && !nook, !gamesParts?.arcade);
   if (nook) buildLibrary(b, { x: c2x, y: lounge.y + lounge.h - 80, w: c2w, h: 80 }, centerAcc);
   const fullWait = H - 6 - (hy + 12);
   const garden = fullWait - 162 - 16 >= 96;
@@ -1361,7 +1425,7 @@ export function buildPortrait(W: number, H: number, opts: LayoutOptions): Layout
       }
       case "lounge":
         lounge = rect;
-        tvParts = buildLounge(b, rect, acc, null, !rows.some((r) => r.kind === "games" || r.kind === "library"));
+        tvParts = buildLounge(b, rect, acc, null, !rows.some((r) => r.kind === "games" || r.kind === "library"), !rows.some((r) => r.kind === "games"));
         break;
       case "games":
         games = rect;

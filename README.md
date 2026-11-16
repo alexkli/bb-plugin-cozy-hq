@@ -154,7 +154,7 @@ Your pick is kept per browser; the buddy dresses to match.
   hole, lipped out, way short, or under the desk, where the dog fetches it),
   the paper-ball hoop (a shot from your chair) and the Newton's cradle. Each does something, with a synthesized sound. Open a window to hear
   outside: birds, crickets at night, rain, wind, thunder or a foghorn.
-- **The arcade** (in the games room, where the office has one) has real games
+- **The arcade** (in the games room, or in the lounge when there's none) has real games
   to play: click it and an arcade cabinet opens over the office. Pick Noodle
   (steer a noodle to twenty dumplings), Inbox Zero (knock out the unread mail
   with a ball), Desk Rally (a paddle duel with the CPU, first to five) or Bug

@@ -277,7 +277,9 @@ function widePlan(W: number, H: number, threads: number): Layout {
     const roomy = bottomH - (tvH + 104) - 8 >= 48 || splitGames;
     const loungeH = Math.min(bottomH, tvH + (roomy ? 104 : 86));
     lounge = { x: cx0, y: y0, w: lw, h: loungeH };
-    tvParts = buildLounge(b, lounge, accL, null, true);
+    // The arcade in the games room when there is one (beside the lounge or under it).
+    const gamesUnder = !splitGames && FB - 6 - (lounge.y + lounge.h + 8) >= 172 && lw >= 150;
+    tvParts = buildLounge(b, lounge, accL, null, true, !splitGames && !gamesUnder);
     if (splitGames) {
       games = { x: cx0 + lw + 10, y: y0 + 8, w: wC - lw - 10, h: Math.min(150, bottomH - 8) };
       gamesParts = buildGames(b, games, { hallY: hy, aisleX: cx0 + lw + 5 });
@@ -292,7 +294,7 @@ function widePlan(W: number, H: number, threads: number): Layout {
     plan.terraceSide = { x: a2 + 6, y0: tY - 6, y1: FB, gaps: [] };
     // The rest of the center: a games room when there's height, the server closet by the aisle.
     let cY = lounge.y + lounge.h + 8;
-    if (!splitGames && FB - 6 - cY >= 172 && lw >= 150) {
+    if (gamesUnder) {
       games = { x: cx0, y: cY + 8, w: lw, h: Math.min(150, FB - 6 - cY - 66) };
       gamesParts = buildGames(b, games, accL);
       cY = games.y + games.h + 8;

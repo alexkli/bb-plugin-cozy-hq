@@ -368,6 +368,9 @@ export function campWide(W: number, H: number, threads: number): Layout {
     const roof = Math.max(lounge.y + 20, ...tops) + 4;
     const bottom = (nook ? loungeTop.y + loungeTop.h : hy - 4) + 2;
     for (const [i, sx] of [lounge.x + 2, lounge.x + lounge.w - side + 2].entries()) {
+      // Not over the arcade cabinet when it stands at the side of the clearing.
+      const cab = tvParts.arcade;
+      if (cab && cab.x < sx + side && cab.x + cab.w > sx) continue;
       trees.push(...stripTrees(L, { x: sx, y: roof + 40, w: side - 4, h: bottom - roof - 40 }, openBlock, 60 + i * 9, { roof, spacing: 100, max: 2, w: side - 6, maxH: 130 }).map((t) => ({ ...t, role: "clearing" as const })));
     }
   }
@@ -500,7 +503,7 @@ export function campPortrait(W: number, H: number, threads: number): Layout {
       }
       case "lounge":
         lounge = rect;
-        tvParts = buildLounge(b, rect, acc, null, !rows.some((r) => r.kind === "games" || r.kind === "library"));
+        tvParts = buildLounge(b, rect, acc, null, !rows.some((r) => r.kind === "games" || r.kind === "library"), !rows.some((r) => r.kind === "games"));
         break;
       case "games":
         games = rect;
@@ -550,7 +553,8 @@ export function campPortrait(W: number, H: number, threads: number): Layout {
   const trees: Tree[] = [];
   // Two giants hold the outdoor screen (standing in the clearing here).
   const tv = tvp.tv;
-  const sw = clamp(Math.floor((tv.x - 18 - (lng.x + 40)) * 0.8), 0, 26);
+  // (clear of the arcade cabinet beside the piano)
+  const sw = clamp(Math.floor((tv.x - 18 - (tvp.arcade ? tvp.arcade.x + tvp.arcade.w + 6 : lng.x + 40)) * 0.8), 0, 26);
   let screenTrees: [Tree, Tree] | null = null;
   if (sw >= 14) {
     const base = tv.y + tv.h + 14;

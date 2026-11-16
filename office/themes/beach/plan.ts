@@ -162,7 +162,9 @@ function wide(W: number, H: number, threads: number): Layout {
   // A tall living room gets a reading nook with peacock chairs at the back.
   const nook = lounge.h >= 166;
   const loungeTop: Rect = nook ? { ...lounge, h: lounge.h - 94 } : lounge;
-  const tvParts = buildLounge(b, loungeTop, { hallY: hy1, aisleX: a23 }, wallTv, !hasGames && !nook);
+  // The arcade goes in the surf shack (the games room) when there's one, else in the living room.
+  const shackBelow = !three && bandEnd - hy1 - 18 - clamp(bandEnd - (hy1 + 10), 64, 92) >= 104;
+  const tvParts = buildLounge(b, loungeTop, { hallY: hy1, aisleX: a23 }, wallTv, !hasGames && !nook, !(three ? hasGames : shackBelow));
   if (nook) buildLibrary(b, { x: c2x, y: lounge.y + lounge.h - 80, w: c2w, h: 80 }, { hallY: hy1, aisleX: a23 });
   const topH = hy1 - 8 - d3;
   const serverTop = topH >= 204;
@@ -361,7 +363,7 @@ function portrait(W: number, H: number, threads: number): Layout {
       }
       case "lounge":
         lounge = rect;
-        tvParts = buildLounge(b, rect, acc, null, !rows.some((r) => r.kind === "games"));
+        tvParts = buildLounge(b, rect, acc, null, !rows.some((r) => r.kind === "games"), !rows.some((r) => r.kind === "games"));
         plan.terraceEnd = rect.y + rect.h + gap / 2 + 1;
         break;
       case "pool": {

@@ -130,8 +130,9 @@ with the same spot kinds and ids:
 | `bossToys(b, boss, keepOut?)` | the cradle on the desk, and where there's room the putting green and the hoop: call it last in your own boss room. It also sets `boss.way`, your way from a hallway in through your door (the guests' path) to your chair, for walks across the office (to the arcade) |
 | `buildWaiting(b, r, hallY)` | reception and seats (fill order in `b.seats`): hallway **above** |
 | `buildKitchen(b, r, access)` | counter (espresso, kettle, microwave) along the top, fridge, vending, island, stools |
-| `buildLounge(b, r, access, wallTv, naps)` | TV (on the wall if `wallTv`, else standing), couch, piano, fish tank (beanbags if `naps`) |
+| `buildLounge(b, r, access, wallTv, naps, arcade?)` | TV (on the wall if `wallTv`, else standing), couch, piano, fish tank (beanbags if `naps`), and the arcade cabinet if the office has none yet and `arcade` isn't false |
 | `buildGames`, `buildLibrary`, `buildGarden` | games room (darts, ping-pong, arcade), reading nook, garden |
+| `buildArcade(b, x, y, path)`, `arcadeFromAbove(b, x, top, hallY)` | the office's one arcade cabinet (null if it has one): the games room makes it, else `buildLounge` puts it by the piano or fish tank (pass `arcade` false when a games room comes later); for a place of your own, build it before the lounge |
 | `buildServerRoom(b, r)` | glass server room (the shock gag and the technician need it); keep an aisle beside it |
 | `utilities(b, H, x, hallY)` | cooler, printer and bin along the bottom edge |
 | `finish(b, W, H, portrait, segments, net, parts)` | the back wall (pinboard, calendar, status board, door at `parts.doorX`, "?" note, windows, clock), entrance, patrol; returns the Layout |

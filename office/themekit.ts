@@ -224,8 +224,10 @@ export function floorPlan(L: Layout): FloorPlan {
 // ------------------------------------------------------------------ floor plans
 
 export {
+  arcadeFromAbove,
   Builder,
   bossToys,
+  buildArcade,
   buildBoss,
   buildGames,
   buildGarden,

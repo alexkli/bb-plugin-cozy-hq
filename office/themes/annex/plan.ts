@@ -7,6 +7,7 @@
 
 import type { Layout, PropPlacement, Rect } from "../../layout.ts";
 import {
+  arcadeFromAbove,
   Builder,
   buildBoss,
   buildGames,
@@ -237,9 +238,11 @@ function wide(W: number, H: number, threads: number): Layout {
     storage(cells, left, { t: true, b: true, l: false, r: true });
 
     // The old meeting hall: the one open room, for office dos.
-    // Chairs stacked down one side, a little stage at the other end (when it's wide enough).
+    // Chairs stacked down one side, a little stage at the other end (when it's wide enough),
+    // and the arcade cabinet by the stage when there's no games room.
     const stage = c2w >= 160 && midH >= 70 ? 44 : 10;
-    eventArea = { x: c2x + 28, y: midY + 10, w: c2w - 28 - stage, h: midH - 20 };
+    const cabinet = midH >= 76 && c2w - 28 - stage - 34 >= 60 ? arcadeFromAbove(b, c2x + c2w - stage - 30, midY, h1) : null;
+    eventArea = { x: c2x + 28, y: midY + 10, w: c2w - 28 - stage - (cabinet ? 34 : 0), h: midH - 20 };
     cells.push({ kind: "hall", r: { x: c2x, y: midY, w: c2w, h: midH }, sides: { t: false, b: false, l: true, r: true } });
 
     // The fishbowl sits on the lower corridor (its door opens onto it); a storeroom over it if it's tall.
@@ -424,7 +427,7 @@ function portrait(W: number, H: number, threads: number): Layout {
       }
       case "lounge":
         lounge = rect;
-        tvParts = buildLounge(b, rect, acc, null, !hasRest);
+        tvParts = buildLounge(b, rect, acc, null, !hasRest, !rows.some((r) => r.kind === "games"));
         cell("break");
         break;
       case "hall":
