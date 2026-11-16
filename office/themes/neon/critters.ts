@@ -2,7 +2,7 @@
 // sweeps the floor, a jellyfish tank, and the visitors' gear (the guard's
 // visor, the courier's glowing pack, the mechanic's goggles).
 import type { Rect } from "../../layout.ts";
-import type { CharPose } from "../../characters.ts";
+import type { CharPose, Look } from "../../characters.ts";
 import type { Facing } from "../../layout.ts";
 import type { PaintInfo, VisitorKind } from "../../theme.ts";
 import { cached, Grid, OUTLINE } from "../../themekit.ts";
@@ -199,7 +199,7 @@ export function neonFishTank(ctx: CanvasRenderingContext2D, tank: Rect, info: Pa
 }
 
 /** The visitors' gear. */
-export function neonDressVisitor(ctx: CanvasRenderingContext2D, v: { x: number; y: number; facing: Facing; pose: CharPose; kind: VisitorKind }, t: number): void {
+export function neonDressVisitor(ctx: CanvasRenderingContext2D, v: { x: number; y: number; facing: Facing; pose: CharPose; kind: VisitorKind; look?: Look }, t: number): void {
   const bob = v.pose === "walk1" || v.pose === "walk3" ? -1 : 0;
   const y0 = v.y + 2 + bob;
   const side = v.facing === "left" || v.facing === "right";
@@ -245,7 +245,8 @@ export function neonDressVisitor(ctx: CanvasRenderingContext2D, v: { x: number; 
       px(8 + s, y0 + 1, 1, 1, OUTLINE);
       break;
     case "boss":
-      // A high collar on the long coat, lit at the edge.
+      // A high collar on the long coat, lit at the edge (not over a shirt you picked yourself).
+      if (v.look?.ownShirt) break;
       px(5, v.y + 14, 1, 3, P.mag);
       px(14, v.y + 14, 1, 3, P.mag);
       break;

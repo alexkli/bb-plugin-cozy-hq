@@ -6,6 +6,7 @@ import type { PaintInfo, Theme } from "../../theme.ts";
 import type { Rect } from "../../layout.ts";
 import { cached, Grid, hash, OUTLINE } from "../../themekit.ts";
 import { C, fill } from "./kit.ts";
+import { wearsAtNeck } from "../../characters.ts";
 
 type DogPose = "sit" | "walk0" | "walk1" | "loaf" | "wag0" | "wag1";
 type CatPose = "sit" | "walk0" | "walk1" | "loaf" | "groom" | "ride";
@@ -263,7 +264,8 @@ export const beachDressVisitor: NonNullable<Theme["dressVisitor"]> = (ctx, v) =>
       put(18, 24, 1, 2, OUTLINE);
       break;
     case "boss":
-      if (!back) [[5, 14], [6, 15], [7, 16], [8, 16], [9, 16], [10, 16], [11, 15], [12, 14]].forEach(([px, py], i) => put(px!, py!, 1, 1, ["#ff4f7b", "#ffd166", "#ffffff", "#ff9fc0"][i % 4]!));
+      // A lei, unless you wear something at your neck already.
+      if (!back && !wearsAtNeck(v.look)) [[5, 14], [6, 15], [7, 16], [8, 16], [9, 16], [10, 16], [11, 15], [12, 14]].forEach(([px, py], i) => put(px!, py!, 1, 1, ["#ff4f7b", "#ffd166", "#ffffff", "#ff9fc0"][i % 4]!));
       break;
   }
 };

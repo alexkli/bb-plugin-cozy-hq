@@ -3,12 +3,15 @@
 ## Unreleased
 
 - Every scenery calls its pets by their own names everywhere: Juniper in Redwood Camp gets the whistle from your desk, not Biscuit, and people's small talk names the scenery's dog and cat (`labels.pets` for scenery authors).
-- **You** in the settings: pick how the boss at the big desk (you) looks, with a live preview.
-  - A figure (woman, man or nonbinary) and your pronouns (she, he or they); the office's small talk about the boss uses them.
-  - Skin tone, hair color (grey and white too) and hair style (a buzz cut and bald are new), glasses on or off.
-  - Kept per browser, and every scenery keeps your pick while it dresses you (the Sky Loft tie is only for "man").
+- **You** in the settings: pick how the boss at the big desk (you) looks.
+  - A compact row under the office buddy: a small preview, the figure (woman, man or nonbinary) and **Customize…**, which opens the look editor with a big preview from the front and the back (it fits a phone too).
+  - Your pronouns (she, he or they); the office's small talk about the boss uses them. The figure suggests pronouns and a top.
+  - Skin tone, hair color (grey and white too) and hair style (a buzz cut and bald are new).
+  - Your top: shirt and tie, open shirt, V-neck, T-shirt, polo, hoodie, turtleneck, sweater or blazer, in a color of your own (or the scenery's outfit) with stripes, a check or dots.
+  - A hat (cap, beanie, sun hat, fedora, beret), glasses, freckles, a beard, and extras: headphones, earrings, a necklace, a nose stud, a scarf, a lanyard, a pin, a hair bow, a flower, in an accent color of your choice.
+  - Kept per browser. Every scenery dresses you its own way but keeps what you picked: your hat replaces the Dusty Annex trilby, your necklace or scarf the beach lei and the school lanyard, and a shirt color of your own leaves off the scenery's collars and ties.
   - The defaults are the classic boss, so nothing changes until you pick something.
-  - For scenery authors: `dressVisitor` gets `v.look` (with the `figure`); `npc("boss", …)` keeps skin, hair and glasses.
+  - For scenery authors: `dressVisitor` gets `v.look` (`top`, `hat`, `wear`, `ownShirt`, and `wearsAtNeck()`); your `npc("boss", …)` outfit applies unless the user picked otherwise.
 - Curly hair no longer hides the eyes.
 - **Your office** gets toys to click:
   - A putting green on the floor, where the room has space: you walk over, line up and putt. In the hole (a small cheer and a wiggling flag), lipped out, way short, or sliced under the desk, where the dog fetches it if it's around. Then back to the desk.

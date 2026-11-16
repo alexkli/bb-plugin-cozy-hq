@@ -2,7 +2,7 @@
 // a little solar robot mower, the trout pond with its frog, and the visitors'
 // extras (the ranger's campaign hat, the courier's bag, the fixer's tool belt,
 // the caretaker's rake).
-import type { CharPose } from "../../characters.ts";
+import type { CharPose, Look } from "../../characters.ts";
 import type { Facing, Rect } from "../../layout.ts";
 import type { PaintInfo, VisitorKind } from "../../theme.ts";
 import { Grid, OUTLINE } from "../../themekit.ts";
@@ -256,7 +256,7 @@ export function pond(ctx: Ctx, tank: Rect, info: PaintInfo & { fish: { x: number
 
 const WALK = new Set<CharPose>(["walk1", "walk3"]);
 
-export function dressVisitor(ctx: Ctx, v: { x: number; y: number; facing: Facing; pose: CharPose; kind: VisitorKind }): void {
+export function dressVisitor(ctx: Ctx, v: { x: number; y: number; facing: Facing; pose: CharPose; kind: VisitorKind; look?: Look }): void {
   const bob = WALK.has(v.pose) ? -1 : 0;
   const x = v.x;
   const y = v.y + bob;
@@ -326,8 +326,8 @@ export function dressVisitor(ctx: Ctx, v: { x: number; y: number; facing: Facing
       break;
     }
     case "boss": {
-      // The fleece's zip and collar.
-      if (v.facing === "back") break;
+      // The fleece's zip and collar (not over a shirt you picked yourself).
+      if (v.facing === "back" || v.look?.ownShirt) break;
       ctx.fillStyle = "#2f5038";
       ctx.fillRect(px(7, 6), y + 14, 6, 1);
       ctx.fillStyle = "#d8d4cc";

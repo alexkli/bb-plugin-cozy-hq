@@ -4,7 +4,7 @@
 // tank nobody has cleaned since it was bought.
 
 import type { PaintInfo, Theme, VisitorKind } from "../../theme.ts";
-import type { CharPose } from "../../characters.ts";
+import type { CharPose, Look } from "../../characters.ts";
 import type { Facing, Rect } from "../../layout.ts";
 import { Grid, OUTLINE, cached } from "../../themekit.ts";
 import { P } from "./pal.ts";
@@ -199,7 +199,7 @@ function fishTank(ctx: CanvasRenderingContext2D, tank: Rect, info: PaintInfo & {
 }
 
 /** What visitors carry: a dripping umbrella and a takeaway bag, a torch, a toolbox, your hat. */
-function dressVisitor(ctx: CanvasRenderingContext2D, v: { x: number; y: number; facing: Facing; pose: CharPose; kind: VisitorKind }, t: number): void {
+function dressVisitor(ctx: CanvasRenderingContext2D, v: { x: number; y: number; facing: Facing; pose: CharPose; kind: VisitorKind; look?: Look }, t: number): void {
   const bob = v.pose === "walk1" || v.pose === "walk3" ? -1 : 0;
   const left = v.facing === "left";
   const handA = v.x + (left ? 6 : 13);
@@ -245,7 +245,8 @@ function dressVisitor(ctx: CanvasRenderingContext2D, v: { x: number; y: number; 
       r(handB - 1, hy - 1, 3, 1, OUTLINE);
       break;
     case "boss": {
-      // You, in a trilby that matches the coat.
+      // You, in a trilby that matches the coat (unless you picked a hat of your own).
+      if (v.look?.hat) break;
       const top = v.y + 1 + bob;
       r(v.x + 6, top - 1, 8, 4, OUTLINE);
       r(v.x + 4, top + 2, 12, 2, OUTLINE);

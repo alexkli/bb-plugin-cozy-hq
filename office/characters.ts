@@ -1,7 +1,7 @@
 // Chibi office workers, built pixel by pixel. Every thread gets a stable look
 // (skin, hair, outfit, accessory) from its id; the shirt follows its project.
 
-import { Grid, hash, hsl, mix, rng, shade, SpriteCache } from "./pixel.ts";
+import { Grid, hash, hsl, mix, parseColor, rng, shade, SpriteCache } from "./pixel.ts";
 import type { Facing } from "./layout.ts";
 
 export const OUTLINE = "#2a1e2e";
@@ -26,8 +26,14 @@ const HAIR_STYLES = ["crop", "bob", "long", "spiky", "bun", "ponytail", "curly",
 /** The styles threads get at random, plus a buzz cut and bald (only you pick those, in the settings). */
 export type HairStyle = (typeof HAIR_STYLES)[number] | "buzz" | "bald";
 type Accessory = "none" | "glasses" | "headphones" | "bow" | "beanie";
-/** Only you have one: lashes and a V-neck for "woman", a tie for "man" (the emblem), an open collar for "nonbinary". */
+/** Only you have one (the settings): "woman" adds lashes; each figure suggests a top and pronouns. */
 export type Figure = "woman" | "man" | "nonbinary";
+/** Your top's cut ("tie": a shirt and tie, the classic boss; the tie itself is the emblem). */
+export type Top = "tie" | "shirt" | "vneck" | "tee" | "polo" | "hoodie" | "turtleneck" | "sweater" | "blazer";
+export type Pattern = "plain" | "stripes" | "check" | "dots";
+export type Hat = "cap" | "beanie" | "sunhat" | "fedora" | "beret";
+/** What else you wear, any number of them (glasses are drawn as the accessory). */
+export type Wear = "glasses" | "freckles" | "beard" | "headphones" | "earrings" | "necklace" | "nosestud" | "scarf" | "lanyard" | "pin" | "bow" | "flower";
 
 export interface Look {
   key: string;
@@ -38,7 +44,19 @@ export interface Look {
   pants: string;
   accessory: Accessory;
   accent: string;
+  /** You only, from the settings (sceneries keep these; see office/themes/README.md). */
   figure?: Figure;
+  top?: Top;
+  pattern?: Pattern;
+  hat?: Hat;
+  wear?: readonly Wear[];
+  /** You picked the shirt's color yourself: a scenery's outfit extras stay off it. */
+  ownShirt?: boolean;
+}
+
+/** You wear something at your neck: a scenery's lei or lanyard would hide it. */
+export function wearsAtNeck(l: Look | undefined): boolean {
+  return l?.wear?.some((w) => w === "necklace" || w === "scarf" || w === "lanyard") ?? false;
 }
 
 export function lookFor(threadId: string, projectHue: number): Look {
@@ -267,15 +285,9 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair, short }:
   const tx = x0 + 4;
   g.rect(tx, bodyTop, tw, torsoH, shirt);
   g.rect(tx, bodyTop + torsoH - 1, tw, 1, shirtLo);
-  if (!back && look.figure === "woman") {
-    // A V-neck and a small pendant.
-    g.rect(tx + 2, bodyTop, 4, 1, skin).set(tx + 3, bodyTop + 1, skinShade).set(tx + 4, bodyTop + 1, skinShade);
-    g.set(tx + 4, bodyTop + 2, "#f2c14e");
-  } else if (!back && look.figure === "nonbinary") {
-    // An open-necked shirt: white collar tips either side of the neck.
-    g.set(tx + 2, bodyTop, "#f4f1ea").set(tx + 5, bodyTop, "#f4f1ea");
-    g.rect(tx + 3, bodyTop, 2, 1, skinShade).rect(tx + 3, bodyTop + 1, 2, 1, skin);
-  } else if (!back) {
+  if (look.pattern && look.pattern !== "plain") drawPattern(g, look.pattern, tx, bodyTop, tw, torsoH - 1, shirt);
+  if (look.top && look.top !== "tie") drawTop(g, look.top, tx, bodyTop, torsoH, back, shirt, skin);
+  else if (!back) {
     // Collar / neckline
     g.set(tx + 3, bodyTop, skinShade).set(tx + 4, bodyTop, skinShade);
     g.set(tx + 3, bodyTop + 1, shade(shirt, 0.25));
@@ -290,6 +302,8 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair, short }:
       for (let xx = 0; xx < 5; xx++) if (row[xx] === "#") g.set(tx + 2 + xx - (back ? 1 : 0) + 0, bodyTop + 1 + yy, ink);
     });
   }
+
+  if (look.wear) drawNeckWear(g, look, tx, bodyTop, back);
 
   // ---- arms
   const armL = tx - 1;
@@ -439,7 +453,9 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair, short }:
   }
 
   drawHair(g, look, hx, hy, back, side);
+  if (look.hat) drawHat(g, look.hat, look.accent, hx, hy);
   drawAccessory(g, look, hx, hy, back);
+  if (look.wear) drawHeadWear(g, look, hx, hy, back);
   if (!back) drawFace(g, look, hx, hy, expr, side, pose);
 
   g.outline(OUTLINE);
@@ -609,6 +625,19 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair, short }:
     }
     // Blush
     gr.set(lx - 1, ey + 3, "#f29a9a").set(rx + 1, ey + 3, "#f29a9a");
+    const wear = l.wear ?? [];
+    if (wear.includes("freckles")) {
+      const dot = shade(l.skin, -0.3);
+      gr.set(lx - 1, ey + 2, dot).set(lx + 1, ey + 3, dot).set(rx - 1, ey + 3, dot).set(rx + 1, ey + 2, dot);
+    }
+    if (wear.includes("beard")) {
+      // Along the jaw and up to the ears, with room for the mouth.
+      const h = l.hairStyle === "bald" ? shade(l.hair, -0.1) : l.hair;
+      gr.rect(x + 1, ey + 3, 10, 1, h).rect(x + 2, ey + 4, 8, 1, h).rect(x, ey, 1, 3, h).rect(x + 11, ey, 1, 3, h);
+      gr.rect(x + 4 + shift, ey + 2, 4, 1, h);
+      gr.rect(x + 5 + shift, ey + 3, 2, 1, shade(l.skin, -0.25));
+    }
+    if (wear.includes("nosestud")) gr.set(x + 6 + shift, ey + 2, "#ffe27a");
     // Mouth
     const mx = x + 5 + shift;
     if (e === "happy" || p === "cheer") {
@@ -620,6 +649,140 @@ function buildChar({ look, facing, pose, expr, emblem, seated: onChair, short }:
     } else if (p === "nap") {
       gr.set(mx + 1, ey + 3, "#c97b84");
     }
+  }
+}
+
+// ------------------------------------------------------------------ your outfit (the settings)
+
+/** A print on the shirt: stripes, a check or dots, lighter on dark shirts and darker on light ones. */
+function drawPattern(g: Grid, p: Pattern, x: number, y: number, w: number, h: number, shirt: string): void {
+  const [r, gg, b] = parseColor(shirt);
+  const pale = r * 0.3 + gg * 0.59 + b * 0.11 > 170;
+  const light = pale ? shade(shirt, -0.16) : shade(shirt, 0.3);
+  const dark = shade(shirt, pale ? -0.12 : -0.22);
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      if (p === "stripes" && j % 2 === 1) g.set(x + i, y + j, light);
+      else if (p === "check" && (i >> 1) % 2 !== (j >> 1) % 2) g.set(x + i, y + j, dark);
+      else if (p === "dots" && j % 2 === 1 && (i + j) % 4 === 1) g.set(x + i, y + j, light);
+    }
+  }
+}
+
+/** The cut of your top, mostly the neckline (the shirt color is already on). */
+function drawTop(g: Grid, top: Top, tx: number, by: number, h: number, back: boolean, shirt: string, skin: string): void {
+  const hi = shade(shirt, 0.3);
+  const lo = shade(shirt, -0.25);
+  const neck = shade(skin, -0.18);
+  const white = "#f4f1ea";
+  if (back) {
+    if (top === "hoodie") g.rect(tx + 1, by, 6, 2, lo);
+    else if (top === "turtleneck") g.rect(tx + 2, by, 4, 1, hi);
+    else if (top === "polo" || top === "shirt") g.rect(tx + 2, by, 4, 1, top === "shirt" ? white : hi);
+    return;
+  }
+  switch (top) {
+    case "tie":
+      break;
+    case "shirt":
+      // Open-necked: white collar tips either side of the neck.
+      g.set(tx + 2, by, white).set(tx + 5, by, white);
+      g.rect(tx + 3, by, 2, 1, neck).rect(tx + 3, by + 1, 2, 1, skin);
+      break;
+    case "vneck":
+      g.rect(tx + 2, by, 4, 1, skin).set(tx + 3, by + 1, neck).set(tx + 4, by + 1, neck);
+      break;
+    case "tee":
+      g.rect(tx + 2, by, 4, 1, lo).rect(tx + 3, by, 2, 1, neck);
+      break;
+    case "polo":
+      // Shirt-colored collar flaps and a buttoned placket.
+      g.set(tx + 2, by, hi).set(tx + 5, by, hi).rect(tx + 3, by, 2, 1, neck);
+      g.set(tx + 3, by + 1, lo).set(tx + 3, by + 2, white).set(tx + 3, by + 3, lo);
+      break;
+    case "hoodie":
+      // The hood bunched round the neck, drawstrings and the front pocket.
+      g.rect(tx + 1, by, 6, 1, lo).rect(tx + 3, by, 2, 1, neck);
+      g.set(tx + 2, by + 1, white).set(tx + 5, by + 1, white).set(tx + 2, by + 2, white).set(tx + 5, by + 2, white);
+      g.rect(tx + 2, by + h - 3, 4, 1, lo).set(tx + 2, by + h - 2, lo).set(tx + 5, by + h - 2, lo);
+      break;
+    case "turtleneck":
+      g.rect(tx + 2, by, 4, 1, hi).rect(tx + 2, by + 1, 4, 1, shade(shirt, 0.12));
+      break;
+    case "sweater":
+      // A ribbed crew neck and hem.
+      g.rect(tx + 2, by, 4, 1, hi).rect(tx + 3, by, 2, 1, neck);
+      for (let i = 0; i < 8; i += 2) g.set(tx + i, by + h - 1, hi);
+      break;
+    case "blazer":
+      // Open lapels over a white tee.
+      g.rect(tx + 3, by, 2, h - 2, white).set(tx + 3, by, neck).set(tx + 4, by, neck);
+      g.rect(tx + 2, by, 1, 3, hi).rect(tx + 5, by, 1, 3, hi).set(tx + 2, by + h - 3, lo);
+      break;
+  }
+}
+
+/** What you wear at the neck and on the chest. */
+function drawNeckWear(g: Grid, l: Look, tx: number, by: number, back: boolean): void {
+  const wear = l.wear!;
+  const gold = "#f2c14e";
+  if (wear.includes("scarf")) {
+    g.rect(tx + 1, by, 6, 2, l.accent).rect(tx + 1, by + 1, 6, 1, shade(l.accent, -0.2));
+    if (!back) g.rect(tx + 5, by + 2, 1, 3, l.accent).set(tx + 5, by + 4, shade(l.accent, -0.2));
+  }
+  if (back) return;
+  if (wear.includes("necklace")) g.set(tx + 2, by, gold).set(tx + 5, by, gold).set(tx + 3, by + 1, gold).set(tx + 4, by + 2, gold);
+  if (wear.includes("lanyard")) {
+    g.rect(tx + 2, by, 1, 2, l.accent).rect(tx + 5, by, 1, 2, l.accent).rect(tx + 3, by + 2, 2, 1, l.accent);
+    g.rect(tx + 3, by + 3, 2, 2, "#ffffff").set(tx + 4, by + 4, "#9ec5ea");
+  }
+  if (wear.includes("pin")) g.rect(tx + 6, by + 2, 1, 2, l.accent).set(tx + 6, by + 2, shade(l.accent, 0.45));
+}
+
+/** A hat over the hair (whatever stood up above the brim is tucked under it). */
+function drawHat(g: Grid, hat: Hat, color: string, x: number, y: number): void {
+  for (let j = y - 6; j < y; j++) for (let i = x - 3; i < x + 15; i++) g.set(i, j, null);
+  const lo = shade(color, -0.25);
+  switch (hat) {
+    case "cap":
+      g.rrect(x, y - 1, 12, 5, color, 2).rect(x - 1, y + 3, 14, 1, lo).set(x + 5, y, shade(color, 0.35));
+      break;
+    case "beanie":
+      g.rrect(x, y - 2, 12, 5, color, 2).rect(x - 1, y + 2, 14, 1, lo);
+      for (let i = 1; i < 12; i += 2) g.set(x + i, y, lo);
+      g.rect(x + 5, y - 3, 2, 1, "#ffffff");
+      break;
+    case "sunhat": {
+      const straw = "#e8c77d";
+      g.rrect(x + 1, y - 3, 10, 5, straw, 2).rect(x + 1, y, 10, 1, color);
+      g.rect(x - 3, y + 1, 18, 1, straw).rect(x - 2, y + 2, 16, 1, shade(straw, -0.2));
+      break;
+    }
+    case "fedora": {
+      const felt = "#4a3f3a";
+      g.rrect(x + 1, y - 3, 10, 4, felt, 1).set(x + 5, y - 3, null).set(x + 6, y - 3, null);
+      g.rect(x + 1, y, 10, 1, color).rect(x - 2, y + 1, 16, 1, shade(felt, -0.2));
+      break;
+    }
+    case "beret":
+      g.ellipse(x + 5, y, 7, 2.2, color).rect(x - 1, y + 1, 13, 1, lo).set(x + 6, y - 3, color);
+      break;
+  }
+}
+
+/** Headphones, earrings, a bow or a flower in the hair. */
+function drawHeadWear(g: Grid, l: Look, x: number, y: number, back: boolean): void {
+  const wear = l.wear!;
+  if (wear.includes("headphones")) {
+    g.rect(x + 1, y - 2, 10, 1, "#3b3b4a").set(x, y - 1, "#3b3b4a").set(x + 11, y - 1, "#3b3b4a");
+    g.rect(x - 2, y + 3, 2, 4, l.accent).rect(x + 12, y + 3, 2, 4, l.accent);
+  }
+  if (back) return;
+  if (wear.includes("earrings")) g.set(x - 1, y + 6, "#f2c14e").set(x + 12, y + 6, "#f2c14e");
+  if (wear.includes("bow")) g.rect(x + 8, y - 2, 2, 2, l.accent).rect(x + 11, y - 2, 2, 2, l.accent).set(x + 10, y - 1, shade(l.accent, -0.2));
+  if (wear.includes("flower")) {
+    g.set(x - 1, y + 1, "#ffd1e0").set(x - 2, y + 2, "#ffd1e0").set(x, y + 2, "#ffd1e0").set(x - 1, y + 3, "#ffd1e0");
+    g.set(x - 1, y + 2, "#ffd84a");
   }
 }
 

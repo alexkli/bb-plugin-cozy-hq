@@ -4,7 +4,7 @@
 // (the hall monitor's sash and stop sign, the custodian's keys, lanyards).
 import { Grid, OUTLINE } from "../../themekit.ts";
 import type { PaintInfo, VisitorKind } from "../../theme.ts";
-import type { CharPose } from "../../characters.ts";
+import { wearsAtNeck, type CharPose, type Look } from "../../characters.ts";
 import type { Facing, Rect } from "../../layout.ts";
 import { C, sprite } from "./kit.ts";
 
@@ -213,7 +213,7 @@ export function aquarium(ctx: CanvasRenderingContext2D, tank: Rect, info: PaintI
 
 // ------------------------------------------------------------------ visitors
 
-export function dressVisitor(ctx: CanvasRenderingContext2D, v: { x: number; y: number; facing: Facing; pose: CharPose; kind: VisitorKind }, t: number): void {
+export function dressVisitor(ctx: CanvasRenderingContext2D, v: { x: number; y: number; facing: Facing; pose: CharPose; kind: VisitorKind; look?: Look }, t: number): void {
   void t;
   const { x, y, facing, pose, kind } = v;
   const bob = pose === "walk1" || pose === "walk3" ? -1 : 0;
@@ -247,8 +247,8 @@ export function dressVisitor(ctx: CanvasRenderingContext2D, v: { x: number; y: n
       break;
     case "technician":
     case "boss":
-      // Staff lanyard (gold for the principal).
-      if (front && pose !== "read" && pose !== "present" && pose !== "present-plan") {
+      // Staff lanyard (gold for the principal, who may wear their own things at the neck).
+      if (front && pose !== "read" && pose !== "present" && pose !== "present-plan" && !(kind === "boss" && wearsAtNeck(v.look))) {
         const strap = kind === "boss" ? C.yellowLo : C.teal;
         px(strap, x + 7, bt, 1, 2);
         px(strap, x + 10, bt, 1, 2);

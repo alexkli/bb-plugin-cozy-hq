@@ -171,11 +171,17 @@ Your pick is kept per browser; the buddy dresses to match.
 ## Settings
 
 The gear at the top right of the office (or either speaker next to the TV)
-opens the settings: how you look, sound on/off, volume and ambient sounds,
-the scenery and the office buddy. **You** is the boss at the big desk: pick a
-figure (woman, man or nonbinary), your pronouns (she, he or they; what the
-office says about you uses them), skin tone, hair color and style, and
-glasses, with a live preview. Every scenery dresses you its own way. Next to it, **Names** puts a name tag over everyone.
+opens the settings: sound on/off, volume and ambient sounds, the office
+buddy, you and the scenery. **You** is the boss at the big desk: pick a
+figure (woman, man or nonbinary) right there, or **Customize…** for the
+full look, with a big preview from the front and the back: your pronouns
+(she, he or they; what the office says about you uses them), skin tone,
+hair color and style, your top (shirt and tie, V-neck, T-shirt, polo,
+hoodie, turtleneck, sweater, blazer…) with its color and a pattern, a hat,
+glasses, freckles or a beard, and extras like headphones, earrings, a
+necklace, a scarf, a lanyard, a pin, a hair bow or a flower. Every scenery
+dresses you its own way and keeps what you picked. Next to the gear,
+**Names** puts a name tag over everyone.
 Everything else:
 
 ```sh

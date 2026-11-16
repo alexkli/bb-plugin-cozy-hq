@@ -33,7 +33,7 @@ import { drawPixelText, pixelTextWidth } from "./pixelfont.ts";
 import type { SoundName } from "./sound.ts";
 import { CLASSIC } from "./themes/classic.ts";
 import { withPets, type GatherCue, type GatherSpot, type Gathering, type Light, type PaintInfo, type SceneryClickable, type Theme, type VisitorKind } from "./theme.ts";
-import { DEFAULT_YOU, withPronouns, youEmblem, youLook, type You } from "./you.ts";
+import { DEFAULT_YOU, dressYou, withPronouns, youEmblem, youLook, type You } from "./you.ts";
 import {
   drawAccessory,
   drawCarriedLantern,
@@ -563,7 +563,9 @@ export class World {
   }
 
   private npcLookOf(kind: VisitorKind): Look {
-    const base = kind === "boss" ? this.youBase : npcLook(kind);
+    // You: dressed by the scenery, keeping what you picked.
+    if (kind === "boss") return this.dressed(`npc|boss|${this.youBase.key}`, () => dressYou(this.you, this.theme));
+    const base = npcLook(kind);
     const fn = this.theme.npc;
     if (!fn) return base;
     return this.dressed(`npc|${kind}|${base.key}`, () => {

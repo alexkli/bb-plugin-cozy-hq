@@ -244,8 +244,8 @@ export function skylineDressVisitor(ctx: CanvasRenderingContext2D, v: { x: numbe
       break;
     }
     case "boss": {
-      // A crisp shirt and a tie under the suit (the other figures keep their own neckline).
-      if (v.facing !== "front" || (v.look?.figure && v.look.figure !== "man")) break;
+      // A crisp shirt and a tie under the suit (with your shirt and tie, unless you picked the shirt yourself).
+      if (v.facing !== "front" || v.look?.ownShirt || (v.look?.top ?? "tie") !== "tie") break;
       px(8, 14, 3, 1, "#f4f2ee");
       px(9, 15, 1, 3, "#b8434f");
       break;
