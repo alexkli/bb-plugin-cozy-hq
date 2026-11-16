@@ -365,6 +365,17 @@ export interface Env {
   season: Season | null;
   /** Every season or festival on today (for seasonal parties). */
   seasons: Season[];
+  /** Outline everything you can click (while Alt is held). */
+  targets?: boolean;
+}
+
+/** Something you can click, and its box (round: the circle inside it). */
+export interface ClickTarget {
+  hit: Hit;
+  rect: Rect;
+  round?: boolean;
+  /** Clickable, but left for you to find: not outlined. */
+  secret?: boolean;
 }
 
 const WALK_SPEED = 32; // px/s
@@ -373,6 +384,9 @@ const NPC_SPEED = 24;
 const KID_SPEED = 40;
 
 const inRect = (x: number, y: number, r: Rect) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+
+/** The corner brackets around things to click. */
+const TARGET_COLOR = "#fff7cf";
 
 /** The two highlight tints, warm gold and cool sky blue: a saturated rim that shows on pale floors, and a lighter haze around it. */
 const GLOW: Record<Highlight, string> = { finished: "#ffb23c", started: "#4fb8ff" };
@@ -995,53 +1009,92 @@ export class World {
   // ------------------------------------------------------------------ input
 
   hitTest(x: number, y: number): Hit | null {
+    for (const t of this.clickTargets()) {
+      const r = t.rect;
+      const inside = t.round ? Math.hypot(x - (r.x + r.w / 2), y - (r.y + r.h / 2)) <= r.w / 2 : inRect(x, y, r);
+      if (inside) return t.hit;
+    }
+    return null;
+  }
+
+  /**
+   * Everything you can click right now and where, front to back: hitTest
+   * takes the first one under the pointer, and holding Alt outlines them
+   * all (but the secrets: the Easter eggs and the string lights).
+   */
+  clickTargets(): ClickTarget[] {
     const L = this.L;
-    if (!L) return null;
+    if (!L) return [];
+    const out: ClickTarget[] = [];
     const list = [...this.agents.values()].filter((a) => !a.leaving).sort((p, q) => q.y - p.y);
     for (const a of list) {
-      const top = this.headTop(a);
-      if (x >= a.x - 8 && x <= a.x + 8 && y >= top - 2 && y <= this.drawY(a) + 1) return { kind: "agent", id: a.id };
+      const top = this.headTop(a) - 2;
+      out.push({ hit: { kind: "agent", id: a.id }, rect: { x: a.x - 8, y: top, w: 17, h: this.drawY(a) + 2 - top } });
     }
-    const helper = this.crew.hit(x, y);
-    if (helper) return { kind: "helper", ...helper };
+    for (const h of this.crew.targets()) out.push({ hit: { kind: "helper", id: h.id, key: h.key }, rect: h.rect });
     for (const n of this.npcs) {
       const ny = n.y - this.climbOf(n);
-      if (Math.abs(x - n.x) <= 8 && y >= ny - ANCHOR_Y + 2 && y <= ny + 1) return { kind: "npc", who: n.kind };
+      out.push({ hit: { kind: "npc", who: n.kind }, rect: { x: n.x - 8, y: ny - ANCHOR_Y + 2, w: 17, h: ANCHOR_Y } });
     }
-    for (const k of this.kids) {
-      if (Math.abs(x - k.x) <= 6 && y >= k.y - KID_H && y <= k.y + 1) return { kind: "npc", who: "kid" };
-    }
-    if (Math.abs(x - this.dog.x) < 10 && y > this.dog.y - 15 && y < this.dog.y + 2) return { kind: "dog" };
-    if (Math.abs(x - this.roomba.x) <= 8 && y >= this.roomba.y - 7 && y <= this.roomba.y + 2) return { kind: "roomba" };
+    for (const k of this.kids) out.push({ hit: { kind: "npc", who: "kid" }, rect: { x: k.x - 6, y: k.y - KID_H, w: 13, h: KID_H + 2 } });
+    out.push({ hit: { kind: "dog" }, rect: { x: this.dog.x - 10, y: this.dog.y - 15, w: 20, h: 17 } });
+    out.push({ hit: { kind: "roomba" }, rect: { x: this.roomba.x - 8, y: this.roomba.y - 7, w: 17, h: 10 } });
     if (this.season === "easter") {
       for (const [i, p] of this.eggs.entries()) {
-        if (!this.eggsFound.has(i) && Math.abs(x - p.x) <= 4 && y >= p.y - 8 && y <= p.y + 2) return { kind: "egg", index: i };
+        if (!this.eggsFound.has(i)) out.push({ hit: { kind: "egg", index: i }, rect: { x: p.x - 4, y: p.y - 8, w: 9, h: 11 }, secret: true });
       }
     }
-    if (Math.abs(x - this.cat.x) < 9 && y > this.cat.y - 13 && y < this.cat.y + 2) return { kind: "cat" };
+    out.push({ hit: { kind: "cat" }, rect: { x: this.cat.x - 9, y: this.cat.y - 13, w: 18, h: 15 } });
     const w = L.wall;
-    for (const s of L.speakers) if (inRect(x, y, s)) return { kind: "speaker" };
-    if (inRect(x, y, L.tv)) return { kind: "tv" };
-    if (inRect(x, y, { x: w.legendNote.x - 1, y: w.legendNote.y - 1, w: w.legendNote.w + 2, h: w.legendNote.h + 2 })) return { kind: "legend" };
-    if (inRect(x, y, w.pinboard)) return { kind: "pinboard" };
-    if (inRect(x, y, { x: w.door.x - 3, y: w.door.y - 15, w: w.door.w + 6, h: w.door.h + 15 })) return { kind: "door" };
-    if (inRect(x, y, w.calendar)) return { kind: "calendar" };
-    if (inRect(x, y, w.status)) return { kind: "status" };
-    if (Math.hypot(x - w.clock.x, y - w.clock.y) <= w.clock.r + 2) return { kind: "clock" };
+    for (const sp of L.speakers) out.push({ hit: { kind: "speaker" }, rect: sp });
+    out.push({ hit: { kind: "tv" }, rect: L.tv });
+    out.push({ hit: { kind: "legend" }, rect: { x: w.legendNote.x - 1, y: w.legendNote.y - 1, w: w.legendNote.w + 2, h: w.legendNote.h + 2 } });
+    out.push({ hit: { kind: "pinboard" }, rect: w.pinboard });
+    out.push({ hit: { kind: "door" }, rect: { x: w.door.x - 3, y: w.door.y - 15, w: w.door.w + 6, h: w.door.h + 15 } });
+    out.push({ hit: { kind: "calendar" }, rect: w.calendar });
+    out.push({ hit: { kind: "status" }, rect: w.status });
+    const cr = w.clock.r + 2;
+    out.push({ hit: { kind: "clock" }, rect: { x: w.clock.x - cr, y: w.clock.y - cr, w: cr * 2, h: cr * 2 }, round: true });
     for (let i = L.pokeables.length - 1; i >= 0; i--) {
       const p = L.pokeables[i]!;
-      if (inRect(x, y, p.rect)) return { kind: "poke", id: p.id, poke: p.kind };
+      out.push({ hit: { kind: "poke", id: p.id, poke: p.kind }, rect: p.rect });
     }
-    for (const [i, win] of w.windows.entries()) if (inRect(x, y, win)) return { kind: "window", index: i };
-    if (y <= 6) return { kind: "lights" };
+    for (const [i, win] of w.windows.entries()) out.push({ hit: { kind: "window", index: i }, rect: win });
+    out.push({ hit: { kind: "lights" }, rect: { x: 0, y: 0, w: L.W, h: 7 }, secret: true });
     const occupied = new Set([...this.agents.values()].map((a) => a.spot?.id ?? a.target));
     for (const d of L.desks) {
       if (occupied.has(d.spot.id)) continue;
       const area = d.side === "north" ? { x: d.x + 20, y: d.y - 10, w: 22, h: 30 } : { x: d.x + 20, y: d.y + 12, w: 24, h: 32 };
-      if (inRect(x, y, area)) return { kind: "desk", index: d.index };
+      out.push({ hit: { kind: "desk", index: d.index }, rect: area });
     }
-    for (const c of this.sceneryClickables()) if (inRect(x, y, c.rect)) return { kind: "scenery", id: c.id, hover: c.hover };
-    return null;
+    for (const c of this.sceneryClickables()) out.push({ hit: { kind: "scenery", id: c.id, hover: c.hover }, rect: c.rect });
+    return out;
+  }
+
+  /** Corner brackets around everything you can click, breathing a little (Alt held). */
+  private drawTargets(ctx: CanvasRenderingContext2D): void {
+    const L = this.L!;
+    ctx.save();
+    ctx.globalAlpha = 0.75 + 0.25 * Math.sin(this.time * 3.2);
+    for (const t of this.clickTargets()) {
+      if (t.secret) continue;
+      const x0 = Math.max(0, Math.round(t.rect.x) - 1);
+      const y0 = Math.max(0, Math.round(t.rect.y) - 1);
+      const x1 = Math.min(L.W - 2, Math.round(t.rect.x + t.rect.w));
+      const y1 = Math.min(L.H - 2, Math.round(t.rect.y + t.rect.h));
+      if (x1 - x0 < 3 || y1 - y0 < 3) continue;
+      const arm = Math.max(2, Math.min(5, Math.floor(Math.min(x1 - x0, y1 - y0) / 3)));
+      for (const [color, d] of [[OUTLINE, 1], [TARGET_COLOR, 0]] as const) {
+        ctx.fillStyle = color;
+        for (const [cx, sx] of [[x0, 1], [x1, -1]] as const) {
+          for (const [cy, sy] of [[y0, 1], [y1, -1]] as const) {
+            ctx.fillRect(sx > 0 ? cx + d : cx - arm + 1 + d, cy + d, arm, 1);
+            ctx.fillRect(cx + d, sy > 0 ? cy + d : cy - arm + 1 + d, 1, arm);
+          }
+        }
+      }
+    }
+    ctx.restore();
   }
 
   /** The scenery's things to click (asked once per plan and theme). */
@@ -3569,6 +3622,7 @@ export class World {
     }
     for (const a of this.agents.values()) this.drawBubble(ctx, a);
     this.crew.drawOverlay(ctx, this.theme);
+    if (env.targets) this.drawTargets(ctx);
     this.drawHover(ctx, env);
   }
 

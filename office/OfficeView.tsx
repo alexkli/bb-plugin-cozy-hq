@@ -533,6 +533,31 @@ export function OfficeView(input: OfficeProps) {
   const weatherRef = useRef(props.weather);
   weatherRef.current = props.weather;
 
+  // Hold Alt (Option) to see everything you can click: let go, switch away
+  // or use Alt in a shortcut and it's gone. Not while typing.
+  const [targets, setTargets] = useState(false);
+  const targetsRef = useRef(false);
+  targetsRef.current = targets;
+  useEffect(() => {
+    const typing = (el: EventTarget | null) =>
+      el instanceof HTMLElement && (el.isContentEditable || el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT");
+    const down = (e: KeyboardEvent) => setTargets(e.key === "Alt" && !e.ctrlKey && !e.metaKey && !e.shiftKey && !typing(e.target));
+    const up = (e: KeyboardEvent) => {
+      if (e.key === "Alt") setTargets(false);
+    };
+    const off = () => setTargets(false);
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", off);
+    document.addEventListener("visibilitychange", off);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", off);
+      document.removeEventListener("visibilitychange", off);
+    };
+  }, []);
+
   // ------------------------------------------------------------ small talk
   const recaps = useRef(new Map<string, string | null>());
   const asking = useRef(new Set<string>());
@@ -678,6 +703,7 @@ export function OfficeView(input: OfficeProps) {
           planning: c.planning.length,
         },
         overflow: overflowRef.current,
+        targets: targetsRef.current,
         ...seasonsFor(dbg.season, date),
       });
       const bw = L.W * f.k;
@@ -710,6 +736,8 @@ export function OfficeView(input: OfficeProps) {
   };
 
   const onMove = (e: React.PointerEvent) => {
+    // Alt let go while we weren't told (focus was elsewhere).
+    if (targets && !e.altKey) setTargets(false);
     const p = toNative(e);
     const hit = world.hitTest(p.x, p.y);
     hoverRef.current = hit;
@@ -995,7 +1023,7 @@ export function OfficeView(input: OfficeProps) {
   const crisp = fit ? Math.abs(fit.s - fit.k) < 1e-6 : false;
 
   return (
-    <div className="chq-root">
+    <div className={`chq-root${targets ? " is-targets" : ""}`}>
       <div className="chq-stage" ref={stageRef}>
         <div className="chq-scene" style={stageStyle}>
           <canvas

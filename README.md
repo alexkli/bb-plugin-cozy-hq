@@ -48,6 +48,11 @@ ultrawide; everyone else gets a flat screen, with the odd retro CRT), chairs
 by provider, and a shirt badge shows what the thread is about. One or two
 people work in a Vision Pro.
 
+Hold **Alt** (Option on a Mac) to see everything you can click: people,
+pets, visitors, the toys and gadgets, the wall, empty desks, the scenery's
+own things and the buttons get light corner brackets until you let go (a few
+secrets stay hidden). Clicking works as usual while you hold it.
+
 When a thread runs subagents of its own (background agents, like Claude Code's
 background Agent tasks), they come in through the door as small helpers in
 caps of the thread's color and stand by its desk while it works: pointing at

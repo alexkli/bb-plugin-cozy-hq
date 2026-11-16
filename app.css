@@ -901,6 +901,26 @@
 .chq-labels-btn:hover { opacity: 1; background: #fffaf0; }
 .chq-labels-btn.is-on { background: #2a1e2e; color: #fffaf0; opacity: 1; }
 
+/* Alt held: the buttons and tags get the same light outline as the clickable things in the scene. */
+.chq-root.is-targets :is(.chq-labels-btn, .chq-gear-btn, .chq-tag, .chq-empty button) {
+  outline: 2px solid #fff7cf;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px rgba(42, 30, 46, 0.4);
+  animation: chq-target 1.9s ease-in-out infinite;
+}
+/* The TV and the pinboard sit over their canvas brackets: an outline of their own. */
+.chq-root.is-targets :is(.chq-tv, .chq-pinboard) {
+  outline: 2px solid #fff7cf;
+  outline-offset: 3px;
+  animation: chq-target 1.9s ease-in-out infinite;
+}
+@keyframes chq-target {
+  50% { outline-color: rgba(255, 247, 207, 0.6); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chq-root.is-targets :is(.chq-labels-btn, .chq-gear-btn, .chq-tag, .chq-empty button, .chq-tv, .chq-pinboard) { animation: none; }
+}
+
 /* Comic speech bubbles. */
 .chq-say {
   position: absolute;

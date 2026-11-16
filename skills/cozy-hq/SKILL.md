@@ -56,6 +56,12 @@ thread. A tag's chip shows the state (`?` question, `!` approval, `▤` plan,
 chip with a red dot means unread, an outlined chip means read. Without tags,
 threads waiting for you show a small bubble over their heads instead.
 
+Holding **Alt** (Option on a Mac) puts light corner brackets around
+everything in the office you can click (people, pets, visitors, props,
+the wall, empty desks, scenery things, the buttons) until you let go; the
+Easter eggs and the string lights stay secret. Clicks still work meanwhile.
+There's no equivalent on phones.
+
 A soft glow marks what's new. Warm gold: the thread finished, failed or
 started waiting on you (question, approval, plan) and you haven't opened it
 since; it glows walking to the waiting room and sitting there, and its name

@@ -33,6 +33,7 @@
   - Opening the thread once ends it. Marking it unread again to keep as a reminder doesn't bring it back; only a new finish does.
   - Cool blue around a thread that got to work since you last looked: on its way to its desk (or the meeting room, to plan) and while it works there, until it stops. At night its desk lamp takes on the same blue.
 - For scenery authors: `clickables` and `click` hooks for things to click in the scenery, which can ask idle people over with lines and sounds.
+- Hold Alt (Option on a Mac) to see everything you can click: light corner brackets around people, pets, visitors, props, the wall, empty desks and the scenery's own things, and outlines on the buttons, the TV and the pinboard, until you let go. The Easter eggs and the string lights stay secret. Not while you're typing.
 - Subagents help out at the desk: while a thread works with background agents of its own, they come in as small helpers in caps of its color and stand next to its desk, pointing at the screen, holding up a page or a laptop, nodding, now and then a word.
   - Up to three per desk (two at desks with their back to you), the rest as "+n"; hover a helper to see whose it is, click it to open the thread.
   - They walk in through the door when they start and back out when they're done.

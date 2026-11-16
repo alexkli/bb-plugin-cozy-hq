@@ -5,7 +5,7 @@
 // stand and how many come is decided in subagents.ts.
 
 import { ANCHOR_X, ANCHOR_Y, charSprite, lookFor, OUTLINE, type CharPose, type Expression, type Look } from "./characters.ts";
-import type { Desk, Facing, Layout } from "./layout.ts";
+import type { Desk, Facing, Layout, Rect } from "./layout.ts";
 import { route, step, type Drawable, type Walker } from "./life.ts";
 import { Grid, hash, rng, shade, SpriteCache } from "./pixel.ts";
 import { drawPixelText, pixelTextWidth } from "./pixelfont.ts";
@@ -287,20 +287,17 @@ export class Crew {
     return { x: top.x + 8, y: top.y - 24 };
   }
 
-  /** The thread whose helper is at (x, y), with that helper's index. */
-  hit(x: number, y: number): { id: string; key: string } | null {
-    let best: Helper | null = null;
-    for (const h of this.helpers.values()) {
-      if (h.wait > 0 || h.leaving) continue;
-      if (Math.abs(x - h.x) <= 6 && y >= h.y - 21 && y <= h.y + 1 && (!best || h.y > best.y)) best = h;
-    }
-    if (best) return { id: best.threadId, key: best.key };
+  /** Helpers you can click (front ones first) and the "+n" tags, each with its thread and box. */
+  targets(): { id: string; key: string; rect: Rect }[] {
+    const out: { id: string; key: string; rect: Rect }[] = [];
+    const shown = [...this.helpers.values()].filter((h) => h.wait <= 0 && !h.leaving).sort((p, q) => q.y - p.y);
+    for (const h of shown) out.push({ id: h.threadId, key: h.key, rect: { x: h.x - 6, y: h.y - 21, w: 13, h: 23 } });
     for (const [id, { n, desk }] of this.more) {
       const at = this.tagAt(desk);
       const half = (pixelTextWidth(`+${n}`) + 6) / 2;
-      if (Math.abs(x - at.x) <= half && y >= at.y - 10 && y <= at.y + 1) return { id, key: `${id}#0` };
+      out.push({ id, key: `${id}#0`, rect: { x: at.x - half, y: at.y - 10, w: half * 2 + 1, h: 12 } });
     }
-    return null;
+    return out;
   }
 
   /** Native point above a helper's head, for the hover marker. */
