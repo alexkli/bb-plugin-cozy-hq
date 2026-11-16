@@ -11,7 +11,7 @@ import type { Facing, Layout, LayoutOptions, PlantPlacement, Point, PokeKind, Po
 import type { Drawable, Season } from "./life.ts";
 import type { DeskStyle } from "./model.ts";
 
-export type SceneryId = "classic" | "neon" | "redwoods" | "beach" | "skyline" | "annex" | "school" | "startup" | "cabin" | "lair" | "spaceship";
+export type SceneryId = "classic" | "neon" | "redwoods" | "beach" | "skyline" | "annex" | "school" | "startup" | "cabin" | "lair" | "spaceship" | "cafe";
 
 /** Sky gradient for the hour; `night` is 0 by day, 1 at night (it drives lamps and darkness). */
 export interface SkyColors {
