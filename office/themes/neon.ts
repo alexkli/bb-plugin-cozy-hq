@@ -15,7 +15,7 @@ import { neonDressVisitor, neonFishTank, neonPet, neonRoomba } from "./neon/crit
 export const NEON: Theme = {
   id: "neon",
   name: "Neon City",
-  blurb: "A cyberpunk loft: neon signs, holo screens and a megacity in the rain",
+  blurb: "A city block on rainy neon streets: capsule desks, shops and food carts",
   icon: "🌃",
 
   layout: (W, H, opts) => neonLayout(W, H, opts),

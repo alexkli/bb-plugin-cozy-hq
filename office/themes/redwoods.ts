@@ -22,7 +22,7 @@ import { LABELS, outdoor, SOUNDS } from "./redwoods/words.ts";
 export const REDWOODS: Theme = {
   id: "redwoods",
   name: "Redwood Camp",
-  blurb: "Glamping among the redwoods: tents, lanterns and a campfire",
+  blurb: "Tents among giant redwoods, a creek and a campfire",
   icon: "🌲",
   layout: (W, H, opts) => campLayout(W, H, opts),
   background: BACKGROUND,

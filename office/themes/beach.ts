@@ -17,7 +17,7 @@ import { beachOutside, beachSky, beachWallLights } from "./beach/view.ts";
 export const BEACH: Theme = {
   id: "beach",
   name: "Surf Villa",
-  blurb: "A beach villa with surfboards, palms and the waves outside",
+  blurb: "A villa, a pool deck and the beach down to the surf",
   icon: "🏄",
   layout: (W, H, opts) => beachLayout(W, H, opts),
   background: BACKDROP,

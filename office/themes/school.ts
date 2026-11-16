@@ -22,7 +22,7 @@ import { LABELS, outdoor, SOUNDS } from "./school/words.ts";
 export const SCHOOL: Theme = {
   id: "school",
   name: "School",
-  blurb: "An elementary and middle school: classrooms, cafeteria and playground",
+  blurb: "Classrooms, a cafeteria and a schoolyard with a bus stop",
   icon: "🏫",
   layout: schoolLayout,
   background: BACKGROUND,

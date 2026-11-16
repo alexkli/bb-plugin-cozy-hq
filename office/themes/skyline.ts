@@ -18,7 +18,7 @@ import { LABELS, SOUNDS, skylineOutdoor } from "./skyline/words.ts";
 export const SKYLINE: Theme = {
   id: "skyline",
   name: "Sky Loft",
-  blurb: "Sleek and modern on the top floor of a New York skyscraper",
+  blurb: "A penthouse atop a New York skyscraper, the city far below",
   icon: "🏙️",
   layout: (W, H, opts) => skylinePlan(W, H, opts),
   background: BACKGROUND,
