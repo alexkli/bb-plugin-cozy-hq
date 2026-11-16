@@ -16,6 +16,7 @@ import { fluffyCat } from "./critters.ts";
 import { C } from "./kit.ts";
 import { planOf, type LairPlan } from "./plan.ts";
 import { heli } from "./view.ts";
+import { bayClick, bayClickables, bayDecor, bayLights, bayOverlay, drawDoors, startLaunch } from "./rocket.ts";
 import { LINES as W, SHOWS, type ClickLine } from "./words.ts";
 
 type Ctx = CanvasRenderingContext2D;
@@ -37,7 +38,7 @@ function cues(list: readonly ClickLine[]): GatherCue[] {
 
 // ------------------------------------------------------------------ what's going on
 
-type ButtonKind = "confetti" | "alert" | "disco" | "heli" | "trapdoor" | "swivel";
+type ButtonKind = "confetti" | "alert" | "disco" | "heli" | "trapdoor" | "swivel" | "launch";
 type Passenger = "cat" | "pizza" | "ducks" | "sleeper" | "palm" | "flamingo";
 type LavaKind = "bubble" | "duck" | "fountain";
 
@@ -72,7 +73,7 @@ export function lairClickables(L: Layout): SceneryClickable[] {
   bind(L);
   const plan = planOf(L);
   if (!plan) return [];
-  const out: SceneryClickable[] = [];
+  const out: SceneryClickable[] = plan.bay ? bayClickables(plan.bay) : [];
   const b = plan.button;
   out.push({ id: "button", rect: b, hover: W.hover.button });
   out.push({ id: "map", rect: plan.map, hover: W.hover.map });
@@ -94,6 +95,7 @@ export function lairClick(id: string, act: SceneryActions): string | null {
   const plan = planOf(act.L);
   if (!plan) return null;
   if (id === "button") return clickButton(plan, act);
+  if (id.startsWith("rocket") && plan.bay) return bayClick(id, plan.bay, act);
   if (id === "map") return clickMap(plan, act);
   if (id === "countdown") return clickCountdown(plan, act);
   if (id === "hatch") return openPit(plan, act) ?? "lair-trapdoor";
@@ -124,6 +126,7 @@ function clickButton(plan: LairPlan, act: SceneryActions): string | null {
     ["swivel", 3],
   ];
   if (act.L.wall.windows.length > 0 && !recent(heli.liftAt, 10)) options.push(["heli", 2]);
+  if (plan.bay) options.push(["launch", 3]);
   const kind = weighted(options.filter(([k]) => !(k === "swivel" && swivel && recent(swivel.t0, 10)) && !(k === "trapdoor" && pit && recent(pit.t0, 14))));
   const b = plan.button;
   switch (kind) {
@@ -134,6 +137,8 @@ function clickButton(plan: LairPlan, act: SceneryActions): string | null {
       return "lair-swivel";
     case "trapdoor":
       return openPit(plan, act) ?? "lair-trapdoor";
+    case "launch":
+      return startLaunch(plan.bay!, act);
     case "heli":
       heli.liftAt = act.t;
       mutter(act, act.L.wall.windows[act.L.wall.windows.length - 1]!.x, 90, W.heli, 1.2, 160);
@@ -674,6 +679,7 @@ function drawFx(ctx: Ctx, L: Layout, t: number): void {
 /** On the floor and the wall, under furniture and people. */
 export function clickUnderlay(ctx: Ctx, L: Layout, plan: LairPlan, info: PaintInfo): void {
   bind(L);
+  if (plan.bay) drawDoors(ctx, plan.bay, info.t);
   drawPitHole(ctx, plan, info.t);
   drawTarget(ctx, plan, info.t);
   drawCountdown(ctx, plan, info);
@@ -684,6 +690,7 @@ export function clickUnderlay(ctx: Ctx, L: Layout, plan: LairPlan, info: PaintIn
 export function clickDecor(ctx: Ctx, L: Layout, plan: LairPlan, info: PaintInfo): Drawable[] {
   bind(L);
   const out: Drawable[] = [...swivelItems(ctx, L, info.t), ...roastItems(ctx, info.t)];
+  if (plan.bay) out.push(...bayDecor(ctx, L, plan.bay, info));
   if (pit) out.push({ z: plan.hatch.y + plan.hatch.h + 1, draw: () => pitFront(ctx, plan, info.t) });
   if (plan.rail) out.push({ z: L.H + 2, draw: () => drawTrain(ctx, plan, L, info.t) });
   return out;
@@ -692,6 +699,7 @@ export function clickDecor(ctx: Ctx, L: Layout, plan: LairPlan, info: PaintInfo)
 export function clickOverlay(ctx: Ctx, L: Layout, plan: LairPlan, info: PaintInfo): void {
   bind(L);
   drawLavaFx(ctx, plan, info.t, true);
+  if (plan.bay) bayOverlay(ctx, plan.bay, info.t);
   drawFx(ctx, L, info.t);
 }
 
@@ -705,6 +713,7 @@ export function clickLights(L: Layout, plan: LairPlan, t: number): Light[] {
   if (car && plan.rail) out.push([car.x, plan.rail.y - 7, 40, 0.8, "#fff2c0", 0.22]);
   for (const f of lava) if (f.kind !== "duck") out.push([f.x, (plan.crater?.y ?? L.H) + 10, 40, 0.9, "#ff8a2a", 0.4]);
   if (tapes && t - tapes.t0 < 4) for (const tp of plan.tapes) out.push([tp.x + tp.w / 2, tp.y + 12, 18, 0.7, "#ffc54a", 0.2]);
+  if (plan.bay) out.push(...bayLights(plan.bay, t));
   return out;
 }
 

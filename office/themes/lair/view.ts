@@ -5,7 +5,9 @@
 import type { Rect } from "../../layout.ts";
 import type { OutsideInfo, PaintInfo, SkyColors } from "../../theme.ts";
 import { hash, mix } from "../../themekit.ts";
+import { BAY_DOORS } from "./bay.ts";
 import { C } from "./kit.ts";
+import { askDoors } from "./rocket.ts";
 
 /** A little brighter and more turquoise than the city sky by day. */
 export function lairSky(_hour: number, classic: SkyColors): SkyColors {
@@ -29,6 +31,12 @@ function seaColors(info: OutsideInfo): { far: string; near: string; foam: string
 
 export function lairOutside(ctx: CanvasRenderingContext2D, win: Rect, index: number, info: OutsideInfo): void {
   const { x, y, w, h } = win;
+  if (BAY_DOORS.has(win)) {
+    // Up the launch shaft: only sky, and the crater's rim against it.
+    ctx.fillStyle = info.night > 0.5 ? "#140f16" : "#3a3438";
+    for (let k = 0; k < w; k++) ctx.fillRect(x + k, y + h - 2 - (hash(`rim${k >> 1}`) % 4), 1, 6);
+    return;
+  }
   const t = info.t;
   const horizon = y + Math.round(h * 0.52);
   const sea = seaColors(info);
@@ -106,7 +114,8 @@ export function lairOutside(ctx: CanvasRenderingContext2D, win: Rect, index: num
     }
   }
   // The helipad and its helicopter (in the last window but one: the panel's buttons sit over the last).
-  if (index === Math.max(0, info.windows.length - 2)) helipad(ctx, win, info);
+  const wall = info.windows.filter((v) => !BAY_DOORS.has(v));
+  if (win === wall[Math.max(0, wall.length - 2)]) helipad(ctx, win, info);
   // Gulls by day.
   if (info.night < 0.3 && !storm && info.weather !== "rain") {
     for (let i = 0; i < 2; i++) {
@@ -171,6 +180,11 @@ function helipad(ctx: CanvasRenderingContext2D, win: Rect, info: PaintInfo): voi
 
 /** A window clicked open: the armored pane slides up into its housing and the sea air comes in. */
 export function lairOpenWindow(ctx: CanvasRenderingContext2D, win: Rect, k: number, info: PaintInfo): boolean {
+  if (BAY_DOORS.has(win)) {
+    // The launch doors slide apart (drawn with the bay; here we only pass it on).
+    askDoors(k, info.t);
+    return true;
+  }
   const { x, y, w, h } = win;
   const lift = Math.round(k * (h - 6));
   // The glass rides up: its bottom rail shows where it is now.

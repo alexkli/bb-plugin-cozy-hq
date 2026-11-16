@@ -66,7 +66,7 @@ export const LABELS: ThemeLabels = {
     Subagent: "Sidekick",
     Subagents: "Sidekicks",
     "String lights · make them twinkle": "Alarm lamps · test the alarm",
-    "Open the window": "Open the blast window",
+    "Open the window": "Open the blast doors",
     "making coffee": "making villain-strength coffee",
     "snacking at the island": "snacking at the serving line",
     "raiding the fridge": "raiding the cold store",
@@ -252,6 +252,23 @@ export const SOUNDS: Record<string, SoundRecipe> = {
   "lair-fountain": (k) => {
     k.swell(0, 1.8, 0.2, 120, 400, 0.8, "lowpass");
     for (let i = 0; i < 8; i++) k.noise(0.2 + i * 0.15, 0.05, 0.08, 1800);
+  },
+  // Eight beeps, ignition, a rumbling hover, a sputter and a sad little horn.
+  "lair-launch": (k) => {
+    for (let i = 0; i < 8; i++) k.tone(i === 7 ? 1320 : 880, i, 0.08, "square", 0.03);
+    k.noise(8, 0.4, 0.2, 500);
+    k.swell(8.2, 4.8, 0.35, 70, 120, 0.8, "lowpass");
+    k.swell(8.2, 4.8, 0.08, 900, 1400, 1);
+    for (let i = 0; i < 6; i++) k.noise(13 + i * 0.22, 0.08, 0.12, 300);
+    for (const [i, f] of [392, 349, 311].entries()) k.tone(f, 15 + i * 0.3, i === 2 ? 0.7 : 0.26, "sawtooth", 0.03, i === 2 ? 280 : undefined);
+  },
+  // A rising hum, then the zap.
+  "lair-charge": (k) => {
+    k.tone(110, 0, 2.6, "sawtooth", 0.025, 880);
+    k.tone(220, 0.4, 2.2, "sine", 0.03, 1320);
+    k.noise(2.6, 0.5, 0.18, 4000);
+    k.tone(1760, 2.6, 0.3, "square", 0.03, 440);
+    k.tone(1568, 3.4, 0.25, "sine", 0.05);
   },
   "lair-tapes": (k) => {
     for (let i = 0; i < 12; i++) k.tone(400 + ((i * 7) % 5) * 180, i * 0.09, 0.06, "square", 0.025);

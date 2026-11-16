@@ -5,13 +5,16 @@
 //  │ briefing │ control room: consoles  │ lair  │   │ control room         │
 //  │ room     │ facing the map          │ (you) │   │ canteen │ briefing   │
 //  │══════════ steel catwalk (the hallway) ═════│   │ lounge (shark tank)  │
-//  │ canteen  │ concourse │ lounge      │ ante- │   │ antechamber │ lair   │
-//  │ reactor  │ (hatch)   │ shark tank  │chamber│   │ crater ledge         │
+//  │ canteen  │ LAUNCH BAY: the rocket, │ lounge│   │ antechamber │ lair   │
+//  │ ante-    │ its tower and the doors │ shark │   │ crater ledge with    │
+//  │ chamber  │ to the sky; the concourse│ tank │   │ the rocket on its pad│
 //  └~~~~~~ the crater: lava far below, the monorail ~~~~~~┘
 //
 // Short panels keep the classic arrangement (consoles under the map on the
-// left, the lounge under the screen wall), dressed the same way.
-import type { Layout, Rect, WallSegment } from "../../layout.ts";
+// left, the lounge under the screen wall), dressed the same way, with a scale
+// model of the rocket in the antechamber; small phones keep it in the lounge.
+import type { Facing, Layout, Rect, Spot, WallSegment } from "../../layout.ts";
+import { BAY_DOORS, miniBay, rocketSize, type Bay, type BaySpot } from "./bay.ts";
 import {
   bossToys,
   Builder,
@@ -52,6 +55,8 @@ export interface LairPlan {
   railSpots: { x: number; y: number; aisle: number; hall: number }[];
   /** The big red button on your desk. */
   button: Rect;
+  /** The secret rocket in its launch bay (or a scale model of it). */
+  bay: Bay | null;
 }
 
 export function planOf(L: Layout): LairPlan | null {
@@ -118,7 +123,14 @@ function arcadeAt(b: Builder, x: number, y: number, acc: Access): Rect | null {
  * with a smaller set when it's short): TV, couch, piano, the shark tank, and
  * the arcade cabinet in the corner left of the TV when it fits there.
  */
-function buildDen(b: Builder, r: Rect, acc: Access, naps: boolean, cabinet: boolean): { tv: Rect; screen: Rect; speakers: Rect[]; couch: Rect; fishtank: Rect; arcade: Rect | null } {
+function buildDen(
+  b: Builder,
+  r: Rect,
+  acc: Access,
+  naps: boolean,
+  cabinet: boolean,
+  model = false,
+): { tv: Rect; screen: Rect; speakers: Rect[]; couch: Rect; fishtank: Rect; arcade: Rect | null; corner: Rect | null } {
   b.rooms.push({ kind: "lounge", rect: r });
   const tvH = clamp(r.h - 80, 45, 72);
   const tvW = Math.min(Math.round(tvH / 0.56), r.w - 70);
@@ -154,7 +166,11 @@ function buildDen(b: Builder, r: Rect, acc: Access, naps: boolean, cabinet: bool
   let arcade: Rect | null = null;
   if (cabinet && left >= 32 && r.y + 2 + 62 < py - 2) arcade = arcadeAt(b, r.x + Math.max(4, Math.floor((left - 24) / 2)), r.y + 2, acc);
   else if (left >= 36) b.plant("LARGE_PLANT", r.x + Math.round((speakers[0]!.x - r.x - 32) / 2), r.y);
-  if (r.x + r.w - (speakers[1]!.x + speakers[1]!.w + 4) >= 36) b.plant("LARGE_PLANT", speakers[1]!.x + speakers[1]!.w + Math.round((r.x + r.w - speakers[1]!.x - speakers[1]!.w - 32) / 2), r.y);
+  // The right corner: a palm, or room for the rocket's scale model.
+  const right = r.x + r.w - (speakers[1]!.x + speakers[1]!.w + 4);
+  let corner: Rect | null = null;
+  if (model && right >= 56 && fishtank.y - 8 - r.y >= 74) corner = { x: speakers[1]!.x + speakers[1]!.w + 4, y: r.y, w: right, h: fishtank.y - 8 - r.y };
+  else if (right >= 36) b.plant("LARGE_PLANT", speakers[1]!.x + speakers[1]!.w + Math.round((r.x + r.w - speakers[1]!.x - speakers[1]!.w - 32) / 2), r.y);
   const by = r.y + r.h - 8;
   if (naps && by - (fishtank.y + 58) >= 30) {
     for (const [i, bx] of [r.x + 20, r.x + r.w - 20].entries()) {
@@ -163,7 +179,7 @@ function buildDen(b: Builder, r: Rect, acc: Access, naps: boolean, cabinet: bool
       b.spot({ id: `beanbag-${i + 1}`, kind: "beanbag", group: "nap", x: bx, y: by, facing: "front", pose: "nap", path: via(acc, by + 5, bx, by), activity: "napping" });
     }
   }
-  return { tv, screen, speakers, couch, fishtank, arcade };
+  return { tv, screen, speakers, couch, fishtank, arcade, corner };
 }
 
 /** The water cooler, printer and bin in a row standing at baseY, reached straight from a hall. */
@@ -175,6 +191,62 @@ function utilitiesAt(b: Builder, x: number, baseY: number, hallY: number): void 
   b.prop("bin", "bin", x + 54, baseY - 14, baseY + 1);
   b.poke("bin", "bin", { x: x + 54, y: baseY - 14, w: 16, h: 16 });
   b.spot({ id: "cooler", kind: "cooler", group: "break", x: x + 8, y: baseY + 4, facing: "back", pose: "cup", path: [{ x: x + 8, y: hallY, c: true }, { x: x + 8, y: baseY + 4 }], activity: "chatting at the water cooler" });
+}
+
+/**
+ * The antechamber as a gallery under another room: the classic waiting room's
+ * sofa islands (front seats fill first), reached along lanes from the aisle
+ * beside it rather than straight down from the hallway, the guard post on
+ * the far side; a row of chairs when it's short.
+ */
+function buildGallery(b: Builder, r: Rect, acc: Access): void {
+  b.rooms.push({ kind: "waiting", rect: r });
+  const left = acc.aisleX < r.x;
+  const recX = left ? r.x + r.w - 38 : r.x + 4;
+  b.prop("reception", "reception", recX, r.y + 2, r.y + 20);
+  b.poke("bell", "bell", { x: recX, y: r.y - 4, w: 34, h: 24 });
+  const front: Spot[] = [];
+  const sides: Spot[] = [];
+  const backs: Spot[] = [];
+  const seat = (list: Spot[], id: string, x: number, y: number, facing: Facing, pose: Spot["pose"], laneY: number, lift: number) => {
+    list.push({ id, kind: "review", group: "review", x, y, facing, pose, path: via(acc, laneY, x, y), activity: "waiting for you", lift });
+  };
+  const islandW = 84;
+  const span = { x: left ? r.x : r.x + 40, w: r.w - 40 };
+  const cols = Math.max(1, Math.floor((span.w - 6) / islandW));
+  const x0 = span.x + Math.round((span.w - cols * islandW) / 2) + islandW / 2;
+  for (let row = 0, cy = r.y + 50; cy + 34 <= r.y + r.h; row++, cy += 72) {
+    for (let col = 0; col < cols; col++) {
+      const cx = Math.round(x0 + col * islandW);
+      const id = `${row}-${col}`;
+      const above = cy - 38;
+      const below = cy + 32;
+      b.prop(`wait-table-${id}`, "lounge-table", cx - 13, cy - 7, cy + 3);
+      const ny = cy - 14;
+      b.prop(`wait-sofa-n-${id}`, "waiting-sofa", cx - 21, ny - 19, ny - 2, 42);
+      seat(front, `wait-${id}-n0`, cx - 10, ny, "front", "sit-front", above, 4);
+      seat(front, `wait-${id}-n1`, cx + 10, ny, "front", "sit-front", above, 4);
+      const sy = cy + 3;
+      b.prop(`wait-arm-w-${id}`, "waiting-armchair", cx - 41, sy - 18, sy - 1);
+      seat(sides, `wait-${id}-w`, cx - 32, sy, "right", "sit-front", below, 3);
+      b.prop(`wait-arm-e-${id}`, "waiting-armchair-left", cx + 25, sy - 18, sy - 1);
+      seat(sides, `wait-${id}-e`, cx + 32, sy, "left", "sit-front", below, 3);
+      const by = cy + 22;
+      b.prop(`wait-sofa-s-${id}`, "waiting-sofa-back", cx - 21, by - 11, by + 3, 42);
+      seat(backs, `wait-${id}-s0`, cx - 10, by, "back", "sit-back", below, 0);
+      seat(backs, `wait-${id}-s1`, cx + 10, by, "back", "sit-back", below, 0);
+    }
+  }
+  if (front.length === 0) {
+    // Too short for islands: one row of velvet chairs.
+    const y = Math.min(r.y + 36, r.y + r.h - 4);
+    for (let i = 0, x = span.x + 14; x <= span.x + span.w - 10; i++, x += 22) {
+      seat(front, `wait-c-${i}`, x, y, "front", "sit-front", y - 22, 2);
+      b.prop(`wait-chair-${i}`, "waiting-chair", x - 8, y - 15, y - 2);
+    }
+  }
+  for (const s of [...front, ...sides, ...backs]) b.spot(s);
+  b.seats.push(...front, ...sides, ...backs);
 }
 
 /** A trapdoor in the middle of an open floor, clear of the hallway below it. */
@@ -273,9 +345,7 @@ function tallPlan(W: number, H: number, threads: number): Layout | null {
   const hy = Math.max(podTop + rows * POD_H + 4, D + 2 + topRoom + 8);
   const y0 = hy + 10;
   const bottomH = FB - 4 - y0;
-  const side = cW >= 380;
-  const EV = 46;
-  if (bottomH < (side ? 132 : EV + 8 + 132)) return null;
+  if (bottomH < 158) return null;
   const net: Network = { halls: [hy], aisles: [a1, a2] };
   const accL: Access = { hallY: hy, aisleX: a1 };
   const accR: Access = { hallY: hy, aisleX: a2 };
@@ -287,44 +357,52 @@ function tallPlan(W: number, H: number, threads: number): Layout | null {
   const bossRoom: Rect = { x: rx0, y: D + 2, w: X1 - rx0, h: hy - 8 - (D + 2) };
   const boss = buildLair(b, bossRoom, hy);
 
-  // ---- below: the canteen (and the reactor), the concourse and the lounge, the antechamber
-  const kH = clamp(Math.round(bottomH * 0.55), 72, 100);
+  // ---- below: the canteen over the antechamber, the launch bay, the lounge
+  const kH = clamp(Math.round(bottomH * 0.48), 72, 96);
   const kitchen: Rect = { x: X0, y: y0 + 8, w: wL, h: kH - 8 };
   buildKitchen(b, kitchen, accL);
-  let leftY = y0 + kH + 10;
-  if (rows < wantRows && FB - 4 - leftY >= POD_H) {
-    buildPods(b, { x: X0, y: leftY, w: wL, h: POD_H - 4 }, accL);
-    leftY += POD_H + 4;
-  }
-  const reactorAt = (x: number, y: number, w: number, h: number) => buildServerRoom(b, { x, y, w, h });
-  if (FB - 4 - leftY >= 48) reactorAt(X0 + 4, leftY + 2, Math.min(wL - 8, 160), Math.min(62, FB - 6 - leftY));
+  const waiting: Rect = { x: X0, y: y0 + kH + 8, w: wL, h: FB - 4 - (y0 + kH + 8) };
+  buildGallery(b, waiting, accL);
 
-  let eventArea: Rect;
-  let lounge: Rect;
-  let tvParts: ReturnType<typeof buildDen>;
-  if (side) {
-    const denW = clamp(Math.round(cW * 0.55), 200, 250);
-    lounge = { x: a2 - 8 - denW, y: y0 + 4, w: denW, h: bottomH - 4 };
-    tvParts = buildDen(b, lounge, accR, true, true);
-    // No room beside the TV: the cabinet stands at the head of the concourse instead.
-    if (!tvParts.arcade) arcadeAt(b, cx0 + 6, y0 + 4, accL);
-    const left = tvParts.arcade ? cx0 + 6 : cx0 + 40;
-    const concW = lounge.x - 10 - left;
-    eventArea = { x: left, y: y0 + 2, w: concW - 6, h: Math.min(84, bottomH - 52) };
-    utilitiesAt(b, left + 2, FB - 8, hy);
-  } else {
-    utilitiesAt(b, cx0 + 4, y0 + 38, hy);
-    eventArea = { x: cx0 + 82, y: y0 + 2, w: cW - 88, h: EV };
-    lounge = { x: cx0, y: y0 + EV + 10, w: cW, h: bottomH - EV - 10 };
-    tvParts = buildDen(b, lounge, accL, true, true);
-  }
+  // The launch bay: the rocket on its pad right of center with the service tower, the bulkhead
+  // with the doors to the sky behind it; the concourse left of the pad, where the base gets
+  // together; the water cooler and printer under it; the arcade beside the tower.
+  const rx = cx0 + Math.round(cW * 0.58);
+  const base = Math.min(FB - 18, y0 + 200);
+  // As tall as the bay allows, its nose just under the doors.
+  const rh = clamp(base - y0 - 48, 100, 150);
+  const fin = rocketSize(rh).w / 2;
+  const pad: Rect = { x: rx - 50, y: base - 13, w: 100, h: 26 };
+  utilitiesAt(b, cx0 + 4, FB - 8, hy);
+  const eventArea: Rect = { x: cx0 + 8, y: y0 + 4, w: pad.x - 6 - (cx0 + 8), h: Math.max(30, FB - 54 - (y0 + 4)) };
+  arcadeAt(b, cx0 + cW - 30, y0 + 6, accR);
+  const fromHall = (x: number, y: number, facing: Facing): BaySpot => ({ x, y, facing, path: [{ x, y: hy, c: true }, { x, y }] });
+  const doors: Rect = { x: rx - 32, y: y0 + 8, w: 64, h: 28 };
+  BAY_DOORS.add(doors);
+  const bay: Bay = {
+    x: rx,
+    base,
+    h: rh,
+    scale: 1,
+    pad,
+    gantry: { x: rx + fin + 6, top: base - Math.round(rh * 0.84) },
+    bulkhead: { x: rx - 50, y: y0 + 2, w: 100, h: 42 },
+    doors,
+    watch: [
+      fromHall(pad.x - 10, base - 2, "right"),
+      fromHall(pad.x - 10, base - 20, "right"),
+      fromHall(pad.x - 26, base - 11, "right"),
+      { x: pad.x + pad.w + 10, y: base - 2, facing: "left", path: [{ x: a2, y: hy, c: true }, { x: a2, y: base - 2 }, { x: pad.x + pad.w + 10, y: base - 2 }] },
+    ],
+    polish: [{ x: rx - fin - 6, y: base - 2, facing: "right", path: [{ x: pad.x - 10, y: hy, c: true }, { x: pad.x - 10, y: base - 2 }, { x: rx - fin - 6, y: base - 2 }] }],
+    cup: { x: pad.x + 10, y: base - 4 },
+  };
 
-  const wx = a2 + 8;
-  const wW = X1 - wx;
-  const roomForReactor = !b.server && bottomH >= 80 + 66;
-  const waiting: Rect = { x: wx, y: y0 + 4, w: wW, h: roomForReactor ? bottomH - 70 : bottomH - 4 };
-  buildWaiting(b, waiting, hy);
-  if (roomForReactor) reactorAt(wx + 30, FB - 4 - 58, Math.min(wW - 34, 150), 56);
+  // The lounge on the right, the reactor room under it when there's height.
+  const roomForReactor = bottomH >= 196;
+  const lounge: Rect = { x: a2 + 8, y: y0 + 4, w: X1 - a2 - 8, h: bottomH - 4 - (roomForReactor ? 56 : 0) };
+  const tvParts = buildDen(b, lounge, accR, true, false);
+  if (roomForReactor) buildServerRoom(b, { x: a2 + 12, y: lounge.y + lounge.h + 8, w: Math.min(X1 - a2 - 16, 150), h: 46 });
 
   const L = finish(b, W, H, false, segments, net, {
     meeting,
@@ -373,9 +451,12 @@ function tallPlan(W: number, H: number, threads: number): Layout | null {
     hatch: hatchIn(eventArea, net),
     railSpots: railSpotsFor(net, FB, W),
     button: buttonOf(boss.desk),
+    bay,
   };
+  // The launch doors are the last window: the office draws the sky (and the weather) in them.
+  L.wall.windows.push(doors);
   L.themeData = plan;
-  L.words = { "in the lounge": "on the concourse" };
+  L.words = { "in the lounge": "in the launch bay" };
   return L;
 }
 
@@ -403,6 +484,7 @@ function shortPlan(W: number, H: number, threads: number): Layout {
   windows.push(...windowsIn(s1.x0, s1.x1, 8, 34, [[tv.x - 18, tv.x + tv.w + 18]], 40));
   L.wall.windows = windows;
   const wall = mapWall(8, L.wall.clock.x - 14, s0.depth);
+  const bay = modelInAntechamber(L);
   const plan: LairPlan = {
     variant: "short",
     segKinds: ["map", "media", "rock"],
@@ -412,9 +494,35 @@ function shortPlan(W: number, H: number, threads: number): Layout {
     hatch: hatchIn(L.eventArea, L.net),
     railSpots: EB > 0 ? railSpotsFor(L.net, H - EB, W) : [],
     button: buttonOf(L.boss.desk),
+    bay,
   };
   L.themeData = plan;
   return L;
+}
+
+/**
+ * The classic waiting room's last island of sofas makes way for a scale model
+ * of the rocket on its pad (when there are two or more, so the antechamber
+ * keeps its seats); the seats left fill in the same order.
+ */
+function modelInAntechamber(L: Layout): Bay | null {
+  const r = L.waiting;
+  const cols = Math.max(1, Math.floor((r.w - 10) / 84));
+  if (cols < 2 || r.h < 92) return null;
+  const x = Math.round(r.x + Math.round((r.w - cols * 84) / 2) + 42 + (cols - 1) * 84);
+  // Its spots are wait-<row>-<col>-…, its furniture wait-<piece>-<row>-<col>.
+  const last = new RegExp(`-\\d+-${cols - 1}(-|$)`);
+  const island = (id: string) => id.startsWith("wait-") && last.test(id);
+  L.spots = L.spots.filter((s) => !island(s.id));
+  L.seats = L.seats.filter((s) => !island(s.id));
+  for (const id of [...L.byId.keys()]) if (island(id)) L.byId.delete(id);
+  L.props = L.props.filter((p) => !island(p.id));
+  const base = r.y + Math.min(r.h - 12, 110);
+  const h = clamp(base - r.y - 6, 60, 100);
+  const w = rocketSize(h).w;
+  const hall = L.net.halls.filter((y) => y < r.y).reduce((m, y) => Math.max(m, y), -Infinity);
+  const down = (sx: number, sy: number, facing: Facing): BaySpot => ({ x: sx, y: sy, facing, path: [{ x: sx, y: hall, c: true }, { x: sx, y: sy }] });
+  return miniBay(x, base, h, [down(x - w - 12, base - 2, "right"), down(x - w - 12, base - 18, "right")], [down(x - w / 2 - 6, base - 4, "right")], true);
 }
 
 // ------------------------------------------------------------------ portrait
@@ -442,7 +550,8 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
   ];
   const EB0 = 30;
   const used = () => top + rows.reduce((s, r) => s + r.h + gap, 0);
-  const ledgeH = 96;
+  // The ledge holds the rocket: tall enough for the real thing when there's height, else a scale model.
+  const ledgeH = used() + 142 + gap + EB0 <= H - 2 ? 142 : 96;
   const withLedge = used() + ledgeH + gap + EB0 <= H - 2;
   if (withLedge) rows.push({ kind: "ledge", h: ledgeH, grow: 0.8 });
   if (needPods >= 2 && used() + POD_H + gap + EB0 <= H - 2) rows.splice(3, 0, { kind: "pods2", h: POD_H, grow: 0 });
@@ -475,6 +584,7 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
   let tvParts: ReturnType<typeof buildDen> | null = null;
   let eventArea: Rect | null = null;
   let ledge: Rect | null = null;
+  let bay: Bay | null = null;
   for (const { row, rect } of placed) {
     const below = hallBelow(rect);
     const above = rect.y - gap / 2;
@@ -493,7 +603,7 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
       }
       case "lounge":
         lounge = rect;
-        tvParts = buildDen(b, rect, { hallY: below, aisleX }, !withLedge, true);
+        tvParts = buildDen(b, rect, { hallY: below, aisleX }, !withLedge, true, !withLedge);
         break;
       case "waitingBoss": {
         const ww = Math.round(rect.w * 0.56);
@@ -511,14 +621,43 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
       }
       case "ledge": {
         ledge = rect;
-        // An open rock ledge over the crater: where the base gets together.
-        eventArea = { x: rect.x + 8, y: rect.y + 4, w: rect.w - 30, h: rect.h - 10 };
+        // An open rock ledge over the crater: the rocket on its pad at the right, where the base gets together on the left.
+        const full = rect.h >= 116;
+        const rx = rect.x + rect.w - (full ? 80 : 48);
+        const base = rect.y + rect.h - (full ? 12 : 10);
+        const rh = clamp(rect.h - 18, 50, 150);
+        const fin = rocketSize(rh).w / 2;
+        const down = (sx: number, sy: number): BaySpot => ({ x: sx, y: sy, facing: "right", path: [{ x: sx, y: above, c: true }, { x: sx, y: sy }] });
+        if (full) {
+          const pad: Rect = { x: rx - 50, y: base - 13, w: 100, h: 26 };
+          bay = {
+            x: rx,
+            base,
+            h: rh,
+            scale: 1,
+            pad,
+            gantry: { x: rx + fin + 6, top: base - Math.round(rh * 0.84) },
+            bulkhead: null,
+            doors: null,
+            watch: [down(pad.x - 10, base - 2), down(pad.x - 10, base - 20), down(pad.x - 26, base - 11)],
+            polish: [{ x: rx - fin - 6, y: base - 2, facing: "right", path: [{ x: pad.x - 10, y: above, c: true }, { x: pad.x - 10, y: base - 2 }, { x: rx - fin - 6, y: base - 2 }] }],
+            cup: { x: pad.x + 10, y: base - 4 },
+          };
+        } else {
+          bay = miniBay(rx, base, rh, [down(rx - fin - 14, base - 2), down(rx - fin - 14, base - 18)], [down(rx - fin - 4, base - 4)], true);
+        }
+        eventArea = { x: rect.x + 8, y: rect.y + 4, w: bay.pad.x - 8 - (rect.x + 8), h: rect.h - 10 };
         break;
       }
     }
   }
   if (!meeting || !whiteboard || !kitchen || !lounge || !tvParts || !waiting || !boss) return null;
   const tv = tvParts as ReturnType<typeof buildDen>;
+  // No ledge: a scale model of the rocket in the lounge's corner.
+  if (!bay && tv.corner) {
+    const c = tv.corner;
+    bay = miniBay(Math.round(c.x + c.w / 2), Math.min(c.y + 74, c.y + c.h), 66, [], [], false);
+  }
   const lng = lounge as Rect;
   if (!b.spots.some((s) => s.id === "cooler")) utilitiesAt(b, x0 + 2, FB - 6, net.halls[net.halls.length - 1]!);
   eventArea ??= { x: lng.x + 10, y: tv.couch.y + 30, w: lng.w - 20, h: Math.max(30, lng.y + lng.h - tv.couch.y - 30) };
@@ -558,6 +697,7 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
   const ev = L.eventArea;
   const plan: LairPlan = {
     variant: "portrait",
+    bay,
     segKinds: ["rock", "map"],
     ...wall,
     crater,

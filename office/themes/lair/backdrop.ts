@@ -7,6 +7,8 @@ import { Grid, hash, OUTLINE, rect, rng, shade } from "../../themekit.ts";
 import { isLand, MAP_COLS, MAP_ROWS } from "./atlas.ts";
 import { C, hazardRect, hazardStripes } from "./kit.ts";
 import { planOf, type LairPlan, type SegKind } from "./plan.ts";
+import { BAY_DOORS } from "./bay.ts";
+import { bayDoorFrame, paintBay } from "./rocket.ts";
 
 function paint(ctx: CanvasRenderingContext2D, g: Grid, x: number, y: number): void {
   ctx.drawImage(g.toCanvas(), x, y);
@@ -654,6 +656,7 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
     if (plan) {
       craterFloor(ctx, plan);
       deckFloor(ctx, L, plan);
+      if (plan.bay) paintBay(ctx, plan.bay);
     }
   },
   wall(ctx, L) {
@@ -674,7 +677,7 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
   pods: podFloor,
   room: roomFloor,
   roomWalls,
-  window: (ctx, win) => windowFrame(ctx, win),
+  window: (ctx, win) => (BAY_DOORS.has(win) ? bayDoorFrame(ctx, win) : windowFrame(ctx, win)),
   pinboard,
   calendar,
   status,

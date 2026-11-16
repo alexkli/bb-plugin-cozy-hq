@@ -40,6 +40,8 @@ export const LAIR: Theme = {
     tint: "34,14,30",
     darkness: (_night, _weather, classic) => Math.min(0.68, classic * 1.2),
     lights: lairLights,
+    // The windows don't throw sunbeams: one of them is the launch doors out in the bay.
+    sunbeam: false,
   },
   boardInk: ["#c23544", "#1f625f", "#2a5690", "#26232a"],
   screenColors: { bg: "#0b1a14", code: ["#7cf0a0", "#ffc54a", "#7cc8ff", "#e2d8bf", "#ff8a6a", "#5ae0c8"] },
