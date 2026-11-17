@@ -101,6 +101,8 @@ export interface CafePlan {
   /** The little piazza beside the café: its paving, the fountain in it, benches (seat feet). */
   piazza: Rect | null;
   fountain: { x: number; y: number; rx: number; ry: number } | null;
+  /** Lawn beds in a tall piazza, above and below the fountain, the upper one with a little pool of its own. */
+  gardens: { lawn: Rect; pool: { x: number; y: number; rx: number; ry: number } | null }[];
   benches: Point[];
   /** The fireplace in the back wall. */
   fireplace: Rect | null;
@@ -179,7 +181,7 @@ function table(b: Builder, dx: number, py: number, kind: Table["kind"], above: n
 
 /** Tables sit this far apart (just room between them for a helper and a chair). */
 const PITCH = 54;
-const BAND = 114;
+const BAND = 106;
 /** The shop front's height, the road's. */
 const FAC = 32;
 const ROAD = 30;
@@ -549,7 +551,7 @@ function terrace(b: Builder, t: Rect, x0: number, x1: number, hall: number, door
  * the fountain, all reached from the terrace's lane (people step onto a
  * bench from the side). Greens are dressed round them in live.ts.
  */
-function piazza(b: Builder, P: Rect, lane: number, hall: number, door: number, benches: Point[], pending: Pending[]): CafePlan["fountain"] {
+function piazza(b: Builder, P: Rect, lane: number, hall: number, door: number, benches: Point[], gardens: CafePlan["gardens"], pending: Pending[]): CafePlan["fountain"] {
   const cx = Math.round(P.x + P.w / 2);
   const rx = Math.max(14, Math.min(24, Math.floor(P.w / 2) - 30));
   const ry = Math.round(rx * 0.6);
@@ -572,6 +574,22 @@ function piazza(b: Builder, P: Rect, lane: number, hall: number, door: number, b
     const col = k % 2 ? re - 14 : le + 14;
     benches.push({ x, y });
     pending.push({ x, y, seat: "bench", path: to(x, col, y), activity: "working on a bench in the piazza" });
+  }
+  // A tall piazza gets lawn beds between the edge benches' ways (they walk
+  // up 14 px in from each side): one above the fountain with a little pool,
+  // one between the fountain's bench and the terrace.
+  const gx = P.x + 30;
+  const gw = P.w - 60;
+  if (gw >= 40) {
+    const top = P.y + 16;
+    const above = fy - ry - 30 - top;
+    if (above >= 70) {
+      const lawn: Rect = { x: gx, y: top, w: gw, h: Math.min(110, above) };
+      const pool = lawn.h >= 56 ? { x: Math.round(lawn.x + lawn.w / 2), y: Math.round(lawn.y + lawn.h / 2) + 2, rx: Math.min(13, Math.floor(gw / 2) - 8), ry: 7 } : null;
+      gardens.push({ lawn, pool });
+    }
+    const below = by < lane - 8 ? by + 10 : fy + ry + 20;
+    if (lane - 14 - below >= 56) gardens.push({ lawn: { x: gx, y: below, w: gw, h: Math.min(90, lane - 14 - below) }, pool: null });
   }
   return { x: cx, y: fy, rx, ry };
 }
@@ -736,7 +754,7 @@ function wide(W: number, H: number, threads: number): Layout {
   const bossW = 200;
   const bossR: Rect = { x: x1 - bossW, y: hG1 + 12, w: bossW, h: 92 };
   const boss = buildArmchair(b, bossR, hG1);
-  for (let row = 0; row === 0 || (b.desks.length < wanted(threads) && hall + BAND + 12 + FAC + 30 + ROAD + 4 <= H); row++) {
+  for (let row = 0; row === 0 || (b.desks.length < wanted(threads) && hall + BAND + 12 + FAC + 22 + ROAD + 4 <= H); row++) {
     const py = hall + 22;
     const below = hall + BAND;
     tablesIn(b, x0, stairX - 14, py, hall, below, tables);
@@ -754,6 +772,7 @@ function wide(W: number, H: number, threads: number): Layout {
   const tEnd = (road ? road.y : H) - 4;
   const bistro: CafePlan["bistro"] = [];
   const benches: Point[] = [];
+  const gardens: CafePlan["gardens"] = [];
   // No room beside the café (a narrow panel): a strip of piazza under the terrace instead, when it's tall.
   const strip = !pw && tEnd - tY >= 66 + 56;
   const terraceR: Rect | null = tEnd - tY >= 22 ? { x: 0, y: tY, w: W, h: strip ? 66 : tEnd - tY } : null;
@@ -761,7 +780,7 @@ function wide(W: number, H: number, threads: number): Layout {
   let fountain: CafePlan["fountain"] = null;
   if (terraceR) terrace(b, terraceR, x0, pw ? W - 12 : x1, hall, doors, bistro, pending);
   if (piazzaR) {
-    fountain = terraceR ? piazza(b, piazzaR, tY + 6, hall, doors[1]!, benches, pending) : { x: Math.round(piazzaR.x + piazzaR.w / 2), y: Math.round(piazzaR.h * 0.5), rx: 22, ry: 13 };
+    fountain = terraceR ? piazza(b, piazzaR, tY + 6, hall, doors[1]!, benches, gardens, pending) : { x: Math.round(piazzaR.x + piazzaR.w / 2), y: Math.round(piazzaR.h * 0.5), rx: 22, ry: 13 };
   } else if (strip && terraceR) {
     piazzaR = { x: 0, y: tY + 66, w: W, h: tEnd - (tY + 66) };
     fountain = piazzaStrip(b, piazzaR, x0, x1, tY + 6, hall, stairX, benches, pending);
@@ -798,6 +817,7 @@ function wide(W: number, H: number, threads: number): Layout {
       street: road,
       piazza: piazzaR,
       fountain,
+      gardens,
       benches,
       fireplace,
       menus: menuBoards(kx + 40, kx + kw - 12, edge - 2, 26),
@@ -888,6 +908,7 @@ function short(W: number, H: number): Layout {
       street: null,
       piazza: null,
       fountain: null,
+      gardens: [],
       benches: [],
       fireplace,
       menus: menuBoards(kx + 36, x1 - 34, 6, 24),
@@ -1026,6 +1047,7 @@ function portrait(W: number, H: number, threads: number): Layout {
       street: road,
       piazza: piazzaR,
       fountain,
+      gardens: [],
       benches,
       fireplace,
       menus: menuBoards(K.x + 40, K.x + K.w - 10, edge - 2, 26),

@@ -238,13 +238,13 @@ interface Fit {
  * Pick the scene size for the panel: whole device pixels per native pixel
  * when that still leaves a reasonably sized office, else the exact fit.
  */
-function fitPanel(cssW: number, cssH: number): Fit {
+function fitPanel(cssW: number, cssH: number, min = { w: MIN_W_WIDE, h: MIN_H_WIDE }): Fit {
   const dpr = window.devicePixelRatio || 1;
   const devW = Math.max(1, cssW * dpr);
   const devH = Math.max(1, cssH * dpr);
   // Tall panels (a phone held upright) get the stacked portrait office.
   const portrait = devW < devH * 0.82;
-  const sMax = portrait ? Math.min(devW / PORTRAIT_W, devH / PORTRAIT_MIN_H) : Math.min(devW / MIN_W_WIDE, devH / MIN_H_WIDE);
+  const sMax = portrait ? Math.min(devW / PORTRAIT_W, devH / PORTRAIT_MIN_H) : Math.min(devW / Math.max(MIN_W_WIDE, min.w), devH / Math.max(MIN_H_WIDE, min.h));
   const whole = Math.floor(sMax);
   const s = whole >= 1 && whole >= sMax * 0.85 ? whole : Math.max(0.5, sMax);
   return { s, k: Math.max(1, Math.ceil(s - 1e-6)), W: Math.floor(devW / s), H: Math.floor(devH / s), dpr };
@@ -399,11 +399,13 @@ export function OfficeView(input: OfficeProps) {
   useEffect(() => sound.setRecipes(theme.sounds), [theme, sound]);
 
   // ------------------------------------------------------------ sizing → layout
+  const minW = theme.minSize?.w ?? MIN_W_WIDE;
+  const minH = theme.minSize?.h ?? MIN_H_WIDE;
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
     const measure = () => {
-      const next = fitPanel(el.clientWidth, el.clientHeight);
+      const next = fitPanel(el.clientWidth, el.clientHeight, { w: minW, h: minH });
       setFit((prev) =>
         prev && prev.s === next.s && prev.W === next.W && prev.H === next.H && prev.dpr === next.dpr ? prev : next,
       );
@@ -412,7 +414,7 @@ export function OfficeView(input: OfficeProps) {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [minW, minH]);
   // ------------------------------------------------------------ threads → world
   const visible = useMemo(() => {
     const list = visibleThreads(threads) as OfficeThread[];

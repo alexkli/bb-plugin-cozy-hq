@@ -388,6 +388,29 @@ function drawFountain(ctx: Ctx, f: { x: number; y: number; rx: number; ry: numbe
   }
 }
 
+/** A garden's little pool: a low stone basin with a bubbling spout in the middle. */
+function drawPool(ctx: Ctx, f: { x: number; y: number; rx: number; ry: number }, t: number, frozen: boolean): void {
+  const { x, y, rx, ry } = f;
+  ctx.drawImage(memoBasin(rx, ry), x - rx - 3, y - ry - 3);
+  ctx.fillStyle = frozen ? "#dce8f0" : "#5a9ec0";
+  for (let yy = -ry + 3; yy <= ry - 2; yy++) {
+    const span = Math.floor(Math.sqrt(Math.max(0, 1 - (yy * yy) / ((ry - 2) * (ry - 2)))) * (rx - 3));
+    ctx.fillRect(x - span, y + yy, span * 2 + 1, 1);
+  }
+  if (frozen) return;
+  // The spout bubbling up and splashing back, a ring spreading round it.
+  ctx.fillStyle = "#cfe9f5";
+  const h = 3 + (Math.floor(t * 6) % 3);
+  ctx.fillRect(x, y - h, 1, h);
+  ctx.fillRect(x - 1 - (Math.floor(t * 6) % 2), y - 1, 1, 1);
+  ctx.fillRect(x + 1 + (Math.floor(t * 6 + 1) % 2), y - 1, 1, 1);
+  const p = (t * 0.8) % 1;
+  ctx.fillStyle = "#9fd0e6";
+  const r = Math.round(2 + p * (rx - 6));
+  ctx.fillRect(x - r, y + 1, 2, 1);
+  ctx.fillRect(x + r - 1, y + 1, 2, 1);
+}
+
 function memoBasin(rx: number, ry: number): HTMLCanvasElement {
   return sprite(`basin-${rx}-${ry}`, rx * 2 + 6, ry * 2 + 9, (g) => {
     const cx = rx + 3;
@@ -625,6 +648,11 @@ function fillers(L: Layout, plan: CafePlan): Placed[] {
     if (plan.upstairs) taken.push({ x: 0, y: plan.upstairs.edge - 12, w: L.W, h: 44 });
     const f = plan.fountain;
     if (f) taken.push({ x: f.x - f.rx - 16, y: f.y - f.ry - 26, w: f.rx * 2 + 32, h: f.ry * 2 + 36 });
+    for (const { lawn, pool } of plan.gardens) {
+      if (pool) taken.push({ x: pool.x - pool.rx - 6, y: pool.y - pool.ry - 8, w: pool.rx * 2 + 12, h: pool.ry * 2 + 14 });
+      // Keep the lower bed's gravel walk clear.
+      else taken.push({ x: lawn.x + Math.round(lawn.w / 2) - 6, y: lawn.y, w: 12, h: lawn.h });
+    }
     for (const p of plan.benches) taken.push({ x: p.x - 12, y: p.y - 14, w: 24, h: 16 });
     if (plan.street) taken.push({ x: 0, y: plan.street.y - 18, w: L.W, h: L.H });
     const clash = (r: Rect) => taken.some((q) => r.x < q.x + q.w + 2 && q.x < r.x + r.w + 2 && r.y < q.y + q.h + 2 && q.y < r.y + r.h + 2);
@@ -646,7 +674,11 @@ function fillers(L: Layout, plan: CafePlan): Placed[] {
     put(inside, [plant("LARGE_PLANT"), plant("PLANT_2"), plant("LARGE_PLANT"), papersSprite, plant("PLANT"), plant("PLANT_2"), plant("LARGE_PLANT")], 1.3);
     // The piazza: a plane tree, box hedges, pots of flowers, a lamp post.
     const pz = plan.piazza;
-    if (pz) put(pz, [treeSprite, hedgeSprite, flowerPotSprite, lampPostSprite, hedgeSprite, flowerPotSprite, treeSprite, flowerPotSprite], 1.4);
+    if (pz) {
+      put(pz, [treeSprite, hedgeSprite, flowerPotSprite, lampPostSprite, hedgeSprite, flowerPotSprite, treeSprite, flowerPotSprite], 1.4);
+      // A tall piazza's lawns get a tree or two and some pots round them.
+      for (const { lawn } of plan.gardens) put({ x: lawn.x - 4, y: lawn.y - 30, w: lawn.w + 8, h: lawn.h + 30 }, [treeSprite, olivePotSprite, flowerPotSprite, treeSprite], 2);
+    }
     const d = L.wall.door;
     const by = plan.facade ? plan.facade.y - 44 : plan.wallD - 30;
     put({ x: d.x - 46, y: by, w: 92, h: 44 }, [coatRackSprite, umbrellaSprite], 1);
@@ -718,6 +750,7 @@ export function cafeDecor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
   if (st) out.push({ z: st.y + st.h + 30, draw: () => roadLife(ctx, L, st, info) });
   const f = plan.fountain;
   if (f) out.push({ z: f.y + f.ry, draw: () => drawFountain(ctx, f, info.t, info.weather === "snow") });
+  for (const { pool } of plan.gardens) if (pool) out.push({ z: pool.y + pool.ry, draw: () => drawPool(ctx, pool, info.t, info.weather === "snow") });
   // The PICKUP sign over the bell.
   const pk = c.pickup;
   out.push({
@@ -872,6 +905,7 @@ function staticLights(L: Layout): Light[] {
     for (const p of plan.armchairs) out.push([p.x, p.y - 14, 20, 0.3, "#ffd9a0", 0.15]);
     const fo = plan.fountain;
     if (fo) out.push([fo.x, fo.y - 4, fo.rx + 18, 0.6, "#bfe6ff", 0.45]);
+    for (const { pool } of plan.gardens) if (pool) out.push([pool.x, pool.y - 2, pool.rx + 12, 0.5, "#bfe6ff", 0.4]);
     // The piazza's lamp posts.
     const lamp = lampPostSprite();
     for (const f of fillers(L, plan)) if (f.s === lamp) out.push([f.x + 5, f.y + 4, 46, 0.75, "#ffe0a0", 0.6]);

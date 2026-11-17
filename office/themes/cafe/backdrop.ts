@@ -20,8 +20,8 @@ function paint(ctx: CanvasRenderingContext2D, g: Grid, x: number, y: number): vo
 
 const hex = (c: string): [number, number, number] => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
 
-/** Fill a rect pixel by pixel from a color function (fast: one ImageData). */
-function pixels(ctx: CanvasRenderingContext2D, r: Rect, color: (x: number, y: number) => string): void {
+/** Fill a rect pixel by pixel from a color function (fast: one ImageData); null leaves a pixel as it was. */
+function pixels(ctx: CanvasRenderingContext2D, r: Rect, color: (x: number, y: number) => string | null): void {
   const x0 = Math.max(0, Math.floor(r.x));
   const y0 = Math.max(0, Math.floor(r.y));
   const w = Math.min(ctx.canvas.width - x0, Math.max(1, Math.floor(r.w)));
@@ -33,6 +33,7 @@ function pixels(ctx: CanvasRenderingContext2D, r: Rect, color: (x: number, y: nu
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const c = color(x0 + x, y0 + y);
+      if (c === null) continue;
       let rgb = cache.get(c);
       if (!rgb) {
         rgb = hex(c);
@@ -205,6 +206,20 @@ function piazzaFloor(ctx: CanvasRenderingContext2D, plan: CafePlan): void {
       g.set(Math.round(cx + Math.cos(a) * (f.rx + 12)), Math.round(cy + Math.sin(a) * (f.ry + 8)), ["#e5484d", "#f4dc8a", "#f2a7b8", "#ffffff"][i % 4]!);
     }
     paint(ctx, g, f.x - cx, f.y - cy);
+  }
+  // Lawn beds, edged in stone with flowers along the edge; the lower one has a
+  // gravel walk up its middle (to the fountain's bench).
+  for (const { lawn: r, pool } of plan.gardens) {
+    const mid = r.x + Math.round(r.w / 2);
+    pixels(ctx, r, (x, y) => {
+      const ex = Math.min(x - r.x, r.x + r.w - 1 - x);
+      const ey = Math.min(y - r.y, r.y + r.h - 1 - y);
+      if (ex + ey < 3) return null;
+      if (ex === 0 || ey === 0) return "#a8a094";
+      if (!pool && Math.abs(x - mid) < 5) return h2(x, y) < 0.3 ? "#cdbf9f" : "#dccfae";
+      if ((ex === 2 || ey === 2) && h2(x, y) < 0.35) return ["#e5484d", "#f4dc8a", "#f2a7b8", "#ffffff"][Math.floor(h2(y, x) * 4)]!;
+      return grass(x, y);
+    });
   }
   // The lawn strip along the far edge, with a border of flowers.
   const lx = P.x + P.w - 8;

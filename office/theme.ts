@@ -227,6 +227,11 @@ export interface Theme {
    * "Floor plans"); `node --test` checks every scenery's plan at many sizes.
    */
   layout?(W: number, H: number, opts: Required<Pick<LayoutOptions, "threads">> & { portrait: boolean }): Layout | null;
+  /**
+   * The smallest wide (not portrait) scene its floor plan is drawn for, in
+   * native pixels (default 600×300): the panel zooms out a little to give it that.
+   */
+  minSize?: { w: number; h: number };
 
   // ------------------------------------------------------------ the backdrop (baked)
   background?: Partial<BackgroundSteps>;

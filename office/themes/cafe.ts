@@ -32,6 +32,9 @@ export const CAFE: Theme = {
   blurb: "A little brick café: laptops at round tables, baristas behind the counter, a cozy upstairs, a terrace out front",
   icon: "☕",
   layout: cafeLayout,
+  // The building with its upstairs takes about 560 px, the piazza beside it
+  // the rest; under a row of tables there's then room for the terrace.
+  minSize: { w: 720, h: 470 },
   background: BACKGROUND,
   prop: cafeProp,
   plant: (sprite) => cafePlant(sprite),
