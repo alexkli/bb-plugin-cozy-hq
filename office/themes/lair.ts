@@ -3,11 +3,12 @@
 // world map, a canteen, a lounge with a shark tank, your lair with the big
 // red button, and the crater with the lava far below and a monorail across
 // it. See office/themes/README.md for the hooks; the pieces live in
-// office/themes/lair/.
+// office/themes/lair/ (eggs.ts: the hidden suggestion box and laser pointer).
 import type { Theme } from "../theme.ts";
 import { BACKGROUND } from "./lair/backdrop.ts";
 import { lairClick, lairClickables } from "./lair/clicks.ts";
 import { lairDrone, lairFishTank, lairPet } from "./lair/critters.ts";
+import { EGG_SOUNDS, eggClick, eggClickables, eggDecor, eggTick, petSprite } from "./lair/eggs.ts";
 import { lairChair, lairDesk, lairPlant } from "./lair/furnish.ts";
 import { lairDecor, lairDoorOpen, lairLights, lairOverlay, lairUnderlay, lairWallLights } from "./lair/live.ts";
 import { lairDress, lairDressVisitor, lairLook, lairNpc } from "./lair/people.ts";
@@ -32,7 +33,7 @@ export const LAIR: Theme = {
   outside: lairOutside,
   wallLights: lairWallLights,
   underlay: lairUnderlay,
-  decor: lairDecor,
+  decor: (ctx, L, info) => [...lairDecor(ctx, L, info), ...eggDecor(ctx, L, info)],
   overlay: lairOverlay,
   doorOpen: lairDoorOpen,
   openWindow: lairOpenWindow,
@@ -49,12 +50,14 @@ export const LAIR: Theme = {
   npc: lairNpc,
   dress: (ctx, a) => lairDress(ctx, a),
   dressVisitor: (ctx, v) => lairDressVisitor(ctx, v),
-  pet: (kind, pose, facing, blink) => lairPet(kind, pose, facing, blink),
+  pet: (kind, pose, facing, blink) => petSprite(kind, () => lairPet(kind, pose, facing, blink)),
   roomba: () => lairDrone(),
   fishTank: lairFishTank,
-  clickables: lairClickables,
-  click: lairClick,
+  // The hidden ones first, so they win where they sit on something clickable.
+  clickables: (L) => [...eggClickables(L), ...lairClickables(L)],
+  click: (id, act) => (id.startsWith("egg-") ? eggClick(id, act) : lairClick(id, act)),
+  tick: eggTick,
   labels: LABELS,
-  sounds: SOUNDS,
+  sounds: { ...SOUNDS, ...EGG_SOUNDS },
   outdoor: lairOutdoor,
 };
