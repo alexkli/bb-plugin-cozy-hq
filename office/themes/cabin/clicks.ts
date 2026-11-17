@@ -19,6 +19,7 @@ import { planOf, type CabinPlan } from "./plan.ts";
 import { towelGuy } from "./outdoor.ts";
 import { sledSprite } from "./terrain.ts";
 import { liftClick, liftClickables } from "./lift.ts";
+import { eggClick, eggClickables } from "./eggs.ts";
 
 const px = (ctx: Ctx, c: string, x: number, y: number, w = 1, h = 1) => {
   ctx.fillStyle = c;
@@ -196,6 +197,8 @@ export function clickables(L: Layout): SceneryClickable[] {
     const r = p.skiRack;
     out.push({ id: "skis", rect: { x: r.x, y: r.y + r.h - 32, w: Math.max(r.w, 14), h: 32 }, hover: "Skis in the snow · don't lean on them" });
   }
+  // And two things to find (eggs.ts).
+  out.push(...eggClickables(L));
   return out;
 }
 
@@ -309,6 +312,9 @@ export function click(id: string, act: SceneryActions): string | null {
       sayNear(act, s.x, s.y, 130, SAY[kind], 1.2);
       return "cab-scope";
     }
+    case "alphorn":
+    case "drift":
+      return eggClick(id, act);
     case "lift-hut":
       return p.lift ? liftClick(id, act) : null;
     case "lift": {

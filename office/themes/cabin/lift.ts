@@ -696,7 +696,8 @@ function runLook(): Look {
   return { ...base, accessory: "beanie", accent, key: `${base.key}|skier|${accent}` };
 }
 
-function speech(ctx: Ctx, x: number, y: number, text: string): void {
+/** A speech bubble with its tail at (x, y + 9). */
+export function speech(ctx: Ctx, x: number, y: number, text: string): void {
   const w = pixelTextWidth(text) + 6;
   const bx = Math.round(x - w / 2);
   px(ctx, OUTLINE, bx - 1, y - 1, w + 2, 9);

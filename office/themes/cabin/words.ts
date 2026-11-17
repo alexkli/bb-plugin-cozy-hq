@@ -264,6 +264,35 @@ export const SOUNDS: Record<string, SoundRecipe> = {
       k.tone(2640, at, 0.4, "sine", 0.03);
     }
   },
+  // The alphorn's call, its two echoes off the peaks (softer, later), and a yodel from across the valley.
+  "cab-alphorn": (k) => {
+    const f0 = 92.5;
+    const call: [number, number, number][] = [[4, 0, 0.7], [6, 0.7, 0.5], [5, 1.2, 0.4], [6, 1.6, 0.5], [8, 2.1, 1.1]];
+    for (const [echo, vol] of [[0, 0.16], [1.7, 0.06], [3.4, 0.025]] as const) {
+      for (const [n, at, dur] of call) {
+        k.tone(f0 * n, echo + at, dur, "triangle", vol, f0 * n * 0.995);
+        k.tone(f0 * n * 2, echo + at + 0.02, dur * 0.8, "sine", vol * 0.25);
+      }
+    }
+    // The yodel: flipping between the chest voice and the head voice.
+    const yo: [number, number][] = [[392, 0.18], [587, 0.14], [392, 0.14], [659, 0.22], [523, 0.14], [784, 0.3], [659, 0.4]];
+    let at = 5.6;
+    for (const [f, dur] of yo) {
+      k.tone(f, at, dur, "sine", 0.035, f * 1.01);
+      at += dur;
+    }
+  },
+  // A muffled "mmf" from the snow, the dog barking as it bounds over, paws digging, a pop out of the drift.
+  "cab-rescue": (k) => {
+    k.tone(170, 0.1, 0.35, "triangle", 0.06, 150);
+    k.tone(160, 0.6, 0.3, "triangle", 0.05, 140);
+    for (const at of [1.8, 2.15, 2.7]) {
+      k.tone(520, at, 0.09, "square", 0.05, 300);
+      k.noise(at, 0.06, 0.06, 1200);
+    }
+    for (let i = 0; i < 12; i++) k.noise(3 + i * 0.25, 0.08, 0.05, 900 + (i % 3) * 400);
+    k.swell(6, 0.3, 0.18, 300, 900, 1);
+  },
   // Far off: a slough of snow rumbling down a face.
   "cab-rumble": (k) => {
     k.swell(0, 3, 0.3, 70, 160, 0.7, "lowpass");

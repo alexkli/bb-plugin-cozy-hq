@@ -15,6 +15,7 @@ import { clickDecor, clickLights, clickOverlay, clickUnderlay, fireBoost, sledGo
 import { nookDecor, nookLights } from "./nooks.ts";
 import { blizzard, outdoorRects, sledSprite, terrainUnder } from "./terrain.ts";
 import { liftDecor, liftLights, liftUnder } from "./lift.ts";
+import { eggDecor, eggOverlay } from "./eggs.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -341,6 +342,7 @@ export function decor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
   out.push(...nookDecor(ctx, L, info));
   out.push(...clickDecor(ctx, L, info));
   out.push(...liftDecor(ctx, L, info));
+  out.push(...eggDecor(ctx, L, info));
   return out;
 }
 
@@ -391,6 +393,7 @@ export function overlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
     }
   }
   clickOverlay(ctx, L, info);
+  eggOverlay(ctx, L, info);
 }
 
 /** Fairy lights along the beam: warm white, a few drops hanging down like icicles. */

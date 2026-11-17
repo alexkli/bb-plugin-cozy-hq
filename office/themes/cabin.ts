@@ -17,6 +17,7 @@ import { click, clickables } from "./cabin/clicks.ts";
 import { pet, plow, troutTank } from "./cabin/critters.ts";
 import { chair, desk } from "./cabin/desks.ts";
 import { darkness, decor, doorOpen, lights, overlay, underlay, wallLights } from "./cabin/live.ts";
+import { eggTick } from "./cabin/eggs.ts";
 import { liftPose, liftTick } from "./cabin/lift.ts";
 import { dress, dressVisitor, look, npc } from "./cabin/people.ts";
 import { cabinPlan } from "./cabin/plan.ts";
@@ -69,6 +70,9 @@ export const CABIN: Theme = {
   // The fireplace, the woodpile, the fondue pot, the sauna, the telescope, the chairlift and the skis.
   clickables,
   click,
-  // Now and then, on a bright day, someone skis down the piste on their own.
-  tick: liftTick,
+  // Now and then, on a bright day, someone skis down the piste on their own; the rest is a secret.
+  tick: (act) => {
+    liftTick(act);
+    eggTick(act);
+  },
 };
