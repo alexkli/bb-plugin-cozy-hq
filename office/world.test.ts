@@ -41,3 +41,14 @@ test("an archived thread walks out even when the floor plan shrinks behind it", 
   const agents = (world as unknown as { agents: Map<string, unknown> }).agents;
   assert.deepEqual([...agents.keys()].sort(), ["t0", "t1", "t2", "t3"]);
 });
+
+test("errands between the desk and the waiting room are brisk; a coffee break isn't", () => {
+  const world = new World(() => {});
+  world.setLayout(buildLayout(900, 420, { threads: 8 }), "8");
+  const agents = (world as unknown as { agents: Map<string, { brisk: boolean; path: unknown[] }> }).agents;
+  world.sync([thread(0), thread(1)], true);
+  // t0 needs you: off to the waiting room. t1 is done for now: a coffee.
+  world.sync([{ ...thread(0), mood: "needs-you", spotId: "wait-0-0-n0" }, { ...thread(1), mood: "idle", spotId: "coffee" }], false);
+  assert.ok(agents.get("t0")!.path.length > 0 && agents.get("t0")!.brisk);
+  assert.ok(agents.get("t1")!.path.length > 0 && !agents.get("t1")!.brisk);
+});
