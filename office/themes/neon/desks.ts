@@ -6,6 +6,7 @@ import type { PlantPlacement } from "../../layout.ts";
 import type { DeskStyle } from "../../model.ts";
 import { cached, hsl, mapPixels, pa, paRecolor, parseColor } from "../../themekit.ts";
 import { hslOf, P } from "./kit.ts";
+import { ctx2d } from "../../pixel.ts";
 
 // DESK_FRONT palette: top #b38857, rim #cfa86d, front #885c47, base #532e3d, legs #394449 / #73787e.
 const DESKS: Record<DeskStyle, { top: string; rim: string; front: string; base: string }> = {
@@ -128,7 +129,7 @@ export function neonPlant(sprite: PlantPlacement["sprite"]): HTMLCanvasElement |
       case "POT": {
         // A dark pot with a tuft of glowing moss.
         const c = bio(pa("POT"), BIO.teal!, P.mag);
-        const ctx = c.getContext("2d")!;
+        const ctx = ctx2d(c);
         const moss = ["#127068", "#1fb8a0", "#5affd8"];
         for (let x = 4; x < 12; x++) {
           const h = 1 + ((x * 5) % 3);

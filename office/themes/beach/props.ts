@@ -4,6 +4,7 @@
 import type { Layout, PropPlacement } from "../../layout.ts";
 import { drawPixelText, Grid, makeCanvas, OUTLINE, cached, paRecolor, pixelTextWidth, recolor, shade } from "../../themekit.ts";
 import { C, canes, fringe, spr, weave } from "./kit.ts";
+import { ctx2d } from "../../pixel.ts";
 
 const RATTAN_WOOD: Record<string, string> = { "#885c47": C.rattanLo, "#b38857": C.rattan, "#cfa86d": C.rattanHi, "#532e3d": C.rattanDk, "#eddf9c": C.white, "#e3bf88": C.rattanHi };
 const WASH_WOOD: Record<string, string> = { "#885c47": "#b9a688", "#b38857": "#e1d5bb", "#cfa86d": "#f3ecdc", "#532e3d": "#7a6a58", "#301c1c": "#6a5a48", "#35191f": "#6a5a48", "#e3bf88": "#f3ecdc" };
@@ -336,7 +337,7 @@ function island(width: number): HTMLCanvasElement {
     const tw = pixelTextWidth(text);
     if (width < tw + 8) return c;
     const out = makeCanvas(c.width, c.height, (ctx) => ctx.drawImage(c, 0, 0));
-    const ctx = out.getContext("2d")!;
+    const ctx = ctx2d(out);
     const x = Math.round((width + 2 - tw) / 2);
     ctx.fillStyle = OUTLINE;
     ctx.fillRect(x - 3, 16, tw + 6, 8);
@@ -506,7 +507,7 @@ function front(w: number, gapX: number, kind: "cabana" | "teak" | "shed"): HTMLC
     }
     const c = g.toCanvas();
     if (kind === "shed" && w >= 60) {
-      const ctx = c.getContext("2d")!;
+      const ctx = ctx2d(c);
       const tw = pixelTextWidth("BOARD SHED");
       drawPixelText(ctx, "BOARD SHED", Math.round((w - tw) / 2), 5, "#1d3a48");
     }
@@ -703,7 +704,7 @@ function planter(width: number): HTMLCanvasElement {
     g.rect(2, 11, width - 4, 1, "#5a4a2a");
     g.outline(OUTLINE);
     const c = g.toCanvas();
-    const ctx = c.getContext("2d")!;
+    const ctx = ctx2d(c);
     // Tropical leaves spill over the box: fronds, monstera, a bird of paradise.
     const put = (x: number, y: number, w: number, h: number, col: string) => {
       ctx.fillStyle = col;

@@ -29,7 +29,7 @@ import {
   type ThreadLike,
 } from "./model.ts";
 import { isUnopened, NO_RECORD, noteOpened, updateOpened, type OpenedRecord } from "./highlight.ts";
-import { hash } from "./pixel.ts";
+import { ctx2d, hash } from "./pixel.ts";
 import { Sound, type SoundName } from "./sound.ts";
 import { familiesOf, subagentsOf } from "./subagents.ts";
 import { World, type Hit, type LabelAnchor, type SeenState, type SpeechBubble, type Talk, type WorldThread } from "./world.ts";
@@ -248,6 +248,33 @@ function fitPanel(cssW: number, cssH: number): Fit {
   const whole = Math.floor(sMax);
   const s = whole >= 1 && whole >= sMax * 0.85 ? whole : Math.max(0.5, sMax);
   return { s, k: Math.max(1, Math.ceil(s - 1e-6)), W: Math.floor(devW / s), H: Math.floor(devH / s), dpr };
+}
+
+/** Whole device pixels per scene pixel. */
+function isCrisp(f: Fit): boolean {
+  return Math.abs(f.s - f.k) < 1e-6;
+}
+
+/** Scene frames a second: plenty for pixel art that steps a pixel at a time. */
+const FPS = 24;
+
+/**
+ * Step the panel's endless CSS animations (TV ticker, glare, the LIVE blink)
+ * along with the scene instead of letting them run: running, they repaint the
+ * page at the display's rate (60-120 times a second) while the scene only
+ * changes 30 times. Each starts from its beginning when it first shows up.
+ */
+function stepAnimations(root: Element, ts: number, started: WeakMap<Animation, number>): void {
+  for (const a of root.getAnimations({ subtree: true })) {
+    if (a.effect?.getTiming().iterations !== Infinity) continue;
+    let t0 = started.get(a);
+    if (t0 === undefined) {
+      a.pause();
+      t0 = ts - (Number(a.currentTime) || 0);
+      started.set(a, t0);
+    }
+    a.currentTime = ts - t0;
+  }
 }
 
 export function OfficeView(input: OfficeProps) {
@@ -644,7 +671,14 @@ export function OfficeView(input: OfficeProps) {
     const out = canvas.getContext("2d");
     if (!out) return;
     const native = document.createElement("canvas");
-    const ctx = native.getContext("2d")!;
+    const ctx = ctx2d(native);
+    // Nothing to draw while the panel is off screen (bb can keep it mounted).
+    let onScreen = true;
+    const seen = new IntersectionObserver((entries) => {
+      for (const e of entries) onScreen = e.isIntersecting;
+    });
+    seen.observe(canvas);
+    const started = new WeakMap<Animation, number>();
     let raf = 0;
     let last = performance.now();
     let acc = 0;
@@ -657,9 +691,9 @@ export function OfficeView(input: OfficeProps) {
       raf = requestAnimationFrame(frame);
       const dt = Math.min(0.1, (ts - last) / 1000);
       last = ts;
-      if (document.hidden) return;
+      if (document.hidden || !onScreen) return;
       acc += dt;
-      if (acc < 1 / 30) return;
+      if (acc < 1 / FPS) return;
       const step = acc;
       acc = 0;
       const L = world.layout;
@@ -719,17 +753,26 @@ export function OfficeView(input: OfficeProps) {
         targets: targetsRef.current,
         ...seasonsFor(dbg.season, date),
       });
-      const bw = L.W * f.k;
-      const bh = L.H * f.k;
+      // At whole device pixels per pixel the page scales it up crisply (CSS
+      // pixelated) for free; otherwise draw it k times bigger for the browser
+      // to shrink smoothly.
+      const k = isCrisp(f) ? 1 : f.k;
+      const bw = L.W * k;
+      const bh = L.H * k;
       if (canvas.width !== bw || canvas.height !== bh) {
         canvas.width = bw;
         canvas.height = bh;
       }
       out.imageSmoothingEnabled = false;
       out.drawImage(native, 0, 0, bw, bh);
+      const root = stageRef.current;
+      if (root) stepAnimations(root, ts, started);
     };
     raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      seen.disconnect();
+    };
   }, [world, sound]);
 
   useEffect(() => {
@@ -1034,7 +1077,7 @@ export function OfficeView(input: OfficeProps) {
   const H = (layout?.H ?? MIN_H_WIDE) * scale;
   const stageStyle = { width: W, height: H, "--s": `${scale}px` } as CSSProperties;
   const box = (r: Rect): CSSProperties => ({ left: r.x * scale, top: r.y * scale, width: r.w * scale, height: r.h * scale });
-  const crisp = fit ? Math.abs(fit.s - fit.k) < 1e-6 : false;
+  const crisp = fit ? isCrisp(fit) : false;
 
   return (
     <div className={`chq-root${targets ? " is-targets" : ""}`}>

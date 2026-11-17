@@ -7,6 +7,7 @@ import type { Facing } from "../../layout.ts";
 import type { PaintInfo, VisitorKind } from "../../theme.ts";
 import { cached, Grid, OUTLINE } from "../../themekit.ts";
 import { P } from "./kit.ts";
+import { ctx2d } from "../../pixel.ts";
 
 type DogPose = "sit" | "walk0" | "walk1" | "loaf" | "wag0" | "wag1";
 type CatPose = "sit" | "walk0" | "walk1" | "loaf" | "groom" | "ride";
@@ -115,7 +116,7 @@ function flip(src: HTMLCanvasElement): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.width = src.width;
   c.height = src.height;
-  const ctx = c.getContext("2d")!;
+  const ctx = ctx2d(c);
   ctx.translate(src.width, 0);
   ctx.scale(-1, 1);
   ctx.drawImage(src, 0, 0);

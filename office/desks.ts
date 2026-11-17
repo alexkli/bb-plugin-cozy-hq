@@ -1,7 +1,7 @@
 // Workstations dressed by whoever sits there: the model picks the desk and
 // screens, the provider picks the chair. Empty desks are plain oak, PC off.
 
-import { Grid, SpriteCache } from "./pixel.ts";
+import { ctx2d, Grid, SpriteCache } from "./pixel.ts";
 import { OUTLINE } from "./characters.ts";
 import { pa, paRecolor } from "./furniture.ts";
 import type { DeskStyle } from "./model.ts";
@@ -242,7 +242,7 @@ function layered(w: number, h: number, parts: [HTMLCanvasElement, number, number
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
-  const ctx = c.getContext("2d")!;
+  const ctx = ctx2d(c);
   for (const [img, x, y] of parts) ctx.drawImage(img, x, y);
   return c;
 }

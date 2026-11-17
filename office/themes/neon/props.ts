@@ -4,6 +4,7 @@
 import type { Layout, PropPlacement } from "../../layout.ts";
 import { drawPixelText, paRecolor, recolor, shade } from "../../themekit.ts";
 import { glyph, neonize, OUTLINE, P, recolorNear, rim, sprite } from "./kit.ts";
+import { ctx2d } from "../../pixel.ts";
 
 // Furniture tones
 const K0 = "#100d1c";
@@ -627,7 +628,7 @@ function glassFront(p: PropPlacement, L: Layout, classic: () => HTMLCanvasElemen
       : { "#8fa3b5": "#2b2546", "#b8c9d6": P.cyan, "#cfe6f5": "#1e2a5a", "#5b6b7a": "#100d20", "#ffffff": P.cyanHi },
   );
   if (room?.kind === "meeting" && (p.w ?? 100) >= 90) {
-    const ctx = glass.getContext("2d")!;
+    const ctx = ctx2d(glass);
     const text = "HOLO DOME";
     const tw = text.length * 4 - 1;
     const x = 8;
@@ -639,7 +640,7 @@ function glassFront(p: PropPlacement, L: Layout, classic: () => HTMLCanvasElemen
   }
   if (room?.kind === "server") {
     // "THE CORE" across the glass.
-    const ctx = glass.getContext("2d")!;
+    const ctx = ctx2d(glass);
     const text = (p.w ?? 100) >= 70 ? "THE CORE" : "CORE";
     const tw = text.length * 4 - 1;
     const x = Math.round((glass.width - tw) / 2);
@@ -680,7 +681,7 @@ function libraryShelf(name: string): HTMLCanvasElement {
 function libraryTable(): HTMLCanvasElement {
   const c = rim(paRecolor("COFFEE_TABLE", { "#885c47": K1, "#e3bf88": P.cyan, "#b38857": K3, "#532e3d": K0 }), P.cyanLo, "top");
   // A holo reader and a cup.
-  const ctx = c.getContext("2d")!;
+  const ctx = ctx2d(c);
   ctx.fillStyle = P.cyanDim;
   ctx.fillRect(9, 13, 10, 6);
   ctx.fillStyle = P.cyan;

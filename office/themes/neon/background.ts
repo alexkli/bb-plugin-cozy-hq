@@ -5,6 +5,7 @@ import type { Layout, Rect, Room } from "../../layout.ts";
 import { cached, carpet, classicProp, drawPixelText, Grid, hash, makeCanvas, OUTLINE, pixelTextWidth, rect, rng, tiles } from "../../themekit.ts";
 import { glyph, P, perLayout, stamp } from "./kit.ts";
 import { planOf, type Front, type NeonPlan } from "./plan.ts";
+import { ctx2d } from "../../pixel.ts";
 
 // ------------------------------------------------------------------ signs on the wall
 
@@ -99,7 +100,7 @@ function glyphSign(seed: number, n: number, color: string): { base: HTMLCanvasEl
       draw(ctx, color);
     });
     // The rails are lit too.
-    const litCtx = lit.getContext("2d")!;
+    const litCtx = ctx2d(lit);
     litCtx.fillStyle = color;
     litCtx.fillRect(1, 1, w - 2, 1);
     litCtx.fillRect(1, h - 2, w - 2, 1);

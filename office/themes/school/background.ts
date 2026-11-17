@@ -7,6 +7,7 @@ import type { Layout, Rect, Room } from "../../layout.ts";
 import { BOOKS, C, CRAYONS, noise, OUTLINE, overlaps, stamp, wallFixtures } from "./kit.ts";
 import { planOf } from "./plan.ts";
 import { paintCorridor, paintHalfWalls, paintPortable, paintYard } from "./yard.ts";
+import { ctx2d } from "../../pixel.ts";
 
 // ------------------------------------------------------------------ floors
 
@@ -812,7 +813,7 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
   painting(ctx, p) {
     // Kids' art in place of paintings: a drawing the size of the frame.
     const src = pa(p.sprite);
-    const s = src.getContext("2d")!.getImageData(0, 0, src.width, src.height).data;
+    const s = ctx2d(src).getImageData(0, 0, src.width, src.height).data;
     let x0 = src.width;
     let y0 = src.height;
     let x1 = 0;

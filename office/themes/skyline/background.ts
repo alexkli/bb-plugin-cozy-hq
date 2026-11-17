@@ -6,6 +6,7 @@ import type { Layout, Rect, Room, WallSegment } from "../../layout.ts";
 import { blit, drawPixelText, Grid, hash, makeCanvas, OUTLINE, pa, pixelTextWidth, rect, rng, shade } from "../../themekit.ts";
 import { C } from "./kit.ts";
 import { planOf, type SkyPlan } from "./plan.ts";
+import { ctx2d } from "../../pixel.ts";
 
 export type SegKind = "glass" | "media" | "plaster" | "core";
 
@@ -646,7 +647,7 @@ function legend(ctx: CanvasRenderingContext2D, n: Rect): void {
 
 /** Opaque bounds of a canvas. */
 function bounds(c: HTMLCanvasElement): Rect {
-  const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+  const d = ctx2d(c).getImageData(0, 0, c.width, c.height).data;
   let x0 = c.width;
   let y0 = c.height;
   let x1 = -1;

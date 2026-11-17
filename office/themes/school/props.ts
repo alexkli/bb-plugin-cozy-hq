@@ -3,13 +3,14 @@
 import { drawPixelText, Grid, makeCanvas, pa, paRecolor, pixelTextWidth, recolor, shade } from "../../themekit.ts";
 import type { Layout, PlantPlacement, PropPlacement } from "../../layout.ts";
 import { BOOKS, bookRow, C, CRAYONS, OUTLINE, sprite } from "./kit.ts";
+import { ctx2d } from "../../pixel.ts";
 
 // ------------------------------------------------------------------ helpers
 
 /** Pixel text into a grid. */
 function text(g: Grid, s: string, x: number, y: number, color: string): void {
   const c = makeCanvas(pixelTextWidth(s) + 1, 6, (ctx) => drawPixelText(ctx, s, 0, 0, color));
-  const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+  const d = ctx2d(c).getImageData(0, 0, c.width, c.height).data;
   for (let yy = 0; yy < c.height; yy++) for (let xx = 0; xx < c.width; xx++) if (d[(yy * c.width + xx) * 4 + 3]! > 0) g.set(x + xx, y + yy, color);
 }
 
@@ -627,7 +628,7 @@ function plasticSide(left: boolean): HTMLCanvasElement {
   });
   if (!left) return c;
   return sprite("arm-side-l", 18, 20, (g) => {
-    const d = c.getContext("2d")!.getImageData(0, 0, 18, 20).data;
+    const d = ctx2d(c).getImageData(0, 0, 18, 20).data;
     for (let y = 0; y < 20; y++) {
       for (let x = 0; x < 18; x++) {
         const i = (y * 18 + 17 - x) * 4;

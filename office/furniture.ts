@@ -5,7 +5,7 @@
 // Desks, PCs, chairs, plants and a few wall pieces are Pixel Agents sprites
 // (MIT, see ATTRIBUTION.md); everything else is drawn here.
 
-import { Grid, parseColor, shade, SpriteCache } from "./pixel.ts";
+import { ctx2d, Grid, parseColor, shade, SpriteCache } from "./pixel.ts";
 import { OUTLINE } from "./characters.ts";
 import type { Layout, PropKind, PropPlacement, Rect } from "./layout.ts";
 import type { BackgroundSteps, Theme } from "./theme.ts";
@@ -48,7 +48,7 @@ export function pa(name: string): HTMLCanvasElement {
   }
   c.width = s.w;
   c.height = s.h;
-  const ctx = c.getContext("2d")!;
+  const ctx = ctx2d(c);
   const img = ctx.createImageData(s.w, s.h);
   const rgb = s.pal.map((h) => parseColor(h));
   for (let i = 0; i < s.px.length; i++) {
@@ -75,7 +75,7 @@ export function paRecolor(name: string, map: Record<string, string>): HTMLCanvas
   c = document.createElement("canvas");
   c.width = s.w;
   c.height = s.h;
-  const ctx = c.getContext("2d")!;
+  const ctx = ctx2d(c);
   const img = ctx.createImageData(s.w, s.h);
   const rgb = s.pal.map((h) => parseColor(map[h] ?? h));
   for (let i = 0; i < s.px.length; i++) {
@@ -307,7 +307,7 @@ function planterSprite(width: number): HTMLCanvasElement {
     for (let x = 6; x < width - 4; x += 12) g.rect(x, 15, 6, 1, "#7a4e2c");
     g.outline(OUTLINE);
     const c = g.toCanvas();
-    const ctx = c.getContext("2d")!;
+    const ctx = ctx2d(c);
     // Leaves spill over the box.
     const leaves = ["#5fae63", "#86cf7f", "#3f8b4c"];
     for (let x = 3; x < width - 3; x += 3) {
@@ -1152,7 +1152,7 @@ export function paintBackground(L: Layout, theme?: Theme): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = L.W;
   canvas.height = L.H;
-  const ctx = canvas.getContext("2d")!;
+  const ctx = ctx2d(canvas);
   ctx.imageSmoothingEnabled = false;
   const steps: BackgroundSteps = { ...CLASSIC_BACKGROUND, ...theme?.background };
   steps.floor(ctx, L);

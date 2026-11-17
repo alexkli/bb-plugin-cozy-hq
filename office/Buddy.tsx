@@ -132,11 +132,17 @@ export function Buddy(props: Props) {
     let last = performance.now();
     const st = state.current;
     st.wave = waiting ? 1.5 : 0;
+    // It sits on every bb page, so it draws 15 times a second (not at the
+    // display's rate) and only when the picture changed.
+    let acc = 0;
+    let drawn = "";
     const frame = (ts: number) => {
       raf = requestAnimationFrame(frame);
-      const dt = Math.min(0.1, (ts - last) / 1000);
+      acc += Math.min(0.1, (ts - last) / 1000);
       last = ts;
-      if (document.hidden) return;
+      if (document.hidden || acc < 1 / 15) return;
+      const dt = acc;
+      acc = 0;
       st.t += dt;
       let pose: CharPose = "stand";
       let facing: "front" | "left" | "right" = "front";
@@ -162,16 +168,19 @@ export function Buddy(props: Props) {
         pose = (`walk${Math.floor(st.walked / 3) % 4}` as CharPose);
       }
       const sprite = charSprite({ look, facing, pose, expr, emblem });
+      const px = Math.round(st.x);
+      const bob = bubble ? Math.round(Math.abs(Math.sin(st.t * 3)) * 2) : 0;
+      const picture = `${px}|${facing}|${pose}|${expr}|${bob}`;
+      if (picture === drawn) return;
+      drawn = picture;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.imageSmoothingEnabled = false;
       // Shadow
       ctx.fillStyle = "rgba(0,0,0,0.18)";
-      const px = Math.round(st.x);
       ctx.fillRect((px + 5) * S, (TOP + CHAR_H - 1) * S, 10 * S, 2 * S);
       ctx.drawImage(sprite, px * S, TOP * S, CHAR_W * S, CHAR_H * S);
       if (bubble) {
         // How many threads have news for you since you last looked.
-        const bob = Math.round(Math.abs(Math.sin(st.t * 3)) * 2);
         const wide = bubble.text.length > 1 ? 3 : 0;
         const bx = (px + 12) * S;
         const by = (1 - bob / S) * S;

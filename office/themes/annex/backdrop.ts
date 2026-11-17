@@ -9,6 +9,7 @@ import { P } from "./pal.ts";
 import { corridorsFor, paintCells, partitions } from "./building.ts";
 import { drawRadiator, radiators } from "./fixtures.ts";
 import { planOf } from "./plan.ts";
+import { ctx2d } from "../../pixel.ts";
 
 /** The layout whose background is being baked (the fixture steps don't get it). */
 let baking: Layout | null = null;
@@ -558,7 +559,7 @@ function window(ctx: CanvasRenderingContext2D, win: Rect): void {
   for (let j = 5; j < my + 6 && j < h - 1; j++) g.set(cx, j, "#e4dcc0");
   g.set(cx, Math.min(h - 2, my + 6), "#8a7f62");
   const c = g.toCanvas();
-  const cc = c.getContext("2d")!;
+  const cc = ctx2d(c);
   // Grime on the glass, mostly in the corners and low down.
   for (let j = 4; j <= h - 2; j++) {
     for (let i = 6; i <= w - 2; i++) {

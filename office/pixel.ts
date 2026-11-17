@@ -3,6 +3,17 @@
 
 export type Color = string;
 
+/**
+ * The 2D context of an offscreen canvas (sprites, backdrops, the scene itself),
+ * kept in main memory: a frame is hundreds of tiny sprite blits, which the CPU
+ * does cheaply, while on the GPU each sprite is a texture and each blit a draw
+ * call (that cost the GPU process about four times the CPU). Only the canvas on
+ * the page is left to the GPU, which then gets one upload a frame.
+ */
+export function ctx2d(c: HTMLCanvasElement): CanvasRenderingContext2D {
+  return c.getContext("2d", { willReadFrequently: true })!;
+}
+
 export class Grid {
   readonly w: number;
   readonly h: number;
@@ -142,7 +153,7 @@ export class Grid {
     const canvas = document.createElement("canvas");
     canvas.width = this.w;
     canvas.height = this.h;
-    const ctx = canvas.getContext("2d")!;
+    const ctx = ctx2d(canvas);
     const img = ctx.createImageData(this.w, this.h);
     for (let i = 0; i < this.px.length; i++) {
       const c = this.px[i];

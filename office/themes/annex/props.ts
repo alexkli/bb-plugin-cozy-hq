@@ -7,6 +7,7 @@ import type { Theme } from "../../theme.ts";
 import type { Layout, PlantPlacement, PropPlacement } from "../../layout.ts";
 import { Grid, OUTLINE, adjust, cached, drawPixelText, grime, hash, makeCanvas, mapPixels, pa, rng, shade, tint } from "../../themekit.ts";
 import { P, carton, mug, papers, ring, speckle, tapeX } from "./pal.ts";
+import { ctx2d } from "../../pixel.ts";
 
 /** Fade, yellow and dirty a classic sprite: the default for anything not hand-drawn. */
 export function shabby(src: HTMLCanvasElement, seed: number, amount = 0.1): HTMLCanvasElement {
@@ -302,7 +303,7 @@ function vending(): HTMLCanvasElement {
   g.set(4, 34, P.tape).set(18, 34, P.tape);
   speckle(g, 1, 1, 22, 42, "#4e302a", 0.05, 3);
   const c = done(g);
-  drawPixelText(c.getContext("2d")!, "OUT", 6, 35, "#8e3b32");
+  drawPixelText(ctx2d(c), "OUT", 6, 35, "#8e3b32");
   return c;
 }
 
@@ -750,7 +751,7 @@ function planter(width: number): HTMLCanvasElement {
   for (let x = 6; x < width - 4; x += 12) g.rect(x, 15, 6, 1, "#4a4640");
   g.outline(OUTLINE);
   const c = g.toCanvas();
-  const ctx = c.getContext("2d")!;
+  const ctx = ctx2d(c);
   const r = rng(width);
   const cols = [P.leafDead, P.leafDry, "#6e5a36", P.leafSick];
   for (let x = 3; x < width - 3; x += 3) {
@@ -1012,7 +1013,7 @@ function propSprite(p: PropPlacement, L: Layout, classic: () => HTMLCanvasElemen
       return k("bin", () => {
         // Overflowing, as ever.
         const c = shabby(classic(), 13, 0.1);
-        const ctx = c.getContext("2d")!;
+        const ctx = ctx2d(c);
         for (const [x, y] of [[5, 1], [8, 0], [10, 2]] as const) {
           ctx.fillStyle = OUTLINE;
           ctx.fillRect(x - 1, y - 1 + 1, 5, 4);

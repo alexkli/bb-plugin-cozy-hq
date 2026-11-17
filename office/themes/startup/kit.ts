@@ -3,6 +3,7 @@
 // carpet, honey oak, terracotta tiles, a green-ish pool, and sticker colors
 // on everything.
 import { cached, drawPixelText, Grid, hash, makeCanvas, OUTLINE, pixelTextWidth, rect } from "../../themekit.ts";
+import { ctx2d } from "../../pixel.ts";
 
 export { OUTLINE, rect };
 
@@ -108,7 +109,7 @@ export function sprite(key: string, w: number, h: number, draw: (g: Grid) => voi
 /** Pixel text into a grid. */
 export function text(g: Grid, s: string, x: number, y: number, color: string): void {
   const c = cached(`startup|text|${s}|${color}`, () => makeCanvas(pixelTextWidth(s) + 1, 6, (ctx) => drawPixelText(ctx, s, 0, 0, color)));
-  const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+  const d = ctx2d(c).getImageData(0, 0, c.width, c.height).data;
   for (let yy = 0; yy < c.height; yy++) for (let xx = 0; xx < c.width; xx++) if (d[(yy * c.width + xx) * 4 + 3]! > 0) g.set(x + xx, y + yy, color);
 }
 

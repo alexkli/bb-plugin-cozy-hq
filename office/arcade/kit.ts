@@ -5,6 +5,7 @@
 // play it; drawing is separate.
 
 import { drawPixelText, pixelTextWidth } from "../pixelfont.ts";
+import { ctx2d } from "../pixel.ts";
 
 /** The cabinet's screen, in its own pixels. */
 export const SW = 160;
@@ -143,7 +144,7 @@ export function sprite(key: string, rows: string[], colors: Record<string, strin
   c = document.createElement("canvas");
   c.width = w;
   c.height = h;
-  const g = c.getContext("2d")!;
+  const g = ctx2d(c);
   const at = (x: number, y: number) => rows[y]?.[x] ?? ".";
   if (outline) {
     g.fillStyle = C.ink;

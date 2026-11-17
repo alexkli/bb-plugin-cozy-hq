@@ -26,6 +26,7 @@ import {
   youEmblem,
   type You,
 } from "./you.ts";
+import { ctx2d } from "./pixel.ts";
 
 type Update = (update: (you: You) => You) => void;
 
@@ -58,7 +59,7 @@ function YouPreview(props: { you: You; theme: Theme; facing: Facing; scale: numb
   }, []);
   useEffect(() => {
     const out = ref.current?.getContext("2d");
-    const ctx = native.getContext("2d");
+    const ctx = ctx2d(native);
     if (!out || !ctx) return;
     const look = dressYou(you, theme);
     const expr: Expression = blink ? "blink" : "open";

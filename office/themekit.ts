@@ -4,7 +4,7 @@
 import { ANCHOR_X, ANCHOR_Y, CHAR_H, CHAR_W, OUTLINE, type Look } from "./characters.ts";
 import { CLASSIC_BACKGROUND, classicProp, pa, paRecolor } from "./furniture.ts";
 import type { Layout, Rect } from "./layout.ts";
-import { Grid, hash, hex, hsl, mix, parseColor, rng, shade, SpriteCache } from "./pixel.ts";
+import { ctx2d, Grid, hash, hex, hsl, mix, parseColor, rng, shade, SpriteCache } from "./pixel.ts";
 import { drawPixelText, pixelTextWidth } from "./pixelfont.ts";
 
 export { ANCHOR_X, ANCHOR_Y, CHAR_H, CHAR_W, OUTLINE, CLASSIC_BACKGROUND, classicProp, pa, paRecolor, Grid, hash, hex, hsl, mix, parseColor, rng, shade, SpriteCache, drawPixelText, pixelTextWidth };
@@ -39,7 +39,7 @@ export function makeCanvas(w: number, h: number, draw: (ctx: CanvasRenderingCont
   const c = document.createElement("canvas");
   c.width = Math.max(1, Math.round(w));
   c.height = Math.max(1, Math.round(h));
-  const ctx = c.getContext("2d")!;
+  const ctx = ctx2d(c);
   ctx.imageSmoothingEnabled = false;
   draw(ctx);
   return c;
@@ -110,7 +110,7 @@ export function adjust(src: HTMLCanvasElement, opts: { sat?: number; light?: num
 export function edgeGlow(src: HTMLCanvasElement, color: string): HTMLCanvasElement {
   const w = src.width;
   const h = src.height;
-  const s = src.getContext("2d")!.getImageData(0, 0, w, h).data;
+  const s = ctx2d(src).getImageData(0, 0, w, h).data;
   const on = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h && s[(y * w + x) * 4 + 3]! > 0;
   return makeCanvas(w + 2, h + 2, (ctx) => {
     ctx.fillStyle = color;

@@ -28,7 +28,7 @@ import type { Facing, Green, Layout, Point, PokeKind, Rect, Spot } from "./layou
 import { waitsForYou, type DeskStyle, type Mood, type WaitKind } from "./model.ts";
 import { highlightOf, keepsStarted, startsWork, type Highlight } from "./highlight.ts";
 import { chairCanvas, deskCanvas, screenFor, type ChairTone } from "./desks.ts";
-import { hash, mix, rng } from "./pixel.ts";
+import { ctx2d, hash, mix, rng } from "./pixel.ts";
 import { drawPixelText, pixelTextWidth } from "./pixelfont.ts";
 import type { SoundName } from "./sound.ts";
 import { CLASSIC } from "./themes/classic.ts";
@@ -4274,7 +4274,7 @@ export class World {
       const c = document.createElement("canvas");
       c.width = sprite.width + 4;
       c.height = sprite.height + 4;
-      const x = c.getContext("2d")!;
+      const x = ctx2d(c);
       for (const [dx, dy] of ring) x.drawImage(sprite, 2 + dx, 2 + dy);
       x.globalCompositeOperation = "source-in";
       x.fillStyle = color;
@@ -4282,7 +4282,7 @@ export class World {
       return c;
     };
     const rim = grown([[-1, 0], [1, 0], [0, -1], [0, 1]], GLOW[glow]);
-    const x = rim.getContext("2d")!;
+    const x = ctx2d(rim);
     x.globalCompositeOperation = "destination-over";
     x.globalAlpha = 0.5;
     x.drawImage(grown([[-2, 0], [2, 0], [0, -2], [0, 2], [-1, -1], [1, -1], [-1, 1], [1, 1]], GLOW_HAZE[glow]), 0, 0);
@@ -4299,7 +4299,7 @@ export class World {
     const c = document.createElement("canvas");
     c.width = sprite.width;
     c.height = sprite.height;
-    const x = c.getContext("2d")!;
+    const x = ctx2d(c);
     x.drawImage(sprite, 0, 0);
     x.globalCompositeOperation = "source-in";
     x.fillStyle = "#2f55d4";
@@ -5739,7 +5739,7 @@ export class World {
     const darkness = lit?.darkness ? lit.darkness(sky.night, env.weather, classic) : classic;
     if (darkness < 0.02) return;
     const d = this.dark!;
-    const dc = d.getContext("2d")!;
+    const dc = ctx2d(d);
     dc.globalCompositeOperation = "source-over";
     dc.clearRect(0, 0, L.W, L.H);
     dc.fillStyle = `rgba(${lit?.tint ?? "16,14,44"},${darkness})`;

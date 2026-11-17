@@ -7,6 +7,7 @@ import type { ChairTone, Screen } from "../../desks.ts";
 import type { DeskStyle } from "../../model.ts";
 import { Grid, OUTLINE, adjust, cached, grime, hash, paRecolor, rng, shade } from "../../themekit.ts";
 import { P, mug, ring } from "./pal.ts";
+import { ctx2d } from "../../pixel.ts";
 
 const FINISH: Record<DeskStyle, { top: string; hi: string; edge: string; front: string; leg: string }> = {
   default: { top: "#8a7454", hi: "#a08a66", edge: "#6a5438", front: "#3e3024", leg: P.metalLo },
@@ -51,7 +52,7 @@ function desk(style: DeskStyle): HTMLCanvasElement {
 function chair(tone: ChairTone, side: "north" | "south", classic: () => HTMLCanvasElement): HTMLCanvasElement {
   return cached(`annex|chair|${tone}|${side}`, () => {
     const c = grime(adjust(classic(), { sat: 0.62, light: -0.05, contrast: 0.95 }), hash(`${tone}${side}`), 0.08);
-    const ctx = c.getContext("2d")!;
+    const ctx = ctx2d(c);
     if (side === "north") {
       // A split in the seat, foam showing; a strip of tape.
       ctx.fillStyle = P.foam;
@@ -102,7 +103,7 @@ function keyboard(g: Grid, x: number, y: number): void {
 /** A beige CRT from behind (the old Pixel Agents CRT, yellowed). */
 function crtBack(g: Grid, ox: number): void {
   const src = paRecolor("PC_BACK", { "#757b7c": P.beigeDk, "#e1e3e9": P.beigeHi, "#3f3740": "#4a4234", "#b5bfc7": P.beige, "#ffffff": "#e6dcc0" });
-  const d = src.getContext("2d")!.getImageData(0, 0, src.width, src.height).data;
+  const d = ctx2d(src).getImageData(0, 0, src.width, src.height).data;
   for (let y = 0; y < src.height; y++) {
     for (let x = 0; x < src.width; x++) {
       const i = (y * src.width + x) * 4;

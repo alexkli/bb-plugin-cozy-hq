@@ -12,6 +12,7 @@ import { C, cached, Grid } from "./kit.ts";
 import { creekX } from "./forest.ts";
 import { campData } from "./plan.ts";
 import { CAMP } from "./words.ts";
+import { ctx2d } from "../../pixel.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -716,7 +717,7 @@ function faceGlow(): HTMLCanvasElement {
     const c = document.createElement("canvas");
     c.width = 15;
     c.height = 15;
-    const ctx = c.getContext("2d")!;
+    const ctx = ctx2d(c);
     const g = ctx.createRadialGradient(7.5, 10, 0, 7.5, 9, 7.5);
     g.addColorStop(0, "rgba(255,240,170,0.55)");
     g.addColorStop(1, "rgba(255,240,170,0)");

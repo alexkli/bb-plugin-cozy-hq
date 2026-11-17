@@ -1,5 +1,6 @@
 // Neon City: palette and small sprite helpers shared by the scenery modules.
 import { cached, Grid, hash, makeCanvas, mapPixels, OUTLINE, parseColor, rng } from "../../themekit.ts";
+import { ctx2d } from "../../pixel.ts";
 
 /** The Neon City palette: wet steel and night violet, with neon accents. */
 export const P = {
@@ -48,7 +49,7 @@ export function sprite(key: string, w: number, h: number, draw: (g: Grid) => voi
     draw(g);
     if (opts.outline !== false) g.outline(OUTLINE, { skip: opts.skip });
     const c = g.toCanvas();
-    if (opts.post) opts.post(c.getContext("2d")!);
+    if (opts.post) opts.post(ctx2d(c));
     return c;
   });
 }
@@ -125,7 +126,7 @@ export function neonize(src: HTMLCanvasElement, opts: { sat?: number; lift?: num
 export function rim(src: HTMLCanvasElement, color: string, mode: "all" | "top" | "sides" = "all"): HTMLCanvasElement {
   const w = src.width;
   const h = src.height;
-  const data = src.getContext("2d")!.getImageData(0, 0, w, h).data;
+  const data = ctx2d(src).getImageData(0, 0, w, h).data;
   const empty = (x: number, y: number) => x < 0 || y < 0 || x >= w || y >= h || data[(y * w + x) * 4 + 3] === 0;
   const [or, og, ob] = parseColor(OUTLINE);
   const [cr, cg, cb] = parseColor(color);
