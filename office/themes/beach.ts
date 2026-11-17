@@ -7,6 +7,7 @@
 import type { Theme } from "../theme.ts";
 import { BACKDROP } from "./beach/backdrop.ts";
 import { click, clickables, clickItems, clickLights, clickOverlay, clickUnderlay, CLICK_SOUNDS } from "./beach/clicks.ts";
+import { EGG_SOUNDS, eggClick, eggClickables, eggDecor, eggOverlay, eggTick } from "./beach/eggs.ts";
 import { beachDressVisitor, beachPet, beachTidePool, hermitCrab } from "./beach/critters.ts";
 import { beachChair, beachDesk, beachPlant, beachScreen } from "./beach/furnish.ts";
 import { BEACH_LABELS, BEACH_SOUNDS, beachDress, beachLook, beachNpc, beachOutdoor } from "./beach/people.ts";
@@ -34,10 +35,11 @@ export const BEACH: Theme = {
     beachUnderlay(ctx, L, info);
     clickUnderlay(ctx, L, info);
   },
-  decor: (ctx, L, info) => beachDecor(ctx, L, info).concat(clickItems(ctx, L, info)),
+  decor: (ctx, L, info) => beachDecor(ctx, L, info).concat(clickItems(ctx, L, info), eggDecor(ctx, L, info)),
   overlay: (ctx, L, info) => {
     beachOverlay(ctx, L, info);
     clickOverlay(ctx, L, info);
+    eggOverlay(ctx, L, info);
   },
   lighting: { ...beachLighting, lights: (L, info) => beachLighting.lights!(L, info).concat(clickLights(L, info)) },
   screenColors: { bg: "#0e2a36", code: ["#7fe0d8", "#ffd166", "#ff9f86", "#9fdc5a", "#f4fbff"] },
@@ -49,9 +51,11 @@ export const BEACH: Theme = {
   roomba: () => hermitCrab(),
   fishTank: beachTidePool,
   labels: BEACH_LABELS,
-  sounds: { ...BEACH_SOUNDS, ...CLICK_SOUNDS },
+  sounds: { ...BEACH_SOUNDS, ...CLICK_SOUNDS, ...EGG_SOUNDS },
   outdoor: beachOutdoor,
-  // The pool, the surf, the lifeguard tower, the bonfire, the beach, the tiki bar and the palms do things when you click them.
-  clickables,
-  click,
+  // The pool, the surf, the lifeguard tower, the bonfire, the beach, the tiki bar and the palms do things when you click them;
+  // the Easter eggs come first, as they hide among them.
+  clickables: (L) => [...eggClickables(L), ...clickables(L)],
+  click: (id, act) => eggClick(id, act) ?? click(id, act),
+  tick: eggTick,
 };
