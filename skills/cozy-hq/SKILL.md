@@ -7,7 +7,9 @@ description: What the Cozy HQ office panel shows and how to configure it. Use wh
 
 Cozy HQ is a full-screen pixel-art office in the bb sidebar (the **Cozy HQ**
 destination, route `/plugins/cozy-hq/office`). Every active, visible thread is
-one character; archived and hidden threads are not shown.
+one character; archived and hidden threads are not shown. **Mod+Shift+H**
+opens the office from anywhere and, pressed again, goes back to where you were
+(command `plugin:cozy-hq/toggle-office`, rebindable in Settings → Keyboard).
 
 ## Where a thread sits
 

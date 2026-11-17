@@ -10,6 +10,7 @@ import {
   useRpc,
   useSettings,
   useSidebarThreadDraftIds,
+  type BbNavigate,
 } from "@get-bb/plugin-sdk/app";
 import type { InboxItem, RpcContract, Story, UsageCard, Weather } from "./contract.ts";
 import { lookKey, OfficeView, type OfficeThread } from "./office/OfficeView.tsx";
@@ -238,6 +239,34 @@ function useNoteOpened(storageKey: string, threads: OfficeThread[], openId: stri
   }, [storageKey, threads, openId, loading]);
 }
 
+/**
+ * For the "show the office / go back" shortcut: its command gets no navigation
+ * of its own, so the overlay (on every page) lends it its own, and notes
+ * where you were before the office.
+ */
+const hq = {
+  navigate: null as BbNavigate | null,
+  pluginId: "",
+  threads: [] as OfficeThread[],
+  /** Where you were before the office: a thread, or just "back". */
+  before: null as { threadId: string | null } | null,
+};
+
+function toggleOffice(): void {
+  const nav = hq.navigate;
+  if (!nav) return;
+  const path = window.location.pathname;
+  if (!path.startsWith(`/plugins/${hq.pluginId}/office`)) {
+    hq.before = { threadId: threadOnPage(hq.threads, path) };
+    nav.toPluginPanel("office");
+    return;
+  }
+  const before = hq.before;
+  hq.before = null;
+  if (before?.threadId) nav.toThread(before.threadId);
+  else window.history.back();
+}
+
 function BuddyOverlay() {
   const pluginId = experimental_usePluginId();
   const navigate = useBbNavigate();
@@ -246,6 +275,13 @@ function BuddyOverlay() {
   const path = usePathname();
   const onOffice = path.startsWith(`/plugins/${pluginId}/office`);
   const currentId = useMemo(() => (onOffice ? null : threadOnPage(threads, path)), [threads, path, onOffice]);
+  hq.navigate = navigate;
+  hq.pluginId = pluginId;
+  hq.threads = threads;
+  // Wherever you are away from the office (also when you go there some other way than the shortcut).
+  useEffect(() => {
+    if (!onOffice) hq.before = { threadId: currentId };
+  }, [onOffice, currentId]);
   // Even with the buddy turned off.
   useNoteOpened(`bb-plugin:${pluginId}`, threads, currentId, loading);
   if (!buddyOn) return null;
@@ -292,4 +328,11 @@ export default definePluginApp((app) => {
     experimental_useBadge: useNewsBadge,
   });
   app.slots.experimental_appOverlay({ id: "buddy", component: BuddyOverlay });
+  app.commands.register({
+    id: "toggle-office",
+    title: "Cozy HQ: show the office, or go back",
+    // H for HQ. bb binds no Mod+Shift+H; rebind it in Settings → Keyboard.
+    defaultShortcut: { key: "h", mod: true, shift: true },
+    run: toggleOffice,
+  });
 });

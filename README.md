@@ -30,7 +30,10 @@ bb plugin install cozy-hq@alexkli
 ```
 
 Cozy HQ appears as **Cozy HQ** in bb's sidebar rail (route
-`/plugins/cozy-hq/office`).
+`/plugins/cozy-hq/office`). **Cmd+Shift+H** (Ctrl+Shift+H on Windows and
+Linux) opens it from anywhere and, pressed again, takes you back to where you
+were; rebind it under Settings → Keyboard ("Cozy HQ: show the office, or go
+back").
 
 ## The tour
 
