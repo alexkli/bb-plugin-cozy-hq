@@ -28,6 +28,7 @@ import {
   type Point,
   type Spot,
 } from "../../themekit.ts";
+import { row, squeezeIn, type Nook, type Zone } from "./squeeze.ts";
 
 export type SegKind = "timber" | "chimney" | "open";
 
@@ -47,8 +48,18 @@ export interface CabinPlan {
   deckSide: "east" | "south" | null;
   /** Beyond the deck's rail: the piste and the chairlift. */
   slope: Rect | null;
-  /** The sky over the deck (east): a window without a frame. */
-  open: Rect | null;
+  /** Sky over the roof and over the deck: windows without frames (the distant peaks show there). */
+  opens: Rect[];
+  /** Where the back wall's top is (the summits show over the roof above it). */
+  top: number;
+  /** The lodge itself, inside its log walls; everything else is the mountainside. */
+  lodge: Rect;
+  /** The snowy yard in front of the lodge (wide panels with the height for it). */
+  yard: Rect | null;
+  /** The mountainside around the lodge. */
+  terrain: Terrain;
+  /** Where the busy ones squeeze in with a laptop when the desks are full. */
+  nooks: Nook[];
   /** The log wall between inside and the deck; gaps are the doorways people walk through. */
   deckWall: { x0: number; y0: number; x1: number; y1: number; gaps: [number, number][] } | null;
   /** The barrel sauna on the deck (its footprint; it stands on its bottom edge). */
@@ -70,6 +81,33 @@ export interface CabinPlan {
   skiWall: Rect | null;
   /** Where a snowman gets built on the deck once enough snow has fallen (its feet). */
   snowman: Point | null;
+}
+
+/** What's out on the mountainside: rocks, pines, ice, the path to the door. */
+export interface Terrain {
+  /** Outcrops and boulders: top-left corner, size, and whether it's a jagged outcrop. */
+  rocks: { x: number; y: number; w: number; h: number; jagged: boolean }[];
+  /** Stunted pines (feet and height). */
+  pines: { x: number; y: number; h: number }[];
+  /** Scree: loose stones fanned out below the rocks. */
+  scree: Rect[];
+  /** A frozen stream down the hillside (its points, top to bottom). */
+  stream: Point[] | null;
+  /** A small frozen tarn. */
+  tarn: Rect | null;
+  /** A cairn and a trail sign. */
+  cairn: Point | null;
+  sign: Point | null;
+  /** The trodden path from the front door, with footprints, and the sled beside it. */
+  path: { x: number; y0: number; y1: number } | null;
+  sled: Point | null;
+  /** Firewood stacked against the outside of the west wall. */
+  logs: Rect | null;
+}
+
+/** Whether a window is one of the plan's open stretches of sky (no frame, no sill). */
+export function isOpen(p: CabinPlan | null, win: Rect): boolean {
+  return !!p && p.opens.some((o) => o.x === win.x && o.y === win.y && o.w === win.w);
 }
 
 export function planOf(L: Layout): CabinPlan | null {
@@ -242,12 +280,12 @@ function windowsIn(x0: number, x1: number, y: number, h: number, avoid: [number,
   return out;
 }
 
-/** The chimney's geometry for a TV of tvW at the center x; the wall there is DC deep. */
-function chimneyAt(cx: number, tvW: number, tvH: number): { DC: number; chimney: Rect; wallTv: Rect; box: Rect; mantel: Rect; hearth: Rect; woodpile: Rect } {
-  const DC = tvH + 36;
+/** The chimney's geometry for a TV of tvW at the center x, the wall's top at `top`; the wall there is DC deep. */
+function chimneyAt(cx: number, tvW: number, tvH: number, top = 0): { DC: number; chimney: Rect; wallTv: Rect; box: Rect; mantel: Rect; hearth: Rect; woodpile: Rect } {
+  const DC = top + tvH + 36;
   const cw = tvW + 40;
   const x0 = Math.round(cx - cw / 2);
-  const chimney: Rect = { x: x0, y: 0, w: cw, h: DC };
+  const chimney: Rect = { x: x0, y: top, w: cw, h: DC - top };
   const wallTv: Rect = { x: x0 + 20, y: DC - 30 - tvH, w: tvW, h: tvH };
   const bw = clamp(Math.round(tvW * 0.42), 38, 54);
   const box: Rect = { x: Math.round(cx - bw / 2), y: DC - 22, w: bw, h: 22 };
@@ -261,14 +299,22 @@ function chimneyAt(cx: number, tvW: number, tvH: number): { DC: number; chimney:
 function dressWall(L: Layout, plan: CabinPlan, segments: WallSegment[], doorX: number, D: number): void {
   L.plants = L.plants.filter((p) => p.sprite !== "HANGING_PLANT");
   L.wall.paintings = [];
+  const top = plan.top;
+  if (plan.variant === "wide") {
+    // The board and the calendar on the mudroom wall, inside the lodge.
+    const x = plan.lodge.x + 10;
+    L.wall.pinboard = { x, y: top + 3, w: 128, h: Math.min(53, D - top - 11) };
+    L.wall.calendar = { x: x + 136, y: top + 6, w: 20, h: 22 };
+    L.wall.status = { x: x + 136, y: top + 31, w: 20, h: 18 };
+  }
   const door: Rect = { x: doorX - 10, y: D - 42, w: 20, h: 42 };
   L.wall.door = door;
   L.wall.legendNote = { x: door.x - 16, y: door.y + 8, w: 12, h: 12 };
   L.entrance = { x: doorX, y: D + 2 };
   L.entrancePath = [{ x: doorX, y: L.net.halls[0]!, c: true }, L.entrance];
   const ch = plan.fire.chimney;
-  const winY = 5;
-  const winH = D - 21;
+  const winY = top + 5;
+  const winH = D - top - 21;
   const busy: [number, number][] = [
     [L.wall.pinboard.x - 4, L.wall.pinboard.x + L.wall.pinboard.w + 4],
     [L.wall.calendar.x - 4, L.wall.calendar.x + 24],
@@ -277,13 +323,13 @@ function dressWall(L: Layout, plan: CabinPlan, segments: WallSegment[], doorX: n
   // The clock on the timber right of the chimney (or left of it on a crowded wall).
   const right = segments.find((s, i) => plan.segKinds[i] === "timber" && s.x0 >= ch.x + ch.w);
   const cx = right && right.x1 - right.x0 >= 40 ? right.x0 + 16 : Math.max(16, ch.x - 16);
-  L.wall.clock = { x: cx, y: 18, r: 9 };
+  L.wall.clock = { x: cx, y: top + 18, r: 9 };
   busy.push([cx - 12, cx + 12]);
   const windows: Rect[] = [];
   for (const [i, sg] of segments.entries()) {
     if (plan.segKinds[i] === "timber") windows.push(...windowsIn(sg.x0, sg.x1, winY, winH, busy));
   }
-  if (plan.open) windows.push(plan.open);
+  windows.push(...plan.opens);
   L.wall.windows = windows;
   L.wall.pillars = segments.slice(1).map((s) => s.x0);
 }
@@ -337,59 +383,131 @@ function southDeck(b: Builder, plan: CabinPlan, deck: Rect, hall: number): Rect 
 
 // ------------------------------------------------------------------ wide
 
+/** How many desks the lodge has: as the head count needs, eight at most (the rest squeeze in with laptops). */
+function deskCount(threads: number): number {
+  return threads <= 4 ? 4 : 8;
+}
+
+/** A pod row of `cols` desk pairs, centered in the column at x (the rest of the floor stays free). */
+function podsIn(b: Builder, x: number, w: number, y: number, cols: number, acc: Access): void {
+  const pw = cols * 48;
+  buildPods(b, { x: x + Math.floor((w - pw) / 2), y, w: pw, h: POD_H - 4 }, acc);
+}
+
+/** An empty mountainside to fill in. */
+function bareTerrain(): Terrain {
+  return { rocks: [], pines: [], scree: [], stream: null, tarn: null, cairn: null, sign: null, path: null, sled: null, logs: null };
+}
+
+/**
+ * Rocks, pines and scree scattered over the bits of mountainside in `areas`,
+ * clear of `keep` (decks, paths, the tarn); a seeded scatter, the same every time.
+ */
+function scatter(t: Terrain, areas: Rect[], keep: Rect[], seed: number): void {
+  const taken: Rect[] = [...keep];
+  const free = (r: Rect) => !taken.some((q) => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h);
+  let k = seed;
+  const rnd = () => {
+    k = (Math.imul(k ^ (k >>> 15), 2246822507) + 0x9e3779b9) >>> 0;
+    return (k % 10000) / 10000;
+  };
+  for (const a of areas) {
+    if (a.w < 10 || a.h < 14) continue;
+    const n = Math.round((a.w * a.h) / 900);
+    for (let i = 0; i < n * 3 && i < 200; i++) {
+      const kind = rnd();
+      const jagged = kind < 0.35;
+      const w = jagged ? 14 + Math.floor(rnd() * 14) : kind < 0.75 ? 7 + Math.floor(rnd() * 7) : 0;
+      if (w > 0) {
+        const h = jagged ? Math.round(w * (0.8 + rnd() * 0.5)) : Math.round(w * 0.75);
+        const r = { x: Math.round(a.x + rnd() * (a.w - w)), y: Math.round(a.y + rnd() * (a.h - h)), w, h };
+        if (r.x < a.x || r.y < a.y || !free({ x: r.x - 3, y: r.y - 3, w: r.w + 6, h: r.h + 6 })) continue;
+        t.rocks.push({ ...r, jagged });
+        taken.push(r);
+        if (jagged && rnd() < 0.6) t.scree.push({ x: r.x - 4, y: r.y + r.h, w: r.w + 8, h: 8 });
+      } else {
+        const h = 10 + Math.floor(rnd() * 8);
+        const p = { x: Math.round(a.x + 6 + rnd() * (a.w - 12)), y: Math.round(a.y + h + 3 + rnd() * (a.h - h - 3)), h };
+        const r = { x: p.x - 6, y: p.y - h - 3, w: 12, h: h + 3 };
+        if (r.y < a.y || r.x < a.x - 2 || !free(r)) continue;
+        t.pines.push(p);
+        taken.push(r);
+      }
+    }
+  }
+}
+
 function widePlan(W: number, H: number, threads: number): Layout {
   const b = new Builder();
-  const east = W >= 640;
-  const OUT = east ? clamp(Math.round(W * 0.16), 104, 190) : 0;
-  const XI = W - OUT;
-  const X0 = 6;
-  const podCols = clamp(Math.floor(((XI - 12) * 0.36) / 48), 4, 6);
-  const wL = podCols * 48;
+  const desks = deskCount(threads);
+  // The summits show over the roof on panels with the height for it.
+  const MT = H >= 440 ? 22 : 0;
+  const short = H < 400;
+  const D = MT + (short ? 66 : 72);
+  const tvCap = H < 330 ? 96 : short ? 108 : 120;
+  const DCguess = MT + Math.round(tvCap * 0.54) + 36;
+  // A snowy front yard with the sun deck when there's the height; else the deck along the side.
+  const yardH = clamp(H - (DCguess + 94) - 140, 0, 130);
+  const front = yardH >= 84;
+  const east = !front && W >= 640;
+  const OUT = east ? clamp(Math.round(W * 0.15), 96, 170) : 0;
+  // The lodge: three columns (the mudroom over the workroom, the great room over the
+  // kitchen, the map room over your study), the mountainside round it.
+  const NEED = 6 + 192 + 16 + 168 + 16 + 140 + 6;
+  let ML: number;
+  let lodgeW: number;
+  if (east) {
+    ML = clamp(W - OUT - NEED, 16, 70);
+    lodgeW = W - OUT - ML;
+  } else {
+    lodgeW = Math.max(NEED, W - 2 * clamp(Math.round(W * 0.09), 16, 100));
+    ML = Math.floor((W - lodgeW) / 2);
+  }
+  const XI = ML + lodgeW;
+  const X0 = ML + 6;
+  const wL = 192;
   const a1 = X0 + wL + 8;
   const cx0 = a1 + 8;
-  const wR = clamp(Math.round((XI - 6 - cx0 - 16) * 0.47), 150, 230);
+  const rest = lodgeW - 236;
+  const wR = clamp(Math.min(Math.round(rest * 0.45), rest - 168), 140, 230);
   const a2 = XI - 6 - wR - 8;
   const rx0 = a2 + 8;
   const wC = a2 - 8 - cx0;
   const split = wC >= 400;
   const gw = split ? Math.max(220, Math.round(wC * 0.56)) : wC;
-  const short = H < 400;
-  const D = short ? 66 : 72;
-  const tvW = Math.min(gw - 50, H < 330 ? 96 : short ? 108 : 120);
+  const tvW = Math.min(gw - 50, tvCap);
   const tvH = Math.round(tvW * 0.54);
-  const ch = chimneyAt(cx0 + gw / 2, tvW, tvH);
+  const ch = chimneyAt(cx0 + gw / 2, tvW, tvH, MT);
   const DC = ch.DC;
 
-  // A sun deck along the bottom when the panel's too narrow for one at the side but tall.
-  const south = !east && H >= 560;
-  const SB = south ? 22 : 0;
-  const deckH = south ? clamp(Math.round(H * 0.15), 96, 124) : 0;
-  const deckTop = H - SB - deckH;
-  const bottom = south ? deckTop - 12 : H - 6;
-  const hy = clamp(Math.round(Math.max(DC + 2 + 104 + 8, H * (south ? 0.4 : 0.46))), DC + 90, bottom - 114);
-  const halls = south ? [hy, deckTop + 12] : [hy];
+  const yardTop = front ? H - yardH : H;
+  const bottom = front ? yardTop - 12 : H - 6;
+  const hy = clamp(Math.round(Math.max(DC + 2 + 104 + 8, H * (front ? 0.4 : 0.46))), DC + 90, bottom - 114);
+  const halls = front ? [hy, yardTop + 12] : [hy];
   const net: Network = { halls, aisles: [a1, a2] };
 
   const segments: WallSegment[] = [
-    { x0: 0, x1: ch.chimney.x, depth: D },
+    { x0: ML, x1: ch.chimney.x, depth: D },
     { x0: ch.chimney.x, x1: ch.chimney.x + ch.chimney.w, depth: DC },
     { x0: ch.chimney.x + ch.chimney.w, x1: XI, depth: D },
   ];
   const segKinds: SegKind[] = ["timber", "chimney", "timber"];
-  if (east) {
-    segments.push({ x0: XI, x1: W, depth: D });
-    segKinds.push("open");
-  }
+  const lodge: Rect = { x: ML, y: MT, w: lodgeW, h: (front ? yardTop - 3 : H) - MT };
   const plan: CabinPlan = {
     variant: "wide",
     segKinds,
     fire: { chimney: ch.chimney, box: ch.box, mantel: ch.mantel, hearth: ch.hearth },
     woodpile: ch.woodpile,
-    inside: { x: 0, y: 0, w: XI, h: south ? deckTop - 3 : H },
+    inside: lodge,
     deck: null,
     deckSide: null,
     slope: null,
-    open: null,
+    opens: MT > 0 ? [{ x: 0, y: 0, w: W, h: MT - 5 }] : [],
+    top: MT,
+    lodge,
+    yard: front ? { x: 0, y: yardTop, w: W, h: yardH } : null,
+    terrain: bareTerrain(),
+    nooks: [],
     deckWall: null,
     sauna: null,
     chairs: [],
@@ -419,7 +537,7 @@ function widePlan(W: number, H: number, threads: number): Layout {
   const tvParts = buildGreatRoom(b, great, { hallY: hy, aisleX: a1 }, ch.wallTv, false, !ski || ski.w < 150);
   let games: Rect | null = null;
   let gamesParts: ReturnType<typeof buildGames> | null = null;
-  let library = false;
+  let library: Rect | null = null;
   if (ski === side) {
     games = side;
     gamesParts = buildGames(b, side, { hallY: hy, aisleX: cx0 + gw + 5 });
@@ -428,12 +546,9 @@ function widePlan(W: number, H: number, threads: number): Layout {
   const meeting: Rect = { x: rx0, y: top, w: wR, h: hy - 8 - top };
   const whiteboard = buildMeeting(b, meeting, hy);
 
-  // ---- below: the workroom, the kitchen (and the ski room), your study
-  const wantRows = Math.ceil((threads + 3) / (2 * podCols));
-  const fitRows = Math.max(1, Math.floor((bottom - y0 + 4) / POD_H));
-  const rows = clamp(wantRows, 1, fitRows);
-  buildPods(b, { x: X0, y: y0, w: wL, h: rows * POD_H - 4 }, { hallY: hy, aisleX: a1 });
-  const leftY = y0 + rows * POD_H + 4;
+  // ---- below: the workroom (one row of desks, as many as needed), the kitchen (and the ski room), your study
+  podsIn(b, X0, wL, y0, desks / 2, { hallY: hy, aisleX: a1 });
+  const leftY = y0 + POD_H + 4;
   const kitchen: Rect = { x: cx0, y: y0 + 8, w: wC, h: kH - 8 };
   buildKitchen(b, kitchen, { hallY: hy, aisleX: a2 });
   let cY = kitchen.y + kitchen.h + 8;
@@ -442,8 +557,8 @@ function widePlan(W: number, H: number, threads: number): Layout {
     const sh = Math.min(56, leftRest - 2);
     buildServerRoom(b, { x: X0 + 8, y: leftY, w: Math.min(wL - 16, 150), h: sh });
     if (leftRest - sh - 12 >= 96) {
-      buildLibrary(b, { x: X0, y: leftY + sh + 20, w: wL, h: Math.min(110, leftRest - sh - 20) }, { hallY: hy, aisleX: a1 });
-      library = true;
+      library = { x: X0, y: leftY + sh + 20, w: wL, h: Math.min(110, leftRest - sh - 20) };
+      buildLibrary(b, library, { hallY: hy, aisleX: a1 });
     }
   }
   const cRest = bottom - cY;
@@ -453,9 +568,9 @@ function widePlan(W: number, H: number, threads: number): Layout {
     dressSkiRoom(plan, games);
     cY = games.y + games.h + 8;
   } else if (!library && cRest >= 100) {
-    buildLibrary(b, { x: cx0, y: cY + 12, w: wC, h: Math.min(110, cRest - 12) }, { hallY: hy, aisleX: a2 });
-    library = true;
-    cY += Math.min(110, cRest - 12) + 12;
+    library = { x: cx0, y: cY + 12, w: wC, h: Math.min(110, cRest - 12) };
+    buildLibrary(b, library, { hallY: hy, aisleX: a2 });
+    cY += library.h + 12;
   }
   const rightAvail = bottom - (hy + 12);
   let bossH = clamp(rightAvail, 96, 210);
@@ -487,15 +602,46 @@ function widePlan(W: number, H: number, threads: number): Layout {
   const coldBelow = sv !== null && sv.x < kitchen.x + kitchen.w && sv.x + sv.w > kitchen.x && sv.y > kitchen.y;
   if (!coldBelow) kitchenArcade(b, kitchen, { hallY: hy, aisleX: a2 }, cY === kitchen.y + kitchen.h + 8 ? bottom : cY - 8);
 
-  // ---- outside: the sun deck
+  // ---- outside: the sun deck in the front yard, or along the side
+  const t = plan.terrain;
   let eventArea: Rect;
-  if (east) {
-    const SL = clamp(Math.round(OUT * 0.22), 24, 48);
-    const deck: Rect = { x: XI + 5, y: D, w: W - SL - 3 - (XI + 5), h: H - D };
+  const keep: Rect[] = [];
+  if (front) {
+    // The yard in front of the lodge: the hallway runs along it, in through the front doors;
+    // the sun deck between the doors (deck chairs at its end), the sauna on the snow to the
+    // left, the tarn to the right, the path down from the deck with the sled beside it.
+    const hall2 = halls[1]!;
+    const deck: Rect = { x: a1 - 12, y: yardTop + 2, w: a2 + 12 - (a1 - 12), h: yardH - 34 };
+    plan.deck = deck;
+    plan.deckSide = "south";
+    plan.deckWall = { x0: ML, y0: yardTop - 3, x1: XI, y1: yardTop - 3, gaps: [] };
+    plan.sauna = { x: Math.max(ML + 6, deck.x - 62), y: hall2 + 12, w: 46, h: Math.min(40, yardTop + yardH - 6 - (hall2 + 12)) };
+    const chairY = deck.y + deck.h - 10;
+    const cx1 = deck.x + deck.w - 16;
+    for (let i = 0; i < 2; i++) deckChair(b, plan, i, cx1 - i * 24, chairY, { hallY: hall2, aisleX: cx1 - i * 24 }, hall2 + 14);
+    const evX = deck.x + 8;
+    eventArea = { x: evX, y: hall2 + 10, w: Math.max(60, cx1 - 24 - 16 - evX), h: Math.max(26, deck.y + deck.h - 6 - (hall2 + 10)) };
+    plan.skiRack = { x: a1 + 13, y: yardTop - 4, w: 28, h: 6 };
+    const snowY = deck.y + deck.h;
+    t.path = { x: deck.x + 30, y0: snowY, y1: H };
+    t.sled = { x: deck.x + 52, y: Math.min(H - 6, snowY + 18) };
+    plan.snowman = { x: Math.round((plan.sauna.x + plan.sauna.w + deck.x) / 2), y: Math.min(H - 6, yardTop + yardH - 14) };
+    const right = deck.x + deck.w + 8;
+    if (XI - 8 - right >= 50) t.tarn = { x: right + Math.round((XI - 8 - right - 48) / 2), y: hall2 + 16, w: 48, h: 24 };
+    keep.push(
+      { x: deck.x - 4, y: deck.y - 4, w: deck.w + 8, h: deck.h + 8 },
+      { x: plan.sauna.x - 4, y: plan.sauna.y - 30, w: plan.sauna.w + 8, h: plan.sauna.h + 34 },
+      { x: t.path.x - 10, y: snowY, w: 44, h: H - snowY },
+      { x: plan.snowman.x - 10, y: plan.snowman.y - 24, w: 20, h: 26 },
+      { x: 0, y: hall2 - 10, w: W, h: 20 },
+    );
+    if (t.tarn) keep.push({ x: t.tarn.x - 4, y: t.tarn.y - 4, w: t.tarn.w + 8, h: t.tarn.h + 8 });
+  } else if (east) {
+    const B = OUT - 84;
+    const deck: Rect = { x: XI + 5, y: D, w: W - B - 3 - (XI + 5), h: H - D };
     plan.deck = deck;
     plan.deckSide = "east";
-    plan.slope = { x: W - SL, y: D, w: SL, h: H - D };
-    plan.open = { x: XI, y: 0, w: W - XI, h: D };
+    plan.opens.push({ x: XI, y: 0, w: W - XI, h: D });
     plan.deckWall = { x0: XI, y0: D, x1: XI, y1: H, gaps: [] };
     plan.sauna = { x: deck.x + 4, y: D + 8, w: Math.min(48, deck.w - 10), h: 40 };
     plan.skiRack = { x: deck.x + deck.w - 14, y: D + 4, w: 12, h: 30 };
@@ -509,18 +655,30 @@ function widePlan(W: number, H: number, threads: number): Layout {
       const n = deck.w >= 70 ? 2 : 1;
       for (let i = 0; i < n; i++) deckChair(b, plan, i, n === 1 ? deck.x + deck.w / 2 : deck.x + 16 + i * (deck.w - 32), cy, acc, cy - 18);
     }
-  } else if (south) {
-    const deck: Rect = { x: 6, y: deckTop, w: W - 12, h: deckH };
-    plan.deck = deck;
-    plan.deckSide = "south";
-    plan.slope = { x: 0, y: H - SB, w: W, h: SB };
-    plan.deckWall = { x0: 0, y0: deckTop - 3, x1: W, y1: deckTop - 3, gaps: [] };
-    eventArea = southDeck(b, plan, deck, halls[1]!);
+    keep.push({ x: XI, y: 0, w: deck.w + 10, h: H });
   } else {
     // No deck: get-togethers on the great room floor, or in the ski room.
     const couch = tvParts.couch;
     const free = great.y + great.h - (couch.y + couch.h + 6);
     eventArea = free >= 60 || !games ? { x: great.x + 16, y: couch.y + couch.h + 4, w: great.w - 32, h: Math.max(26, free) } : games;
+  }
+
+  // ---- the mountainside: firewood against the west wall, a frozen stream, rocks and pines
+  const hillTop = MT;
+  const hillBottom = front ? yardTop : H;
+  if (ML >= 20) {
+    t.logs = { x: ML - 13, y: Math.round(hy - 30), w: 12, h: 44 };
+    keep.push({ x: ML - 16, y: t.logs.y - 4, w: 16, h: t.logs.h + 8 });
+    if (ML >= 34) {
+      t.stream = [];
+      for (let y = hillTop; y <= H; y += 6) t.stream.push({ x: Math.round(ML * 0.45 + Math.sin(y * 0.035) * ML * 0.2), y });
+      t.cairn = { x: Math.round(ML * 0.78), y: hillTop + 30 };
+      keep.push({ x: t.cairn.x - 8, y: t.cairn.y - 16, w: 16, h: 18 });
+    }
+  }
+  if (W - XI >= 34 && !east) {
+    t.sign = { x: XI + Math.round((W - XI) / 2), y: hillTop + 34 };
+    keep.push({ x: t.sign.x - 10, y: t.sign.y - 24, w: 20, h: 26 });
   }
 
   const L = finish(b, W, H, false, segments, net, {
@@ -539,48 +697,104 @@ function widePlan(W: number, H: number, threads: number): Layout {
     wallTv: ch.wallTv,
   });
   dressWall(L, plan, segments, a1, D);
-  if (plan.deck && plan.deckSide === "east") {
-    L.patrol = [
-      { x: 12, y: hy, c: true },
-      { x: plan.deck.x + plan.deck.w - 10, y: hy, c: true },
-    ];
-  }
+  // The guard's rounds: the lodge's hallway, and the deck.
+  L.patrol = [{ x: X0 + 6, y: hy, c: true }, { x: XI - 8, y: hy, c: true }];
+  if (plan.deck && plan.deckSide === "east") L.patrol.push({ x: plan.deck.x + plan.deck.w - 10, y: hy, c: true });
+  if (front) L.patrol.push({ x: XI - 12, y: halls[1]!, c: true }, { x: ML + 12, y: halls[1]!, c: true });
   cutDoors(L, plan);
+  // When the desks are full the rest squeeze in: by the fire, on the window seat and the boot bench, on kitchen stools, out on the deck.
+  const outside = [...keep];
+  if (plan.sauna) outside.push({ x: plan.sauna.x - 4, y: plan.sauna.y - 30, w: plan.sauna.w + 8, h: plan.sauna.h + 34 });
+  if (t.stream) outside.push({ x: 0, y: 0, w: ML - 4, h: H });
+  plan.nooks = squeezeIn(L, cabinZones(L, plan, { great, mud, kitchen, library, hall: hy, a1, a2 }), threads - L.desks.length, outside);
+  // Then the rocks and pines, round everything (the stumps out in the snow too).
+  keep.push(...plan.nooks.map((n) => ({ x: n.x - 10, y: n.y - 24, w: 20, h: 28 })));
+  const streamBand = t.stream ? [{ x: Math.round(ML * 0.25) - 4, y: 0, w: Math.round(ML * 0.4) + 8, h: H }] : [];
+  scatter(t, [{ x: 2, y: hillTop + 4, w: ML - 6, h: hillBottom - hillTop - 6 }, ...(east ? [{ x: W - (OUT - 84) + 2, y: D + 4, w: OUT - 88, h: H - D - 8 }] : [{ x: XI + 4, y: hillTop + 4, w: W - XI - 6, h: hillBottom - hillTop - 6 }]), ...(front ? [{ x: 2, y: yardTop + 6, w: W - 4, h: yardH - 8 }] : [])], [...keep, ...streamBand], W * 31 + H);
+
   L.themeData = plan;
   if (plan.deck) L.words = { "in the lounge": "on the sun deck" };
   return L;
+}
+
+/** Where the busy ones squeeze in, in the order they fill. */
+function cabinZones(L: Layout, plan: CabinPlan, r: { great: Rect; mud: Rect; kitchen: Rect; library: Rect | null; hall: number; a1: number; a2: number }): Zone[] {
+  const out: Zone[] = [];
+  const f = plan.fire;
+  const near = (x: number) => L.net.aisles.reduce((b, a) => (Math.abs(a - x) < Math.abs(b - x) ? a : b));
+  // Sheepskins on the hearth, either side of the fire.
+  const hy = f.hearth.y + 15;
+  const hall = (y: number) => L.net.halls.reduce((b, h) => (h > y && (b < y || h < b) ? h : b), L.net.halls[L.net.halls.length - 1]!);
+  out.push({ at: [f.box.x - 10, f.box.x + f.box.w + 10, f.box.x - 30, f.box.x + f.box.w + 30].map((x) => ({ x, y: hy })), seat: "sheepskin", entry: { x: r.a1, y: hall(hy) }, lane: hy, max: 4 });
+  // The window seat along the great room's floor below the sofa.
+  const c = L.couch;
+  out.push({ at: row(r.great.x + 14, r.great.x + r.great.w - 14, c.y + c.h + 26), seat: "seat", entry: { x: near(r.great.x), y: hall(c.y) }, max: 6 });
+  // The boot bench: the mudroom's free floor.
+  for (const y of [r.mud.y + 70, r.mud.y + 100]) out.push({ at: row(r.mud.x + 14, r.mud.x + r.mud.w - 14, y), seat: "boots", entry: { x: r.a1, y: hall(y) }, max: 6 });
+  // Kitchen stools by the table.
+  const stool = L.byId.get("stool-0");
+  if (stool && stool.path.length >= 3) {
+    const lane = stool.path[1]!.y;
+    out.push({ at: [lane - 4, lane + 20].flatMap((y) => row(r.kitchen.x + 12, r.kitchen.x + r.kitchen.w - 12, y, 22)), seat: "stool", entry: stool.path[0]!, lane, max: 4 });
+  }
+  // Knitted poufs in the reading loft.
+  if (r.library) out.push({ at: row(r.library.x + 14, r.library.x + r.library.w - 14, r.library.y + r.library.h - 6), seat: "pouf", entry: { x: near(r.library.x + r.library.w / 2), y: hall(r.library.y) }, max: 6 });
+  // Log stumps out on the deck, clear of the get-togethers.
+  const d = plan.deck;
+  if (d) {
+    const ev = L.eventArea;
+    const avoid = [{ x: ev.x - 6, y: ev.y - 4, w: ev.w + 12, h: ev.h + 8 }];
+    if (plan.deckSide === "south") {
+      const hall2 = L.net.halls[L.net.halls.length - 1]!;
+      const yard = plan.yard ?? { x: 0, y: d.y, w: L.W, h: L.H - d.y };
+      for (const y of [d.y + d.h - 10, d.y + d.h - 36, hall2 + 40, hall2 + 66]) out.push({ at: row(yard.x + 14, yard.x + yard.w - 14, y, 22), seat: "stump", entry: { x: near(d.x + d.w / 2), y: hall2 }, lane: y + 5, avoid });
+    } else {
+      for (let y = d.y + 30; y < d.y + d.h - 8; y += 28) out.push({ at: row(d.x + 14, d.x + d.w - 14, y, 22), seat: "stump", entry: { x: d.x + Math.round(d.w / 2), y: r.hall }, lane: y + 5, avoid });
+    }
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ portrait
 
 function portraitPlan(W: number, H: number, threads: number): Layout | null {
   const b = new Builder();
-  const D = 72;
-  const aisleX = W - 8;
-  const x0 = 6;
-  const innerW = W - 20;
+  const desks = deskCount(threads);
+  // The lodge stands a little in from the sides; tall phones see the summits over the roof.
+  const M = clamp(Math.round((W - 340) * 0.5) + 6, 6, 24);
+  const MT = H >= 760 ? 20 : 0;
+  const D = MT + 72;
+  const aisleX = W - M - 8;
+  const x0 = M + 6;
+  const innerW = W - 2 * M - 20;
   const gap = 16;
   // The board and calendar on the left, the chimney (TV on it) in the middle, the door at the right.
-  const tvW = clamp(W - 252, 88, 112);
+  const tvW = clamp(W - 2 * M - 252, 88, 112);
   const tvH = Math.round(tvW * 0.54);
-  const boardEnd = Math.min(172, 8 + Math.min(128, W - 210) + 28);
-  const ch = chimneyAt(Math.max(boardEnd + 6 + (tvW + 40) / 2, Math.min(W / 2, aisleX - 40 - (tvW + 40) / 2)), tvW, tvH);
+  const boardEnd = M + Math.min(172, 8 + Math.min(128, W - 2 * M - 210) + 28);
+  const ch = chimneyAt(Math.max(boardEnd + 6 + (tvW + 40) / 2, Math.min(W / 2, aisleX - 40 - (tvW + 40) / 2)), tvW, tvH, MT);
   const DC = ch.DC;
   const segments: WallSegment[] = [
-    { x0: 0, x1: ch.chimney.x, depth: D },
+    { x0: M, x1: ch.chimney.x, depth: D },
     { x0: ch.chimney.x, x1: ch.chimney.x + ch.chimney.w, depth: DC },
-    { x0: ch.chimney.x + ch.chimney.w, x1: W, depth: D },
+    { x0: ch.chimney.x + ch.chimney.w, x1: W - M, depth: D },
   ];
+  const lodge: Rect = { x: M, y: MT, w: W - 2 * M, h: H - MT };
   const plan: CabinPlan = {
     variant: "portrait",
     segKinds: ["timber", "chimney", "timber"],
     fire: { chimney: ch.chimney, box: ch.box, mantel: ch.mantel, hearth: ch.hearth },
     woodpile: ch.woodpile,
-    inside: { x: 0, y: 0, w: W, h: H },
+    inside: lodge,
     deck: null,
     deckSide: null,
     slope: null,
-    open: null,
+    opens: MT > 0 ? [{ x: 0, y: 0, w: W, h: MT - 5 }] : [],
+    top: MT,
+    lodge,
+    yard: null,
+    terrain: bareTerrain(),
+    nooks: [],
     deckWall: null,
     sauna: null,
     chairs: [],
@@ -594,8 +808,6 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
     skiWall: null,
     snowman: null,
   };
-  const podCols = Math.max(2, Math.floor(innerW / 48));
-  const needPods = Math.ceil((threads + 3) / (2 * podCols));
   type Row = { kind: "great" | "pods" | "kitchenMeeting" | "pods2" | "games" | "library" | "mudBoss" | "deck"; h: number; grow: number };
   const rows: Row[] = [
     { kind: "great", h: 88, grow: 0.5 },
@@ -611,7 +823,6 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
   const withDeck = used() + gap + deckH <= FB - 2;
   if (withDeck) rows.push({ kind: "deck", h: deckH, grow: 0.6 });
   const end = withDeck ? FB : H - 4;
-  if (needPods >= 2 && used() + POD_H + gap <= end) rows.splice(2, 0, { kind: "pods2", h: POD_H, grow: 0 });
   if (used() + 100 + gap <= end - 30) rows.splice(rows.length - (withDeck ? 2 : 1), 0, { kind: "games", h: 100, grow: 0.4 });
   if (used() + 96 + gap <= end - 30) rows.splice(rows.length - (withDeck ? 2 : 1), 0, { kind: "library", h: 96, grow: 0.3 });
   const extra = end - used();
@@ -645,6 +856,7 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
   let tvParts: ReturnType<typeof buildLounge> | null = null;
   let great: Rect | null = null;
   let eventArea: Rect | null = null;
+  let library: Rect | null = null;
   for (const { row, rect } of placed) {
     const hallY = hallOf.get(row)!;
     const acc: Access = { hallY, aisleX };
@@ -657,7 +869,7 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
       }
       case "pods":
       case "pods2":
-        buildPods(b, { ...rect, h: Math.min(rect.h, POD_H) }, acc);
+        podsIn(b, rect.x, rect.w, rect.y, desks / 2, acc);
         break;
       case "kitchenMeeting": {
         const kw = Math.round(rect.w * 0.54);
@@ -673,7 +885,8 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
         dressSkiRoom(plan, { ...rect, y: rect.y + 6, h: rect.h - 6 });
         break;
       case "library":
-        buildLibrary(b, { ...rect, y: rect.y + 8, h: rect.h - 8 }, acc);
+        library = { ...rect, y: rect.y + 8, h: rect.h - 8 };
+        buildLibrary(b, library, acc);
         break;
       case "mudBoss": {
         const ww = Math.round(rect.w * 0.56);
@@ -700,7 +913,8 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
         plan.deck = deck;
         plan.deckSide = "south";
         plan.slope = { x: 0, y: FB, w: W, h: SB };
-        plan.deckWall = { x0: 0, y0: deck.y - 3, x1: W, y1: deck.y - 3, gaps: [] };
+        plan.deckWall = { x0: M, y0: deck.y - 3, x1: W - M, y1: deck.y - 3, gaps: [] };
+        lodge.h = deck.y - 3 - MT;
         eventArea = southDeck(b, plan, deck, hallY);
         break;
       }
@@ -727,14 +941,24 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
     wallTv: ch.wallTv,
   });
   // The board, calendar and status on the left; finish() put the door at the aisle.
-  const boardW = Math.min(128, ch.chimney.x - 44);
-  L.wall.pinboard = { x: 8, y: 3, w: boardW, h: Math.min(53, D - 11) };
-  L.wall.calendar = { x: 8 + boardW + 8, y: 6, w: 20, h: 22 };
-  L.wall.status = { x: 8 + boardW + 8, y: 31, w: 20, h: 18 };
-  dressWall(L, plan, segments, Math.min(aisleX, W - 14), D);
+  const boardW = Math.min(128, ch.chimney.x - M - 44);
+  L.wall.pinboard = { x: M + 8, y: MT + 3, w: boardW, h: Math.min(53, D - MT - 11) };
+  L.wall.calendar = { x: M + 8 + boardW + 8, y: MT + 6, w: 20, h: 22 };
+  L.wall.status = { x: M + 8 + boardW + 8, y: MT + 31, w: 20, h: 18 };
+  dressWall(L, plan, segments, Math.min(aisleX, W - M - 14), D);
   L.entrance = { x: aisleX, y: D + 2 };
   L.entrancePath = [{ x: aisleX, y: net.halls[0]!, c: true }, L.entrance];
+  // The guard's rounds stay in the lodge (and on the deck).
+  L.patrol = net.halls.flatMap((hy, i) => (i % 2 ? [W - M - 12, M + 12] : [M + 12, W - M - 12]).map((x) => ({ x, y: hy, c: true })));
   cutDoors(L, plan);
+  // Firewood against the west wall and a few rocks and pines in the margins.
+  const t = plan.terrain;
+  const hillBottom = plan.deck ? plan.deck.y - 3 : H;
+  if (M >= 16) {
+    t.logs = { x: M - 13, y: Math.round(gr.y + 20), w: 12, h: 44 };
+    scatter(t, [{ x: 1, y: MT + 4, w: M - 3, h: hillBottom - MT - 6 }, { x: W - M + 2, y: MT + 4, w: M - 3, h: hillBottom - MT - 6 }], [{ x: M - 16, y: t.logs.y - 4, w: 16, h: t.logs.h + 8 }], W * 17 + H);
+  }
+  plan.nooks = squeezeIn(L, cabinZones(L, plan, { great: gr, mud: mud as Rect, kitchen: kitchen as Rect, library, hall: net.halls[0]!, a1: aisleX, a2: aisleX }), threads - L.desks.length);
   L.themeData = plan;
   if (plan.deck) L.words = { "in the lounge": "on the sun deck" };
   return L;

@@ -9,7 +9,7 @@ import type { OutsideInfo, PaintInfo, SkyColors } from "../../theme.ts";
 import type { Layout, Rect } from "../../layout.ts";
 import { cached, makeCanvas, mix } from "../../themekit.ts";
 import { clamp, h2 } from "./kit.ts";
-import { planOf } from "./plan.ts";
+import { isOpen, planOf } from "./plan.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -119,11 +119,9 @@ export function viewLift(L: Layout): { x0: number; y0: number; x1: number; y1: n
   return cached(`cabin|viewlift|${L.W}x${L.H}|${L.wall.windows.length}`, () => {
     const p = planOf(L);
     const Hv = viewH(L);
-    if (p?.open && p.slope && p.deckSide === "east") {
-      const lx = p.slope.x + Math.round(p.slope.w * 0.42);
-      return { x0: lx, y0: p.open.y + p.open.h, x1: p.open.x + Math.round(p.open.w * 0.28), y1: Math.round(Hv * 0.42) };
-    }
-    const wins = L.wall.windows;
+    const side = p?.deckSide === "east" ? p.opens.find((o) => o.y === 0 && o.h > 30) : undefined;
+    if (side) return { x0: side.x + side.w - 10, y0: side.y + side.h, x1: side.x + Math.round(side.w * 0.28), y1: Math.round(Hv * 0.42) };
+    const wins = L.wall.windows.filter((w) => !isOpen(p, w));
     const w = wins[wins.length - 1];
     if (!w) return null;
     return { x0: w.x + Math.round(w.w * 0.85), y0: w.y + w.h, x1: w.x + Math.round(w.w * 0.3), y1: w.y + Math.round(w.h * 0.42) };
@@ -388,7 +386,7 @@ export function outside(ctx: Ctx, win: Rect, index: number, info: OutsideInfo): 
   maybeAuto(L, t, n, wx);
   for (const s of shows) drawShow(ctx, s, win, t, n, Hv);
   // Frost creeping into the corners of the glass on cold days and nights.
-  if (!(planOf(L)?.open && win.x === planOf(L)!.open!.x)) frost(ctx, win, info);
+  if (!isOpen(planOf(L), win)) frost(ctx, win, info);
 }
 
 /** One night in five is an aurora night (it shows only when it's clear). */

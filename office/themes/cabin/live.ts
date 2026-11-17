@@ -8,10 +8,12 @@ import type { Drawable, Light, PaintInfo, WallLightsInfo } from "../../theme.ts"
 import type { Layout, Rect } from "../../layout.ts";
 import { cached, makeCanvas, OUTLINE } from "../../themekit.ts";
 import { C, h2 } from "./kit.ts";
-import { planOf, type CabinPlan } from "./plan.ts";
+import { isOpen, planOf, type CabinPlan } from "./plan.ts";
 import { bindView } from "./view.ts";
 import { bootRack, deckChair, lantern, saunaHut, skiRack, skiWall, snowman, telescope, toolStand, waxBench, woodpile } from "./outdoor.ts";
-import { clickDecor, clickLights, clickOverlay, clickUnderlay, fireBoost } from "./clicks.ts";
+import { clickDecor, clickLights, clickOverlay, clickUnderlay, fireBoost, sledGone } from "./clicks.ts";
+import { nookDecor, nookLights } from "./nooks.ts";
+import { blizzard, outdoorRects, sledSprite, terrainUnder } from "./terrain.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -140,10 +142,6 @@ function windowLight(w: number): HTMLCanvasElement {
 
 // ------------------------------------------------------------------ the slope
 
-function liftX(s: Rect): number {
-  return s.x + Math.round(s.w * 0.42);
-}
-
 const JACKETS = ["#e0453a", "#f2c230", "#3a8ad8", "#e86aa8", "#4fbf7a", "#f08a3a", "#8a5ad8"];
 
 /** A chair on the lift: a bar from the cable, a bench, maybe riders in bright jackets. */
@@ -197,69 +195,34 @@ function slopeLife(ctx: Ctx, p: CabinPlan, info: PaintInfo): void {
   const s = p.slope;
   if (!s) return;
   const t = info.t;
-  const east = p.deckSide === "east";
   ctx.save();
   ctx.beginPath();
   ctx.rect(s.x, s.y, s.w, s.h);
   ctx.clip();
-  if (east) {
-    const lx = liftX(s);
-    ctx.fillStyle = "#3a3d46";
-    ctx.fillRect(lx - 6, s.y, 1, s.h);
-    ctx.fillRect(lx + 4, s.y, 1, s.h);
-    // Up on the right, down on the left.
-    const gap = 38;
-    const run = info.night > 0.85 ? 0 : t * 9;
-    for (let y = s.y - gap + (run % gap); y < s.y + s.h + gap; y += gap) {
-      const n = Math.floor((y - run) / gap);
-      chair(ctx, lx + 4, Math.round(s.y + s.h - (y - s.y)), info.night > 0.6 ? 0 : (n * 7) % 3, Math.abs(n), true);
-      chair(ctx, lx - 6, Math.round(y - 12), 0, 0, true);
-    }
-    // Skiers carving down the piste.
-    if (info.night < 0.5 && info.weather !== "storm") {
-      for (let i = 0; i < 3; i++) {
-        const period = (s.h + 40) / (22 + i * 6);
-        const ph = ((t + i * 5.3) % period) / period;
-        const y = s.y - 20 + ph * (s.h + 40);
-        const sw = Math.sin(ph * Math.PI * 2 * (s.h / 70) + i);
-        const x = s.x + 4 + (s.w - 8) * (0.5 + sw * 0.45);
-        // Their tracks behind them.
-        ctx.fillStyle = "#dfe8f2";
-        for (let k = 1; k < 8; k++) {
-          const py = y - k * 3;
-          const pq = (py - (s.y - 20)) / (s.h + 40);
-          const px = s.x + 4 + (s.w - 8) * (0.5 + Math.sin(pq * Math.PI * 2 * (s.h / 70) + i) * 0.45);
-          ctx.fillRect(Math.round(px), Math.round(py), 1, 1);
-        }
-        bigSkier(ctx, x, y, i + Math.floor(t / period), Math.cos(ph * Math.PI * 2 * (s.h / 70) + i) > 0 ? 1 : -1, true);
-      }
-    }
-  } else {
-    const ly = s.y + Math.round(s.h * 0.3);
-    ctx.fillStyle = "#3a3d46";
-    ctx.fillRect(s.x, ly, s.w, 1);
-    ctx.fillRect(s.x, ly + 6, s.w, 1);
-    for (let x = s.x + 40; x < s.x + s.w; x += 110) {
-      ctx.fillStyle = OUTLINE;
-      ctx.fillRect(x - 1, ly - 2, 3, s.h);
-      ctx.fillStyle = "#8d949e";
-      ctx.fillRect(x, ly - 2, 1, s.h - 1);
-    }
-    const gap = 40;
-    const run = info.night > 0.85 ? 0 : t * 9;
-    for (let x = s.x - gap + (run % gap); x < s.x + s.w + gap; x += gap) {
-      const n = Math.floor((x - run) / gap);
-      chair(ctx, Math.round(x), ly + 1, info.night > 0.6 ? 0 : (n * 7) % 3, Math.abs(n), false);
-      chair(ctx, Math.round(s.x + s.w - (x - s.x)), ly + 7, 0, 0, false);
-    }
-    if (info.night < 0.5 && info.weather !== "storm") {
-      for (let i = 0; i < 2; i++) {
-        const period = (s.w + 40) / (26 + i * 8);
-        const ph = ((t + i * 7.1) % period) / period;
-        const x = s.x - 20 + ph * (s.w + 40);
-        const y = s.y + s.h - 2 - Math.abs(Math.sin(ph * 14 + i)) * 4;
-        bigSkier(ctx, i ? s.x + s.w - (x - s.x) : x, y, i + 2, i ? -1 : 1, false);
-      }
+  const ly = s.y + Math.round(s.h * 0.3);
+  ctx.fillStyle = "#3a3d46";
+  ctx.fillRect(s.x, ly, s.w, 1);
+  ctx.fillRect(s.x, ly + 6, s.w, 1);
+  for (let x = s.x + 40; x < s.x + s.w; x += 110) {
+    ctx.fillStyle = OUTLINE;
+    ctx.fillRect(x - 1, ly - 2, 3, s.h);
+    ctx.fillStyle = "#8d949e";
+    ctx.fillRect(x, ly - 2, 1, s.h - 1);
+  }
+  const gap = 40;
+  const run = info.night > 0.85 ? 0 : t * 9;
+  for (let x = s.x - gap + (run % gap); x < s.x + s.w + gap; x += gap) {
+    const n = Math.floor((x - run) / gap);
+    chair(ctx, Math.round(x), ly + 1, info.night > 0.6 ? 0 : (n * 7) % 3, Math.abs(n), false);
+    chair(ctx, Math.round(s.x + s.w - (x - s.x)), ly + 7, 0, 0, false);
+  }
+  if (info.night < 0.5 && info.weather !== "storm") {
+    for (let i = 0; i < 2; i++) {
+      const period = (s.w + 40) / (26 + i * 8);
+      const ph = ((t + i * 7.1) % period) / period;
+      const x = s.x - 20 + ph * (s.w + 40);
+      const y = s.y + s.h - 2 - Math.abs(Math.sin(ph * 14 + i)) * 4;
+      bigSkier(ctx, i ? s.x + s.w - (x - s.x) : x, y, i + 2, i ? -1 : 1, false);
     }
   }
   ctx.restore();
@@ -277,7 +240,7 @@ export function underlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
   if (info.night < 0.5 && (info.weather === "clear" || info.weather === "partly")) {
     ctx.globalAlpha = 1 - info.night * 2;
     for (const w of L.wall.windows) {
-      if (p.open && w.x === p.open.x) continue;
+      if (isOpen(p, w)) continue;
       const seg = L.segments.find((s) => w.x >= s.x0 && w.x < s.x1);
       ctx.drawImage(windowLight(w.w), w.x, seg?.depth ?? w.y + w.h + 14);
     }
@@ -296,7 +259,7 @@ export function underlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
   if (lvl > 0.05) {
     ctx.fillStyle = C.snow;
     for (const w of L.wall.windows) {
-      if (p.open && w.x === p.open.x) continue;
+      if (isOpen(p, w)) continue;
       const hgt = 1 + Math.round(lvl * 3);
       for (let x = 0; x < w.w; x += 3) {
         const bump = Math.round(Math.sin(x * 0.7 + w.x) * 0.8 + (x < 3 || x > w.w - 4 ? 1 : 0));
@@ -319,6 +282,7 @@ export function underlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
     ctx.fillStyle = "#cfe6f5";
     ctx.fillRect(rack.x + 12, Math.round(rack.y + 6 + ph * 7), 1, 1);
   }
+  terrainUnder(ctx, L, p, info, lvl);
   slopeLife(ctx, p, info);
   clickUnderlay(ctx, L, info);
 }
@@ -370,6 +334,9 @@ export function decor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
     const s = p.telescope;
     out.push({ z: s.y, draw: () => ctx.drawImage(telescope(), s.x - 7, s.y - 26) });
   }
+  const sled = p.terrain.sled;
+  if (sled && !sledGone(info.t)) out.push({ z: sled.y, draw: () => ctx.drawImage(sledSprite(), sled.x - 9, sled.y - 8) });
+  out.push(...nookDecor(ctx, L, info));
   out.push(...clickDecor(ctx, L, info));
   return out;
 }
@@ -380,11 +347,8 @@ export function overlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
   const t = info.t;
   const wx = info.weather;
   // Weather over the deck and the piste (the windows get theirs from the office).
-  const out: Rect[] = [];
-  if (p.deck && p.slope) {
-    if (p.deckSide === "east") out.push({ x: p.deck.x - 2, y: p.deck.y, w: L.W - p.deck.x + 2, h: L.H - p.deck.y });
-    else out.push({ x: 0, y: p.deck.y, w: L.W, h: L.H - p.deck.y });
-  }
+  const out = outdoorRects(L, p);
+  if (wx === "storm" || wx === "snow") blizzard(ctx, out, t, wx === "storm");
   for (const r of out) {
     if (wx === "snow" || wx === "storm") {
       const storm = wx === "storm";
@@ -436,7 +400,7 @@ function bulbs(L: Layout): { x: number; y: number; drop: number }[] {
       for (let x0 = seg.x0 + 6; x0 < seg.x1 - 6; x0 += 100) {
         const x1 = Math.min(seg.x1 - 6, x0 + 100);
         if (x1 - x0 < 30) continue;
-        for (let x = x0; x < x1; x++) if ((x - x0) % 10 === 5) out.push({ x, y: 4 + Math.round(Math.sin(((x - x0) / (x1 - x0)) * Math.PI) * 2), drop: ((x * 7) % 3) + 1 });
+        for (let x = x0; x < x1; x++) if ((x - x0) % 10 === 5) out.push({ x, y: (p?.top ?? 0) + 4 + Math.round(Math.sin(((x - x0) / (x1 - x0)) * Math.PI) * 2), drop: ((x * 7) % 3) + 1 });
       }
     }
     return out;
@@ -496,6 +460,7 @@ export function lights(L: Layout, info: PaintInfo): Light[] {
     else out.push([g[1] + 6, p.deckWall!.y0 + 4, 34, 0.85, "#ffd28a", 0.2]);
   }
   out.push([L.kitchen.x + 30, L.kitchen.y + 4, 40, 0.6, "#ffb46a", 0.12]);
+  out.push(...nookLights(L, info));
   out.push(...clickLights(L, info));
   return out;
 }

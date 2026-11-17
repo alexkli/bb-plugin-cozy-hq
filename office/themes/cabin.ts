@@ -54,7 +54,7 @@ export const CABIN: Theme = {
   screenColors: { bg: "#1c1a1e", code: ["#ffcf7a", "#e8e4da", "#8ac8e8", "#a8d89a", "#e88a7a", "#9a948a"] },
   look: (l, id) => look(l, id),
   npc,
-  dress: (ctx, a) => dress(ctx, a),
+  dress: (ctx, a, t) => dress(ctx, a, t),
   dressVisitor: (ctx, v) => dressVisitor(ctx, v),
   pet: (kind, pose, facing, blink) => pet(kind, pose, facing, blink),
   roomba: () => plow(),

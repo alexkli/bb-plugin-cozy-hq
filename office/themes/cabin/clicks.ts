@@ -17,6 +17,12 @@ import { OUTLINE } from "../../themekit.ts";
 import { C, clamp } from "./kit.ts";
 import { planOf, type CabinPlan } from "./plan.ts";
 import { towelGuy } from "./outdoor.ts";
+import { sledSprite } from "./terrain.ts";
+
+const px = (ctx: Ctx, c: string, x: number, y: number, w = 1, h = 1) => {
+  ctx.fillStyle = c;
+  ctx.fillRect(x, y, w, h);
+};
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -180,6 +186,9 @@ export function clickables(L: Layout): SceneryClickable[] {
   }
   if (p.telescope) out.push({ id: "telescope", rect: { x: p.telescope.x - 7, y: p.telescope.y - 26, w: 15, h: 28 }, hover: "The telescope · what's up on the peaks?" });
   if (p.slope) out.push({ id: "lift", rect: p.slope, hover: "The chairlift · who's riding up?" });
+  const t = p.terrain;
+  if (t.tarn) out.push({ id: "tarn", rect: t.tarn, hover: "The frozen tarn · is the ice thick enough?" });
+  if (t.sled) out.push({ id: "sled", rect: { x: t.sled.x - 9, y: t.sled.y - 9, w: 18, h: 10 }, hover: "The sled · one run down" });
   if (p.skiRack) {
     const r = p.skiRack;
     out.push({ id: "skis", rect: { x: r.x, y: r.y + r.h - 32, w: Math.max(r.w, 14), h: 32 }, hover: "Skis in the snow · don't lean on them" });
@@ -200,6 +209,13 @@ let sauna: { kind: "plunge" | "steam"; t0: number; skin: string } | null = null;
 let scope: { kind: "climber" | "ibex" | "eagle" | "hut" | "moon"; t0: number } | null = null;
 let lift: { kind: "wave" | "yeti" | "dog" | "mitten"; t0: number; at: number } | null = null;
 let skis: { t0: number } | null = null;
+let ice: { kind: "skate" | "crack" | "slide"; t0: number } | null = null;
+let sled: { t0: number } | null = null;
+
+/** The sled's off down the hill (and being dragged back up). */
+export function sledGone(t: number): boolean {
+  return sled !== null && t - sled.t0 > 0.2 && t - sled.t0 < 6;
+}
 
 function bind(L: Layout): void {
   if (L === forL) return;
@@ -212,6 +228,8 @@ function bind(L: Layout): void {
   scope = null;
   lift = null;
   skis = null;
+  ice = null;
+  sled = null;
 }
 
 /** How much the fire's been stoked right now (0 calm … 1 roaring). */
@@ -297,6 +315,18 @@ export function click(id: string, act: SceneryActions): string | null {
       if (deck) sayNear(act, deck.x + deck.w / 2, act.at.y, 160, SAY[kind], 1.2);
       return "cab-clank";
     }
+    case "tarn": {
+      const kind = ice && t - ice.t0 < 8 ? "crack" : weighted<"skate" | "crack" | "slide">([["skate", 3], ["crack", 2], ["slide", 2]]);
+      ice = { kind, t0: t };
+      return kind === "crack" ? "cab-crack" : "cab-skate";
+    }
+    case "sled": {
+      if (sled && t - sled.t0 < 6) return null;
+      sled = { t0: t };
+      const tr = p.terrain;
+      if (tr.path) sayNear(act, tr.path.x, tr.path.y0, 160, ["Wheee!", "Mind the rocks!", "My turn next!"], 0.4);
+      return "cab-swoosh";
+    }
     case "skis": {
       if (skis && t - skis.t0 < 5) return null;
       skis = { t0: t };
@@ -350,6 +380,13 @@ export function clickUnderlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
   const p = planOf(L);
   if (!p) return;
   const t = info.t;
+  // A crack zigzagging across the tarn's ice.
+  const tarn = p.terrain.tarn;
+  if (ice?.kind === "crack" && tarn && t - ice.t0 < 6) {
+    const k = Math.min(1, (t - ice.t0) / 0.6);
+    const n = Math.round((tarn.w - 10) * k);
+    for (let i = 0; i < n; i++) px(ctx, i % 5 === 0 ? "#ffffff" : C.iceDk, tarn.x + 5 + i, Math.round(tarn.y + tarn.h / 2 + Math.sin(i * 0.9) * 2 + (i % 7 === 3 ? 1 : 0)), 1, 1);
+  }
   // A special chair on the lift, and the mitten it dropped.
   if (lift && p.slope) {
     const e = t - lift.t0;
@@ -397,6 +434,20 @@ export function clickUnderlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
       }
     }
   }
+}
+
+/** A little skater on the ice in a bobble hat, scarf flying. */
+function skater(ctx: Ctx, x: number, y: number, dir: number, e: number): void {
+  px(ctx, OUTLINE, x - 3, y - 13, 7, 14);
+  px(ctx, C.navy, x - 2, y - 8, 5, 6);
+  px(ctx, "#f2c9a0", x - 2, y - 11, 5, 3);
+  px(ctx, C.red, x - 2, y - 12, 5, 1);
+  px(ctx, C.red, x, y - 13, 1, 1);
+  px(ctx, C.mustard, x - 2, y - 8, 5, 1);
+  px(ctx, C.mustard, x - dir * 3, y - 8 + (Math.sin(e * 9) > 0 ? 1 : 0), 2, 1);
+  px(ctx, "#2a2c36", x - 2, y - 2, 2, 2);
+  px(ctx, "#2a2c36", x + 1, y - 2, 2, 2);
+  px(ctx, "#c8d0d8", x - 3, y, 7, 1);
 }
 
 function specialChair(ctx: Ctx, x: number, y: number, kind: "wave" | "yeti" | "dog" | "mitten", t: number, vertical: boolean): void {
@@ -529,6 +580,57 @@ export function clickDecor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
             ctx.fillStyle = "#5a3a2a";
             ctx.fillRect(X - 1, Y - 5, 3, 1);
           } else if (e >= 0.8 && e < 7.8) ctx.drawImage(towelGuy(Math.floor(e * 8) % 2, sauna!.skin), Math.round(x) - 4, Math.round(y) - 12);
+        },
+      });
+    }
+  }
+  // Out on the tarn: a skater's loops, a crack running across, a marmot sliding on its belly.
+  const tarn = p.terrain.tarn;
+  if (ice && tarn) {
+    const e = t - ice.t0;
+    const cx = tarn.x + tarn.w / 2;
+    const cy = tarn.y + tarn.h / 2;
+    if (ice.kind === "skate" && e < 8) {
+      const a = e * 2.2;
+      const x = cx + Math.sin(a) * (tarn.w / 2 - 9);
+      const y = cy + Math.sin(a * 2) * (tarn.h / 2 - 6);
+      out.push({ z: y, draw: () => skater(ctx, Math.round(x), Math.round(y), Math.cos(a) > 0 ? 1 : -1, e) });
+    } else if (ice.kind === "slide" && e < 3) {
+      const x = tarn.x - 4 + (e / 3) * (tarn.w + 8);
+      out.push({
+        z: cy,
+        draw: () => {
+          px(ctx, OUTLINE, Math.round(x) - 5, Math.round(cy) - 3, 11, 5);
+          px(ctx, "#9a7a58", Math.round(x) - 4, Math.round(cy) - 2, 9, 3);
+          px(ctx, "#5a4430", Math.round(x) + 3, Math.round(cy) - 2, 2, 2);
+          px(ctx, "#ffffff", Math.round(x) - 8, Math.round(cy), 2, 1);
+        },
+      });
+    }
+  }
+  // Down the path on the sled, and dragged back up.
+  const tr = p.terrain;
+  if (sled && tr.path && tr.sled) {
+    const e = t - sled.t0;
+    const down = e < 1.6;
+    const k = down ? Math.min(1, e / 1.4) : Math.max(0, 1 - (e - 2.8) / 3);
+    const y = tr.path.y0 + (L.H + 14 - tr.path.y0) * k;
+    if (e < 6 && (down || e > 2.8)) {
+      out.push({
+        z: y,
+        draw: () => {
+          ctx.drawImage(sledSprite(), Math.round(tr.path!.x - 9), Math.round(y - 8));
+          if (down) {
+            // The rider, hunched on it, a spray of snow behind.
+            px(ctx, OUTLINE, Math.round(tr.path!.x) - 3, Math.round(y) - 15, 7, 9);
+            px(ctx, C.red, Math.round(tr.path!.x) - 2, Math.round(y) - 12, 5, 5);
+            px(ctx, "#f2c9a0", Math.round(tr.path!.x) - 1, Math.round(y) - 14, 3, 2);
+            px(ctx, C.navy, Math.round(tr.path!.x) - 2, Math.round(y) - 15, 5, 1);
+            for (let i = 0; i < 4; i++) px(ctx, "#ffffff", Math.round(tr.path!.x) - 6 + i * 4, Math.round(y) - 10 - (i % 2) * 2, 1, 1);
+          } else {
+            // Somebody dragging it back up by the rope.
+            px(ctx, C.cream, Math.round(tr.path!.x) + 8, Math.round(y) - 6, 6, 1);
+          }
         },
       });
     }

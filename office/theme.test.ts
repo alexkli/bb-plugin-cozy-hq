@@ -78,3 +78,41 @@ test("Startup House: 28 busy threads all have a place to work at 666×474 and 39
     }
   }
 });
+
+test("Mountain Cabin: 28 busy threads all have a place to work at 666×474 and 390×844", () => {
+  const theme = themeById("cabin");
+  const busy = Array.from({ length: 28 }, (_, i): ThreadLike => ({
+    id: `t${i}`,
+    displayTitle: `t${i}`,
+    projectId: "p",
+    providerId: "claude-code",
+    status: "active",
+    indicator: "none",
+    hasPendingInteraction: false,
+    isUnread: false,
+    isPinned: false,
+    isArchived: false,
+    isHidden: false,
+    parentThreadId: null,
+    href: `/t/${i}`,
+    activity: { workflows: 0, backgroundAgents: 0, backgroundCommands: 0, planMode: 0 },
+    updatedAt: 1_800_000_000_000 - i * 60_000,
+    lastReadAt: null,
+    latestAttentionAt: 0,
+  }));
+  for (const [w, h] of [[666, 474], [390, 844]] as const) {
+    const size = layoutSize(w, h);
+    const L = theme.layout!(size.W, size.H, { threads: 28, portrait: size.portrait })!;
+    const { spots, overflow } = assignSpots(busy, L.spots, new Map(), new Map(), 1_800_000_000_000);
+    assert.deepEqual(overflow, [], `${w}×${h}: nobody's left out`);
+    const at = busy.map((t) => L.byId.get(spots.get(t.id)!)!);
+    assert.ok(at.every((s) => s.group === "desk"), `${w}×${h}: everyone works in the desk group`);
+    // The real desks fill first; the rest squeeze in with laptops, typing away facing you.
+    const desks = at.filter((s) => s.kind === "desk");
+    assert.equal(desks.length, L.desks.length, `${w}×${h}: every desk is taken`);
+    assert.ok(desks.length < 28, `${w}×${h}: fewer desks than the head count`);
+    for (const s of at.filter((s) => s.kind !== "desk")) {
+      assert.ok(!s.id.startsWith("desk-") && s.pose === "sit-desk-front", `${w}×${h}: ${s.id} is a squeeze-in`);
+    }
+  }
+});

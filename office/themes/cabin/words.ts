@@ -238,6 +238,19 @@ export const SOUNDS: Record<string, SoundRecipe> = {
       k.noise(i * 0.09, 0.03, 0.08, 1800);
     }
   },
+  // Ice: a crack shooting across, skates scraping, a sled hissing down.
+  "cab-crack": (k) => {
+    k.tone(1800, 0, 0.05, "square", 0.06, 300);
+    k.noise(0.02, 0.08, 0.14, 2600);
+    k.tone(140, 0.05, 0.5, "sine", 0.08, 90);
+  },
+  "cab-skate": (k) => {
+    for (let i = 0; i < 4; i++) k.swell(i * 0.45, 0.4, 0.06, 3200, 2200, 2);
+  },
+  "cab-swoosh": (k) => {
+    k.swell(0, 1.3, 0.14, 1400, 600, 1.5);
+    k.tone(700, 0.2, 0.3, "sine", 0.03, 1200);
+  },
   // A chair clanking over the lift tower.
   "cab-clank": (k) => {
     k.noise(0, 0.05, 0.16, 1400);

@@ -7,7 +7,8 @@ import type { BackgroundSteps } from "../../theme.ts";
 import type { Layout, Rect, Room, WallSegment } from "../../layout.ts";
 import { Grid, OUTLINE, rect, shade } from "../../themekit.ts";
 import { C, h2, knitBand, stones } from "./kit.ts";
-import { planOf, type CabinPlan } from "./plan.ts";
+import { isOpen, planOf, type CabinPlan } from "./plan.ts";
+import { paintEaves, paintShell, paintTerrain } from "./terrain.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -178,30 +179,11 @@ function fir(ctx: Ctx, x: number, base: number, h: number): void {
   paint(ctx, g, x - cx - 1, base - h - 3);
 }
 
-function paintSlope(ctx: Ctx, s: Rect, along: "x" | "y"): void {
+/** The piste below the deck on phones: groomed corduroy, a few snowy firs (the lift is live). */
+function paintSlope(ctx: Ctx, s: Rect): void {
   snowField(ctx, s, 7);
-  if (along === "y") {
-    // Groomed corduroy down the piste, firs on the far side.
-    for (let x = s.x + 4; x < s.x + s.w - 10; x += 3) for (let y = s.y; y < s.y + s.h; y += 2) if ((x + y) % 7 === 0) rect(ctx, x, y, 1, 1, "#e3ebf5");
-    for (let y = s.y + 30; y < s.y + s.h - 6; y += 46 + Math.floor(h2(y, 3) * 30)) fir(ctx, s.x + s.w - 4, y, 9 + Math.floor(h2(y, 5) * 5));
-    // Lift towers (the cables and chairs are live).
-    const lx = s.x + Math.round(s.w * 0.42);
-    for (let y = s.y + 50; y < s.y + s.h; y += 120) liftTower(ctx, lx, y);
-  } else {
-    for (let y = s.y + 3; y < s.y + s.h - 2; y += 3) for (let x = s.x; x < s.x + s.w; x += 2) if ((x + y) % 7 === 0) rect(ctx, x, y, 1, 1, "#e3ebf5");
-    for (let x = s.x + 20; x < s.x + s.w; x += 70 + Math.floor(h2(x, 2) * 50)) fir(ctx, x, s.y + s.h, 8 + Math.floor(h2(x, 4) * 4));
-  }
-}
-
-/** A chairlift tower: a grey steel pole with a crossbar (cables run through its ends). */
-function liftTower(ctx: Ctx, x: number, base: number): void {
-  const g = new Grid(13, 30);
-  g.rect(5, 4, 3, 26, "#7d848e").vline(5, 4, 26, "#a3aab3");
-  g.rect(0, 2, 13, 2, "#5b626c").rect(0, 2, 13, 1, "#8d949e");
-  g.set(1, 4, "#2a2c31").set(11, 4, "#2a2c31");
-  g.rect(3, 28, 7, 2, "#5b626c");
-  g.outline(OUTLINE);
-  paint(ctx, g, x - 7, base - 30);
+  for (let y = s.y + 3; y < s.y + s.h - 2; y += 3) for (let x = s.x; x < s.x + s.w; x += 2) if ((x + y) % 7 === 0) rect(ctx, x, y, 1, 1, "#e3ebf5");
+  for (let x = s.x + 20; x < s.x + s.w; x += 70 + Math.floor(h2(x, 2) * 50)) fir(ctx, x, s.y + s.h, 8 + Math.floor(h2(x, 4) * 4));
 }
 
 /** The rail along the deck's edge: posts and a top rail, a cap of snow. */
@@ -285,14 +267,14 @@ function deckWall(ctx: Ctx, p: CabinPlan): void {
 
 // ------------------------------------------------------------------ the back wall
 
-function timberSegment(ctx: Ctx, sg: WallSegment): void {
+function timberSegment(ctx: Ctx, sg: WallSegment, top: number): void {
   const d = sg.depth;
   const w = sg.x1 - sg.x0;
-  rect(ctx, sg.x0, 0, w, d, C.plaster);
-  for (let i = 0; i < (w * d) / 70; i++) rect(ctx, sg.x0 + Math.floor(h2(i, sg.x0) * w), 4 + Math.floor(h2(i, 77) * (d - 20)), 2, 1, C.plasterLo);
+  rect(ctx, sg.x0, top, w, d - top, C.plaster);
+  for (let i = 0; i < (w * (d - top)) / 70; i++) rect(ctx, sg.x0 + Math.floor(h2(i, sg.x0) * w), top + 4 + Math.floor(h2(i, 77) * (d - top - 20)), 2, 1, C.plasterLo);
   // The ceiling beam and the rail over the plinth.
-  rect(ctx, sg.x0, 0, w, 3, C.beamDk);
-  rect(ctx, sg.x0, 3, w, 1, C.beam);
+  rect(ctx, sg.x0, top, w, 3, C.beamDk);
+  rect(ctx, sg.x0, top + 3, w, 1, C.beam);
   rect(ctx, sg.x0, d - 17, w, 3, C.beam);
   rect(ctx, sg.x0, d - 17, w, 1, C.beamHi);
   // The granite plinth.
@@ -305,12 +287,13 @@ function timberSegment(ctx: Ctx, sg: WallSegment): void {
 }
 
 function chimneySegment(ctx: Ctx, sg: WallSegment, p: CabinPlan, L: Layout): void {
-  const d = sg.depth;
+  const top = p.top;
+  const d = sg.depth - top;
   const w = sg.x1 - sg.x0;
   const g = new Grid(w, d);
   stones(g, 0, 0, w, d, 11, 7);
   // The chimney stands out from the wall: shaded flanks where it passes the wall line.
-  const wallD = Math.min(...L.segments.filter((s) => s !== sg).map((s) => s.depth), d);
+  const wallD = Math.min(...L.segments.filter((s) => s !== sg).map((s) => s.depth), sg.depth) - top;
   for (let y = 0; y < d; y++) {
     g.set(0, y, OUTLINE).set(w - 1, y, OUTLINE);
     g.set(1, y, y >= wallD - 2 ? C.stoneDk : C.stoneHi).set(w - 2, y, C.stoneDk);
@@ -318,7 +301,7 @@ function chimneySegment(ctx: Ctx, sg: WallSegment, p: CabinPlan, L: Layout): voi
   g.rect(0, 0, w, 2, C.beamDk);
   const f = p.fire;
   const bx = f.box.x - sg.x0;
-  const by = f.box.y;
+  const by = f.box.y - top;
   // The firebox: firebrick inside, sooty and arched, an iron grate.
   g.rect(bx - 2, by - 2, f.box.w + 4, f.box.h + 2, C.stoneDk);
   g.rrect(bx, by, f.box.w, f.box.h, "#3a1e18", 3);
@@ -329,7 +312,7 @@ function chimneySegment(ctx: Ctx, sg: WallSegment, p: CabinPlan, L: Layout): voi
   for (let x = bx + 4; x < bx + f.box.w - 4; x += 3) g.rect(x, by + f.box.h - 6, 1, 3, C.ironHi);
   g.rect(bx, by + f.box.h - 2, f.box.w, 2, "#2a1a16");
   // The mantel: a thick larch beam on stone corbels.
-  const m = f.mantel;
+  const m = { ...f.mantel, y: f.mantel.y - top };
   const mx = m.x - sg.x0;
   g.rect(mx, m.y, m.w, m.h, C.beam).rect(mx, m.y, m.w, 1, C.beamHi).rect(mx, m.y + m.h - 1, m.w, 1, C.beamDk);
   g.rect(mx + 2, m.y + m.h, 4, 3, C.stoneLo).rect(mx + m.w - 6, m.y + m.h, 4, 3, C.stoneLo);
@@ -339,9 +322,9 @@ function chimneySegment(ctx: Ctx, sg: WallSegment, p: CabinPlan, L: Layout): voi
   g.rect(mx + 8, m.y - 3, 2, 2, C.cream).set(mx + 8, m.y - 4, C.fire2);
   g.rect(mx + m.w - 12, m.y - 4, 4, 3, C.copper).set(mx + m.w - 12, m.y - 4, C.copperHi).set(mx + m.w - 8, m.y - 3, C.copperLo);
   g.rect(mx + m.w - 6, m.y - 2, 3, 1, C.pineDk).set(mx + m.w - 6, m.y - 1, C.pineDk).set(mx + m.w - 4, m.y - 1, C.pineDk).set(mx + m.w - 3, m.y - 3, C.pineDk).set(mx + m.w - 3, m.y - 4, C.pineDeep);
-  paint(ctx, g, sg.x0, 0);
+  paint(ctx, g, sg.x0, top);
   ctx.fillStyle = "rgba(40,24,20,0.25)";
-  ctx.fillRect(sg.x0, d, w, 3);
+  ctx.fillRect(sg.x0, sg.depth, w, 3);
 }
 
 /** Coats, a scarf and a bobble hat on the peg rail over the mudroom benches. */
@@ -394,8 +377,8 @@ function wallGear(ctx: Ctx, L: Layout, p: CabinPlan): void {
       if (busy.some(([a, z]) => x < z && x + 14 > a)) continue;
       const d = sg.depth;
       const kind = kinds[k++ % kinds.length]!;
-      const g = new Grid(14, d - 22);
-      const h = d - 22;
+      const g = new Grid(14, d - p.top - 22);
+      const h = d - p.top - 22;
       if (kind === "skis") {
         g.rect(3, 4, 2, h - 6, "#9a5a32").rect(8, 4, 2, h - 6, "#9a5a32").set(3, 3, "#9a5a32").set(4, 2, "#9a5a32").set(8, 3, "#9a5a32").set(9, 2, "#9a5a32");
         g.rect(2, Math.floor(h / 2), 9, 2, C.iron);
@@ -420,7 +403,7 @@ function wallGear(ctx: Ctx, L: Layout, p: CabinPlan): void {
         g.ellipse(7, 13, 3, 3, null as unknown as string);
       }
       g.outline(OUTLINE);
-      paint(ctx, g, x, 6);
+      paint(ctx, g, x, p.top + 6);
       busy.push([x - 4, x + 18]);
       x += 18;
     }
@@ -532,18 +515,19 @@ function roomShell(ctx: Ctx, room: Room, L: Layout): void {
 export const BACKGROUND: Partial<BackgroundSteps> = {
   floor(ctx, L) {
     const p = planOf(L);
+    if (p) paintTerrain(ctx, L, p);
     const inside = p?.inside ?? { x: 0, y: 0, w: L.W, h: L.H };
-    pineFloor(ctx, { x: 0, y: 0, w: inside.w, h: inside.h });
+    pineFloor(ctx, inside);
     // A long woven runner down the hallway (inside the lodge).
     for (const hy of L.net.halls) {
-      if (hy > inside.h) continue;
+      if (hy > inside.y + inside.h) continue;
       const g = new Grid(inside.w, 12);
       g.rect(0, 0, inside.w, 12, C.redLo);
       g.rect(0, 1, inside.w, 10, C.red);
       knitBand(g, 0, 2, inside.w, C.red, C.cream);
       knitBand(g, 0, 7, inside.w, C.red, C.cream);
       g.rect(0, 5, inside.w, 2, C.navy);
-      paint(ctx, g, 0, hy - 6);
+      paint(ctx, g, inside.x, hy - 6);
     }
     if (!p) return;
     // The hearth slab in front of the fire.
@@ -560,25 +544,32 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
     for (let x = m.x + 2; x < m.x + m.w - 2; x += 2) rect(ctx, x, m.y + 2, 1, m.h - 4, "#7d6a52");
     rect(ctx, m.x + 3, m.y + 3, 3, 2, C.snow);
     rect(ctx, m.x + m.w - 7, m.y + 5, 2, 1, C.snowShade);
-    // Outside: the deck, its rail, the drifts and the piste beyond.
-    if (p.deck && p.slope) {
-      const east = p.deckSide === "east";
-      const d = p.deck;
-      const s = p.slope;
-      if (east) {
-        deckBoards(ctx, { x: inside.w, y: d.y, w: s.x - inside.w, h: L.H - d.y }, "x");
-        snowField(ctx, { x: inside.w, y: d.y - 4, w: L.W - inside.w, h: 4 }, 3);
-        paintSlope(ctx, s, "y");
-        drift(ctx, { x: s.x - 10, y: d.y, w: 8, h: d.h }, "y", 2);
-        rail(ctx, { x: s.x - 3, y: d.y, w: 3, h: d.h }, "y");
-      } else {
+    // Outside: the deck and its rail (the piste below it on phones).
+    const d = p.deck;
+    if (d) {
+      const right = inside.x + inside.w;
+      if (p.deckSide === "east") {
+        deckBoards(ctx, { x: right, y: d.y, w: d.x + d.w - right, h: L.H - d.y }, "x");
+        drift(ctx, { x: d.x + d.w - 8, y: d.y, w: 8, h: d.h }, "y", 2);
+        rail(ctx, { x: d.x + d.w, y: d.y, w: 3, h: d.h }, "y");
+      } else if (p.slope) {
+        const s = p.slope;
         deckBoards(ctx, { x: 0, y: d.y, w: L.W, h: s.y - d.y }, "y");
-        paintSlope(ctx, s, "x");
+        paintSlope(ctx, s);
         drift(ctx, { x: 0, y: s.y - 7, w: L.W, h: 6 }, "x", 4);
         rail(ctx, { x: 0, y: s.y - 2, w: L.W, h: 3 }, "x");
+      } else {
+        // The sun deck in front of the lodge: a rail along its front, open where the path goes down.
+        deckBoards(ctx, d, "y");
+        drift(ctx, { x: d.x, y: d.y + d.h - 7, w: d.w, h: 6 }, "x", 4);
+        const gap = p.terrain.path ? p.terrain.path.x : -99;
+        rail(ctx, { x: d.x, y: d.y + d.h - 2, w: Math.max(0, gap - 9 - d.x), h: 3 }, "x");
+        if (gap > 0) rail(ctx, { x: gap + 9, y: d.y + d.h - 2, w: d.x + d.w - gap - 9, h: 3 }, "x");
+        for (const x of [d.x, d.x + d.w - 3]) rail(ctx, { x, y: d.y + 6, w: 3, h: d.h - 8 }, "y");
       }
       deckWall(ctx, p);
     }
+    paintShell(ctx, L, p);
   },
   wall(ctx, L) {
     const p = planOf(L);
@@ -586,7 +577,7 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
       const kind = p?.segKinds[i] ?? "timber";
       if (kind === "open") return;
       if (kind === "chimney" && p) chimneySegment(ctx, sg, p, L);
-      else timberSegment(ctx, sg);
+      else timberSegment(ctx, sg, p?.top ?? 0);
     });
     // Posts where the wall steps (next to the chimney the stone is its own edge).
     for (const px of L.wall.pillars) {
@@ -594,13 +585,15 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
       const i = right ? L.segments.indexOf(right) : -1;
       if (p && (p.segKinds[i] === "chimney" || p.segKinds[i - 1] === "chimney")) continue;
       const d = Math.max(right?.depth ?? 64, L.segments[i - 1]?.depth ?? 64);
-      rect(ctx, px - 3, 0, 6, d, OUTLINE);
-      rect(ctx, px - 2, 0, 4, d, C.beam);
-      rect(ctx, px - 2, 0, 1, d, C.beamHi);
+      const top = p?.top ?? 0;
+      rect(ctx, px - 3, top, 6, d - top, OUTLINE);
+      rect(ctx, px - 2, top, 4, d - top, C.beam);
+      rect(ctx, px - 2, top, 1, d - top, C.beamHi);
     }
     if (p) {
       coatPegs(ctx, p, L);
       wallGear(ctx, L, p);
+      paintEaves(ctx, p);
     }
   },
   pods(ctx, L) {
@@ -618,7 +611,7 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
   roomWalls: roomShell,
   window(ctx, win, L) {
     const p = planOf(L);
-    if (p?.open && win.x === p.open.x && win.y === p.open.y && win.w === p.open.w) {
+    if (isOpen(p, win)) {
       // The sky over the deck: no frame, just the eave of the lodge roof along the top.
       ctx.clearRect(win.x, win.y, win.w, win.h);
       return;
