@@ -1,6 +1,7 @@
 // Small helpers for the sceneries' hidden Easter eggs: when one goes off on
 // its own, and who says what when it does. Each scenery keeps its eggs in
 // its own folder (eggs.ts there); these are just the bits they share.
+import type { Layout, Rect } from "../layout.ts";
 import type { SceneryActions } from "../theme.ts";
 
 /**
@@ -30,3 +31,29 @@ export const ease = (x: number): number => {
   const u = Math.max(0, Math.min(1, x));
   return u * u * (3 - 2 * u);
 };
+
+/**
+ * A bare stretch of the back wall for something small hung on it (w×h, its
+ * top `fromTop` px down the wall): clear of the wall's fixtures, windows, the
+ * TV and its speakers. The one nearest `towardX`, or null when it's all taken.
+ */
+export function bareWall(L: Layout, w: number, h: number, fromTop: number, towardX = L.W / 2): Rect | null {
+  const wl = L.wall;
+  const cr = wl.clock.r + 3;
+  const taken: Rect[] = [
+    wl.pinboard, wl.calendar, wl.status, wl.legendNote, L.tv, ...L.speakers, ...wl.windows,
+    { x: wl.door.x - 4, y: 0, w: wl.door.w + 8, h: 999 },
+    { x: wl.clock.x - cr, y: wl.clock.y - cr, w: cr * 2, h: cr * 2 },
+  ];
+  let best: Rect | null = null;
+  for (const sg of L.segments) {
+    const y = fromTop;
+    if (y + h > sg.depth - 2) continue;
+    for (let x = sg.x0 + 4; x + w <= sg.x1 - 4; x += 2) {
+      const r = { x, y, w, h };
+      if (taken.some((q) => r.x < q.x + q.w + 3 && q.x < r.x + r.w + 3 && r.y < q.y + q.h + 2 && q.y < r.y + r.h + 2)) continue;
+      if (!best || Math.abs(x + w / 2 - towardX) < Math.abs(best.x + w / 2 - towardX)) best = r;
+    }
+  }
+  return best;
+}

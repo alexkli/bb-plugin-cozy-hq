@@ -9,6 +9,7 @@ import type { Theme } from "../theme.ts";
 import { BACKGROUND } from "./annex/backdrop.ts";
 import { clutterSpots, LIVE } from "./annex/live.ts";
 import { click, clickables } from "./annex/clicks.ts";
+import { EGG_SOUNDS, eggClick, eggClickables, eggDecor, eggLights, eggOverlay, eggTick } from "./annex/eggs.ts";
 import { PEOPLE } from "./annex/people.ts";
 import { PROPS } from "./annex/props.ts";
 import { WORDS } from "./annex/words.ts";
@@ -43,6 +44,18 @@ export const ANNEX: Theme = {
   // The leak, the tubes, the storerooms, the stage, the urn, the radiators and the stairs.
   // The leak's bucket and the photocopiers are placed among the clutter, which takes
   // sprites: without a browser (the layout tests) there's just the rest to click.
-  clickables: (L) => clickables(L, typeof document === "undefined" ? null : clutterSpots(L)),
-  click,
+  clickables: (L) => [...clickables(L, typeof document === "undefined" ? null : clutterSpots(L)), ...eggClickables(L)],
+  click: (id, act) => eggClick(id, act) ?? click(id, act),
+  // Hidden Easter eggs: the box marked DO NOT OPEN, the 1987 staff photo, a kick to the snack machine (eggs.ts).
+  tick: (act) => {
+    HABITS.tick!(act);
+    eggTick(act);
+  },
+  decor: (ctx, L, info) => [...LIVE.decor!(ctx, L, info), ...eggDecor(ctx, L, info)],
+  overlay: (ctx, L, info) => {
+    LIVE.overlay!(ctx, L, info);
+    eggOverlay(ctx, L, info);
+  },
+  lighting: { ...LIVE.lighting, lights: (L, info) => [...LIVE.lighting!.lights!(L, info), ...eggLights(L, info)] },
+  sounds: { ...WORDS.sounds, ...EGG_SOUNDS },
 };
