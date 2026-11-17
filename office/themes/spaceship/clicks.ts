@@ -9,7 +9,7 @@ import type { Layout, Point, Rect } from "../../layout.ts";
 import type { GatherCue, GatherSpot, SceneryActions, SceneryClickable, SoundRecipe, SynthKit, Theme } from "../../theme.ts";
 import { planOf } from "./plan.ts";
 import { CALLER_COUNT, SYSTEMS, systemOf } from "./space.ts";
-import { SHIP, since, type CrateKind, type SynthItem } from "./state.ts";
+import { SHIP, afterSeated, faceScreen, since, type CrateKind, type StationShow, type SynthItem } from "./state.ts";
 import { WORDS } from "./words.ts";
 
 const HOVER = {
@@ -25,7 +25,50 @@ const HOVER = {
   hydro: "Hydroponics · grow lights to full",
   airlock: "Suit locker · send someone out on a spacewalk",
   crate: "Cargo crate · what's in this one?",
+  officer: "First officer's chair · call someone over",
+  helmSeat: "The helm seat · send someone to fly",
+  ops: "Operations · send someone to the board",
+  side: "A side station · send someone over",
+  science: "Science station · send someone to look closer",
+  tactical: "Tactical · send someone to run a scan",
 };
+
+type SeatKind = "officer" | "helm" | "ops" | "side" | "science" | "tactical";
+
+/** What someone says at each station (the first when they sit down, the second a bit later). */
+const SEAT_LINES: Record<SeatKind, [string, string][]> = {
+  officer: [
+    ["Morning, captain.", "Quiet shift so far."],
+    ["Your coffee, captain. Still warm.", "Mostly."],
+    ["Ship's in good shape today.", "I checked twice."],
+    ["Shall I take the next watch?", "You look like you need a nap."],
+  ],
+  helm: [
+    ["Helm's answering.", "Small course trim. Smooth."],
+    ["Nudging us a hair to port.", "And back. Perfect."],
+    ["Dodging a pebble.", "A big pebble. Done."],
+  ],
+  ops: [
+    ["Power's balanced.", "Coffee maker included."],
+    ["All decks green.", "Well, greenish."],
+    ["Readout's up.", "Numbers look happy."],
+  ],
+  side: [
+    ["Checking the side sensors.", "Nothing but stars."],
+    ["Environmental's fine.", "Someone's microwaving fish again."],
+  ],
+  science: [
+    ["Ooh. A very interesting rock.", "It's still a rock."],
+    ["Running an analysis.", "Inconclusive. Delightfully so."],
+    ["Stellar readings coming in.", "That star is showing off."],
+  ],
+  tactical: [
+    ["Sweeping the sector.", "Scan clear. Just dust."],
+    ["Shields at full.", "Just in case. They're cosy."],
+  ],
+};
+
+const SEAT_SHOW: Record<SeatKind, StationShow | null> = { officer: null, helm: "helmAt", ops: "opsAt", side: "opsAt", science: "scienceAt", tactical: "scanAt" };
 
 const AI_LINES = [
   "Good morning, crew. Oxygen levels: delightful.",
@@ -100,6 +143,7 @@ function clickables(L: Layout): SceneryClickable[] {
   add("ai", plan.ai, HOVER.ai);
   add("hydro", plan.hydro, HOVER.hydro);
   add("airlock", plan.airlock, HOVER.airlock);
+  for (const s of plan.seats) add(`seat-${s.id}`, s.rect, s.kind === "helm" ? HOVER.helmSeat : HOVER[s.kind]);
   plan.crates.forEach((c, i) => add(`crate-${i}`, { x: c.x, y: c.y - 3, w: c.w, h: c.h + 3 }, HOVER.crate));
   return out;
 }
@@ -124,6 +168,7 @@ function along(base: { path: Point[] }, xs: number[], y: number, facing: GatherS
 function jump(act: SceneryActions): string | null {
   if (since(SHIP.jumpAt, act.t, 3) >= 0) return null;
   SHIP.jumpAt = act.t;
+  faceScreen(act.t, 3);
   SHIP.system = (SHIP.system + 1) % SYSTEMS.length;
   const plan = planOf(act.L)!;
   const v = plan.viewscreen;
@@ -141,6 +186,7 @@ function bridgeCrew(act: SceneryActions): { id: string }[] {
 function order(act: SceneryActions): string | null {
   if (since(SHIP.engageAt, act.t, 3) >= 0) return null;
   SHIP.engageAt = act.t;
+  faceScreen(act.t, 3);
   const [first, answer] = pick(ORDERS);
   const crew = bridgeCrew(act);
   if (crew[0]) act.say(crew[0].id, first, 2.6, 0.3);
@@ -151,6 +197,7 @@ function order(act: SceneryActions): string | null {
 function hail(act: SceneryActions): string | null {
   if (since(SHIP.hailAt, act.t, 8) >= 0) return null;
   SHIP.hailAt = act.t;
+  faceScreen(act.t, 8);
   SHIP.hailWho = (SHIP.hailWho + 1 + Math.floor(Math.random() * (CALLER_COUNT - 1))) % CALLER_COUNT;
   SHIP.hailLine = pick(HAILS);
   const crew = bridgeCrew(act);
@@ -162,6 +209,7 @@ function hail(act: SceneryActions): string | null {
 function redAlert(act: SceneryActions): string | null {
   if (since(SHIP.alertAt, act.t, 8) >= 0) return null;
   SHIP.alertAt = act.t;
+  faceScreen(act.t, 7);
   // The crew scramble to the bridge's side stations for a few seconds.
   const L = act.L;
   const r = planOf(L)!.bridge;
@@ -227,13 +275,13 @@ function core(act: SceneryActions): string | null {
 }
 
 function gravity(act: SceneryActions): string | null {
-  if (since(SHIP.gravityAt, act.t, 8) >= 0) return null;
+  if (since(SHIP.gravityAt, act.t, 9.5) >= 0) return null;
   SHIP.gravityAt = act.t;
   const everyone = act.near(act.L.W / 2, act.L.H / 2, 9999);
   const shuffled = [...everyone].sort(() => Math.random() - 0.5);
   const lines = ["Whoa!", "My coffee!", "Who touched the switch?", "Wheee!", "I'm a balloon!"];
   shuffled.slice(0, 4).forEach((p, i) => act.say(p.id, lines[(i + Math.floor(Math.random() * 5)) % lines.length]!, 2.2, 0.4 + i * 0.9));
-  if (shuffled[4] ?? shuffled[0]) act.say((shuffled[4] ?? shuffled[0])!.id, "And we're down.", 2.4, 7.2);
+  if (shuffled[4] ?? shuffled[0]) act.say((shuffled[4] ?? shuffled[0])!.id, "And we're down.", 2.4, 8.4);
   return "ship-zero-g";
 }
 
@@ -299,6 +347,38 @@ function crate(act: SceneryActions, i: number): string | null {
   return "ship-crate";
 }
 
+/** A bridge seat: someone idle walks over, sits, says something and works the console (the show starts once they're seated). */
+function seat(act: SceneryActions, id: string): string | null {
+  const plan = planOf(act.L)!;
+  const s = plan.seats.find((q) => q.id === id);
+  if (!s) return null;
+  const [first, second] = pick(SEAT_LINES[s.kind]);
+  const show = SEAT_SHOW[s.kind];
+  // Already somebody there: they answer and get on with it.
+  const there = act.near(s.x, s.y, 5)[0];
+  if (there) {
+    act.say(there.id, first, 2.4, 0.2);
+    act.say(there.id, second, 2.4, 2.8);
+    if (show) SHIP[show] = act.t + 0.4;
+    if (s.kind === "helm") faceScreen(act.t, 3);
+    return "ship-beep";
+  }
+  const spot = act.L.byId.get(s.id);
+  const g = act.gather(
+    [{ x: s.x, y: s.y, facing: spot?.facing ?? "back", pose: spot?.pose ?? "sit-back", activity: s.kind === "officer" ? "keeping the captain company" : `at the ${s.kind === "ops" ? "operations" : s.kind} station`, path: s.path }],
+    9,
+    [
+      { at: 0.2, who: 0, say: first, seconds: 2.4 },
+      { at: 0.8, sound: "ship-beep" },
+      { at: 2.8, who: 0, say: second, seconds: 2.4 },
+      { at: 4.2, sound: "ship-beep" },
+    ],
+  );
+  if (!g) return null;
+  if (show) afterSeated(g, show);
+  return "ship-beep";
+}
+
 function click(id: string, act: SceneryActions): string | null {
   if (!planOf(act.L)) return null;
   switch (id) {
@@ -325,6 +405,7 @@ function click(id: string, act: SceneryActions): string | null {
     case "airlock":
       return airlock(act);
     default:
+      if (id.startsWith("seat-")) return seat(act, id.slice(5));
       return id.startsWith("crate-") ? crate(act, Number(id.slice(6))) : null;
   }
 }
@@ -338,7 +419,7 @@ const later = (k: SynthKit, dt: number): SynthKit => ({
   swell: (s, d, v, a, b, q, ty) => k.swell(s + dt, d, v, a, b, q, ty),
 });
 
-/** Gravity off, and back on again seven seconds later (one recipe: a click can only start one sound). */
+/** Gravity off, and back on again as everyone settles (one recipe: a click can only start one sound). */
 export const CLICK_SOUNDS: Record<string, SoundRecipe> = {
   // A channel opening: a crackle and a friendly three-note chirp.
   "ship-hail": (k) => {
@@ -361,7 +442,7 @@ export const CLICK_SOUNDS: Record<string, SoundRecipe> = {
   },
   "ship-zero-g": (k) => {
     WORDS.sounds?.["ship-gravity-off"]?.(k);
-    WORDS.sounds?.["ship-gravity-on"]?.(later(k, 6.8));
+    WORDS.sounds?.["ship-gravity-on"]?.(later(k, 7.6));
   },
 };
 

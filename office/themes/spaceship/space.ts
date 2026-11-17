@@ -503,6 +503,36 @@ function jumpFlash(ctx: CanvasRenderingContext2D, r: Rect, t: number): void {
   ctx.fillRect(r.x, r.y, r.w, r.h);
 }
 
+/** The curved viewscreen's inset at the top and bottom of column x: none at the ends, the most in the middle (the ends come toward you). */
+export function screenInset(v: Rect, x: number): number {
+  const u = (x + 0.5 - (v.x + v.w / 2)) / (v.w / 2);
+  return Math.round(Math.max(3, Math.round(v.h * 0.15)) * (1 - u * u));
+}
+
+const paths = new Map<string, Path2D>();
+/** The curved screen's outline as a stepped (pixel-crisp) path. */
+export function screenPath(v: Rect): Path2D {
+  const key = `${v.x},${v.y},${v.w},${v.h}`;
+  let p = paths.get(key);
+  if (!p) {
+    p = new Path2D();
+    p.moveTo(v.x, v.y + screenInset(v, v.x));
+    for (let x = v.x; x < v.x + v.w; x++) {
+      const y = v.y + screenInset(v, x);
+      p.lineTo(x, y);
+      p.lineTo(x + 1, y);
+    }
+    for (let x = v.x + v.w - 1; x >= v.x; x--) {
+      const y = v.y + v.h - screenInset(v, x);
+      p.lineTo(x + 1, y);
+      p.lineTo(x, y);
+    }
+    p.closePath();
+    paths.set(key, p);
+  }
+  return p;
+}
+
 /** The bridge's viewscreen: the system ahead, its suns and worlds, space weather, a HUD. */
 export function viewscreen(ctx: CanvasRenderingContext2D, v: Rect, t: number, weather: WeatherKind, W: number): void {
   if (v.w <= 0 || v.h <= 0) return;
@@ -511,15 +541,15 @@ export function viewscreen(ctx: CanvasRenderingContext2D, v: Rect, t: number, we
   // Half way through a jump the view switches to the system the jump goes to.
   const sys = systemOf(jumping ? SHIP.system - 1 : SHIP.system);
   ctx.save();
-  ctx.beginPath();
-  ctx.rect(v.x, v.y, v.w, v.h);
-  ctx.clip();
+  ctx.clip(screenPath(v));
   for (let i = 0; i < 6; i++) fill(ctx, v.x, v.y + Math.floor((i * v.h) / 6), v.w, Math.ceil(v.h / 6) + 1, mix(sys.tint, "#000000", i / 9));
   if (sys.nebula) drawNebula(ctx, v, t, nebulaTile(sys.nebula[0], sys.nebula[1], 64, 0.85), 0.7, 0.8, v.y);
   const warp = warpNow(t);
   starfield(ctx, v, t * 1.5, warp);
   // The suns and worlds drift very slowly across.
-  const drift = (((t - Math.max(0, SHIP.jumpAt)) * 0.05) % 30) - 15;
+  const wig = since(SHIP.helmAt, t, 3);
+  // The helm nudging the course: the view swings a little and settles.
+  const drift = (((t - Math.max(0, SHIP.jumpAt)) * 0.05) % 30) - 15 + (wig >= 0 ? Math.sin(wig * 5) * 6 * (1 - wig / 3) : 0);
   for (const s of sys.suns) {
     const c = sun(s.color, s.r);
     ctx.drawImage(c, Math.round(v.x + v.w * s.fx - c.width / 2 + drift * 0.3), Math.round(v.y + v.h * s.fy - c.height / 2));
@@ -556,6 +586,12 @@ export function viewscreen(ctx: CanvasRenderingContext2D, v: Rect, t: number, we
     }
   }
   jumpFlash(ctx, v, t);
+  stations(ctx, v, t, sys);
+  // The ends of the curve are turned toward you: a little darker.
+  for (let x = v.x; x < v.x + v.w; x++) {
+    const u = Math.abs((x + 0.5 - (v.x + v.w / 2)) / (v.w / 2));
+    if (u > 0.74) fill(ctx, x, v.y, 1, v.h, `rgba(0,0,0,${((u - 0.74) * 0.9).toFixed(2)})`);
+  }
   // The HUD: corner ticks, a reticle, the system's name and a faint scanline.
   ctx.fillStyle = "rgba(127,227,255,0.55)";
   for (const [x, y, dx, dy] of [[v.x + 2, v.y + 2, 1, 1], [v.x + v.w - 3, v.y + 2, -1, 1], [v.x + 2, v.y + v.h - 3, 1, -1], [v.x + v.w - 3, v.y + v.h - 3, -1, -1]] as const) {
@@ -570,7 +606,7 @@ export function viewscreen(ctx: CanvasRenderingContext2D, v: Rect, t: number, we
   ctx.fillRect(cx, cy - 3, 1, 2);
   ctx.fillRect(cx, cy + 2, 1, 2);
   const label = jumping ? "JUMPING" : sys.name;
-  drawPixelText(ctx, label, v.x + 4, v.y + v.h - 8, j >= 0 && j < 4 && Math.floor(t * 4) % 2 ? "#ffffff" : "rgba(127,227,255,0.75)");
+  drawPixelText(ctx, label, v.x + 6, v.y + v.h - 9 - screenInset(v, v.x + 6 + label.length * 4), j >= 0 && j < 4 && Math.floor(t * 4) % 2 ? "#ffffff" : "rgba(127,227,255,0.75)");
   ctx.fillStyle = "rgba(0,0,0,0.12)";
   const row = Math.floor(t * 12) % v.h;
   ctx.fillRect(v.x, v.y + row, v.w, 2);
@@ -669,9 +705,7 @@ export function drawHail(ctx: CanvasRenderingContext2D, v: Rect, k: number, who:
   if (k < 0 || k >= 8 || v.w <= 0) return;
   const c = CALLERS[who % CALLERS.length]!;
   ctx.save();
-  ctx.beginPath();
-  ctx.rect(v.x, v.y, v.w, v.h);
-  ctx.clip();
+  ctx.clip(screenPath(v));
   const fade = Math.min(1, k / 0.5, (8 - k) / 0.5);
   if (k < 0.5 || k > 7.6) {
     // Static as the channel opens and closes.
@@ -715,4 +749,45 @@ export function drawHail(ctx: CanvasRenderingContext2D, v: Rect, k: number, who:
     lines.forEach((l, i) => drawPixelText(ctx, l, v.x + 4, v.y + v.h - h + 2 + i * 7, "#ffffff"));
   }
   ctx.restore();
+}
+
+/** The bridge's stations at work on the viewscreen: ops' readout, a tactical sweep, a science scan of the nearest world. */
+function stations(ctx: CanvasRenderingContext2D, v: Rect, t: number, sys: StarSystem): void {
+  const ops = since(SHIP.opsAt, t, 4.5);
+  if (ops >= 0) {
+    const w = 46;
+    const x = v.x + v.w - w - 6;
+    const y = v.y + 10;
+    fill(ctx, x, y, w, 28, "rgba(6,14,28,0.8)");
+    fill(ctx, x, y, w, 1, "#ffc857");
+    drawPixelText(ctx, "OPS", x + 3, y + 3, "#ffc857");
+    for (let i = 0; i < 4; i++) {
+      const full = Math.min(1, ops * 1.5 - i * 0.25);
+      const len = Math.max(0, Math.round((w - 20) * full * (0.6 + 0.4 * ((i * 37) % 10) / 10)));
+      fill(ctx, x + 3, y + 10 + i * 4, len, 2, i % 2 ? "#8ff0b5" : "#7fe3ff");
+    }
+    if (ops > 1.6) drawPixelText(ctx, "OK", x + w - 11, y + 3, "#8ff0b5");
+  }
+  const scan = since(SHIP.scanAt, t, 3.5);
+  if (scan >= 0) {
+    const p = Math.min(1, scan / 2.2);
+    const x = Math.round(v.x + p * v.w);
+    for (let i = 0; i < 14; i++) fill(ctx, x - i, v.y, 1, v.h, `rgba(255,107,107,${(0.5 * (1 - i / 14)).toFixed(2)})`);
+    if (scan > 2.2) drawPixelText(ctx, "SCAN CLEAR", Math.round(v.x + v.w / 2 - 19), Math.round(v.y + v.h / 2 - 2), "#ffb0a0");
+  }
+  const sci = since(SHIP.scienceAt, t, 4.5);
+  if (sci >= 0) {
+    const b = sys.bodies[0]!;
+    const bx = Math.round(v.x + v.w * b.fx);
+    const by = Math.round(v.y + v.h * b.fy);
+    const r = Math.max(8, Math.round(b.fr * v.h) + 3 + Math.round(Math.sin(t * 6) * 1.5));
+    ctx.fillStyle = "#8ff0b5";
+    for (let i = 0; i < 40; i++) {
+      if (i % 5 === 4) continue;
+      const a = (i / 40) * Math.PI * 2 + t;
+      ctx.fillRect(Math.round(bx + Math.cos(a) * r), Math.round(by + Math.sin(a) * r), 1, 1);
+    }
+    const pct = Math.min(99, Math.floor(sci * 40));
+    drawPixelText(ctx, `ANALYSIS ${pct}`, Math.min(v.x + v.w - 50, bx + r + 3), Math.max(v.y + 3, by - r), "#8ff0b5");
+  }
 }

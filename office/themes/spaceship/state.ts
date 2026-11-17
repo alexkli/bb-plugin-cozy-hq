@@ -41,6 +41,14 @@ export const SHIP = {
   alertAt: NEVER,
   /** The ready room's door, open for a moment. */
   readyAt: NEVER,
+  /** The captain's chair swivels round to face the screen from `turnAt` for `turnFor` seconds. */
+  turnAt: NEVER,
+  turnFor: 0,
+  /** Bridge stations at work: the helm nudging the course, ops' readout, a tactical sweep, a science scan. */
+  helmAt: NEVER,
+  opsAt: NEVER,
+  scanAt: NEVER,
+  scienceAt: NEVER,
   /** Porthole visitors: the next one picked when a porthole is clicked, and those on show per window. */
   nextVisitor: "satellite" as Visitor,
   portholes: new Map<number, { visitor: Visitor; at: number; seen: number }>(),
@@ -50,4 +58,37 @@ export const SHIP = {
 export function since(at: number, t: number, length: number): number {
   const k = t - at;
   return k >= 0 && k < length ? k : -1;
+}
+
+/** Swivel the captain's chair round to the screen for a while (from now, `t`). */
+export function faceScreen(t: number, seconds: number): void {
+  const end = Math.max(SHIP.turnAt + SHIP.turnFor, t + seconds);
+  if (t > SHIP.turnAt + SHIP.turnFor) SHIP.turnAt = t;
+  SHIP.turnFor = end - SHIP.turnAt;
+}
+
+/** Where the captain's chair is in its swivel: facing you, turning, or facing the screen. */
+export function chairView(t: number): "front" | "turnBack" | "back" | "turnFront" {
+  const k = t - SHIP.turnAt;
+  if (k < 0 || k > SHIP.turnFor) return "front";
+  if (k < 0.35) return "turnBack";
+  if (k > SHIP.turnFor - 0.35) return "turnFront";
+  return "back";
+}
+
+/** A station show waiting for its crew member to sit down (a seat click): it starts once they have. */
+export type StationShow = "helmAt" | "opsAt" | "scanAt" | "scienceAt";
+const waiting: { g: { readonly arrivedAt: number | null; readonly done: boolean }; show: StationShow }[] = [];
+
+export function afterSeated(g: { readonly arrivedAt: number | null; readonly done: boolean }, show: StationShow): void {
+  waiting.push({ g, show });
+}
+
+/** Called each frame: starts the shows whose crew have sat down, drops the ones that never got there. */
+export function seatedShows(): void {
+  for (let i = waiting.length - 1; i >= 0; i--) {
+    const w = waiting[i]!;
+    if (w.g.arrivedAt !== null) SHIP[w.show] = w.g.arrivedAt + 0.8;
+    if (w.g.arrivedAt !== null || w.g.done) waiting.splice(i, 1);
+  }
 }

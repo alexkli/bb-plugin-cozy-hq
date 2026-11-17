@@ -443,17 +443,17 @@ function chartTable(): HTMLCanvasElement {
 
 function seatBack(): HTMLCanvasElement {
   // (Bridge stations: burgundy like the command chairs.)
-  // A bridge seat from behind (the classic chair's rows 15..31): a padded back on a pedestal.
+  // A bridge seat from behind, its back over the sitter's lower half (like the officers' chairs): a padded back on a pedestal.
   const g = new Grid(16, 32);
-  g.rrect(3, 15, 10, 10, P.panel, 2);
-  g.rrect(4, 16, 8, 7, BR.wine, 1);
-  g.hline(5, 16, 6, BR.wineHi);
-  g.rect(2, 22, 12, 3, P.panelMid);
-  g.hline(2, 22, 12, P.panelHi);
-  g.set(12, 23, P.amber);
-  g.rect(7, 25, 2, 3, P.steel);
-  g.rect(4, 28, 8, 1, P.steelDk);
-  g.set(4, 29, P.steelDk).set(11, 29, P.steelDk);
+  g.rrect(3, 8, 10, 10, P.panel, 2);
+  g.rrect(4, 9, 8, 7, BR.wine, 1);
+  g.hline(5, 9, 6, BR.wineHi);
+  g.rect(2, 15, 12, 3, P.panelMid);
+  g.hline(2, 15, 12, P.panelHi);
+  g.set(12, 16, P.amber);
+  g.rect(7, 18, 2, 3, P.steel);
+  g.rect(4, 21, 8, 1, P.steelDk);
+  g.set(4, 22, P.steelDk).set(11, 22, P.steelDk);
   return done(g);
 }
 
@@ -573,25 +573,6 @@ const BR = {
   woodLo: "#7a5236",
 };
 
-/** The captain's chair from behind (22×26; the back starts at row 10, under the captain's head): high burgundy back, arm consoles. */
-function captainsBack(): HTMLCanvasElement {
-  const g = new Grid(22, 26);
-  g.rrect(3, 10, 16, 11, BR.beigeLo, 3);
-  g.rrect(4, 10, 14, 10, BR.wine, 3);
-  g.hline(6, 10, 10, BR.wineHi);
-  g.vline(4, 12, 6, BR.wineHi);
-  for (let y = 13; y < 19; y += 2) g.hline(6, y, 10, BR.wineLo);
-  // Arm consoles either side, with readouts.
-  for (const x of [0, 17]) {
-    g.rrect(x, 14, 5, 7, BR.beige, 1);
-    g.hline(x + 1, 14, 3, BR.beigeHi);
-    g.rect(x + 1, 16, 3, 2, P.screen);
-  }
-  g.set(1, 16, P.amber).set(3, 17, P.cyan).set(18, 16, P.mint).set(20, 17, P.amber);
-  g.rect(9, 21, 4, 2, P.steelDk);
-  g.rrect(5, 23, 12, 2, BR.beigeLo, 1);
-  return done(g);
-}
 
 /** A first officer's chair from behind (16×32, the back at rows 7..18 over the sitter's lower body). */
 function officerBack(): HTMLCanvasElement {
@@ -1157,7 +1138,8 @@ function propSprite(p: PropPlacement, L: Layout, classic: () => HTMLCanvasElemen
     case "boss-desk":
       return k(`boss-desk-${p.w}`, () => bridgeRail(p.w ?? 60));
     case "boss-chair":
-      return k("boss-chair", captainsBack);
+      // The captain's chair swivels: it's drawn live (live.ts), facing you or the screen.
+      return k("boss-chair", () => makeCanvas(22, 26, () => {}));
     case "dog-bed":
       return k("dog-bed", chargePad);
     case "library-shelf":

@@ -57,7 +57,7 @@ export interface ShipPlan {
   /** How much bridge the panel has room for. */
   bridgeSize: "grand" | "compact" | "mini";
   /** The consoles on the bridge floor (helm, ops, the side station, the rear tactical station). */
-  consoles: { kind: "helm" | "ops" | "side" | "rear"; rect: Rect }[];
+  consoles: { kind: "helm" | "ops" | "side" | "science" | "rear"; rect: Rect }[];
   /** The captain's chair (your seat; its back faces us), the rail behind the command area, the raised rear deck. */
   captain: Rect | null;
   rail: Rect | null;
@@ -70,6 +70,10 @@ export interface ShipPlan {
   lift: Rect | null;
   /** The bridge's two ramps up to the rear deck. */
   ramps: Rect[];
+  /** Small side panels beside the captain's chair, display banks and panels on the rear deck. */
+  panels: Rect[];
+  /** The bridge's seats you can click to send someone over: where to sit, how to get there, the hit area. */
+  seats: { id: string; kind: "officer" | "helm" | "ops" | "side" | "science" | "tactical"; x: number; y: number; facing: "back"; path: Point[]; rect: Rect }[];
 }
 
 export function planOf(L: Layout): ShipPlan | null {
@@ -130,13 +134,20 @@ function buildBridge(b: Builder, r: Rect, hallY: number, plan: ShipPlan): Layout
     }
     plan.helm = plan.consoles[0]!.rect;
     if (size === "grand" && r.w >= 210) {
-      const x = r.x + r.w - 18;
-      add({ id: "meet-2", kind: "meeting-seat", group: "meeting", x, y: yf - 2, facing: "back", pose: "sit-back", path: path(x, yf - 2, laneM), activity: "at a bridge station" });
-      b.prop("meet-chair-2", "meeting-chair-back", x - 8, yf - 16, yf);
-      const rect = { x: x - 11, y: yf - 26, w: 22, h: 14 };
-      plan.consoles.push({ kind: "side", rect });
-      keep.push(rect);
+      // A station on the starboard wall, the science station to port.
+      for (const [id, x, kind] of [["meet-2", r.x + r.w - 18, "side"], ["meet-3", r.x + 40, "science"]] as const) {
+        add({ id, kind: "meeting-seat", group: "meeting", x, y: yf - 2, facing: "back", pose: "sit-back", path: path(x, yf - 2, laneM), activity: kind === "science" ? "at the science station" : "at a bridge station" });
+        b.prop(`${id.replace("meet", "meet-chair")}`, "meeting-chair-back", x - 8, yf - 16, yf);
+        const rect = { x: x - 11, y: yf - 26, w: 22, h: 14 };
+        plan.consoles.push({ kind: kind === "science" ? "science" : "side", rect });
+        keep.push(rect);
+      }
     }
+  }
+  for (const sp of b.spots) {
+    if (sp.kind !== "meeting-seat" || !sp.id.startsWith("meet-") || plan.seats.some((q) => q.id === sp.id)) continue;
+    const kind = sp.id === "meet-0" ? "helm" : sp.id === "meet-1" ? "ops" : sp.id === "meet-3" ? "science" : "side";
+    plan.seats.push({ id: sp.id, kind, x: sp.x, y: sp.y, facing: "back", path: sp.path, rect: { x: sp.x - 8, y: sp.y - 6, w: 16, h: 12 } });
   }
   // The command area: your chair, a first officer's chair either side.
   const seat = { x: cx, y: ys };
@@ -147,7 +158,10 @@ function buildBridge(b: Builder, r: Rect, hallY: number, plan: ShipPlan): Layout
     const x = cx + dx;
     add({ id: `boss-guest-${i}`, kind: "boss-guest", group: "boss", x, y: ys, facing: "back", pose: "sit-back", path: path(x, ys, laneM), activity: "going over a draft with you" });
     b.prop(`guest-chair-${i}`, "guest-chair", x - 8, ys - 14, ys + 2);
+    plan.seats.push({ id: `boss-guest-${i}`, kind: "officer", x, y: ys, facing: "back", path: path(x, ys, laneM), rect: { x: x - 8, y: ys - 6, w: 16, h: 12 } });
   }
+  // Side panels between your chair and theirs.
+  for (const x of [cx - 15, cx + 11]) plan.panels.push({ x, y: ys - 12, w: 4, h: 12 });
   // Presenters beside the command area, facing you.
   for (const [i, dx] of [52, -52].entries()) {
     const x = cx + dx;
@@ -164,6 +178,18 @@ function buildBridge(b: Builder, r: Rect, hallY: number, plan: ShipPlan): Layout
   if (size === "grand") {
     const y = desk.y + 34;
     add({ id: "board-2", kind: "whiteboard", group: "meeting", x: cx, y, facing: "back", pose: "draw", path: path(cx, y, y + 6), activity: "at the tactical station" });
+    plan.seats.push({ id: "board-2", kind: "tactical", x: cx, y, facing: "back", path: path(cx, y, y + 6), rect: { x: cx - 8, y: y - 22, w: 16, h: 22 } });
+    // On the rear deck: a panel either side of tactical, a display bank along the back wall.
+    for (const x of [cx - 46, cx + 32]) {
+      const q = { x, y: desk.y + 18, w: 14, h: 16 };
+      plan.panels.push(q);
+      keep.push({ x: q.x - 2, y: q.y - 2, w: q.w + 4, h: q.h + 4 });
+    }
+    const bank = { x: r.x + 62, y: r.y + r.h - 24, w: r.w - 96, h: 12 };
+    if (bank.w >= 40 && bank.y > y + 6) {
+      plan.panels.push(bank);
+      keep.push({ x: bank.x, y: bank.y - 4, w: bank.w, h: bank.h + 4 });
+    }
     plan.alert = { x: cx - 12, y: desk.y + 4, w: 24, h: 12 };
     plan.consoles.push({ kind: "rear", rect: { x: cx - 16, y: desk.y + 10, w: 32, h: 12 } });
     plan.rearDeck = { x: r.x + 26, y: desk.y + 10, w: r.w - 52, h: r.y + r.h - 10 - (desk.y + 10) };
@@ -526,7 +552,7 @@ function widePlan(W: number, H: number, threads: number): Layout {
   const wantPods = Math.ceil((threads + 3) / (2 * podCols));
   const hy = clamp(Math.max(Math.round(FB * 0.56), wantPods >= 2 ? D + 2 * POD_H + 10 : 0), D + POD_H + 10, FB - 110);
   // The viewscreen's wall is deep, but not so deep that the bridge can't have its rear deck.
-  const DV = hy - 8 - 92 < 150 ? clamp(hy - 8 - 150, 80, 92) : 92;
+  const DV = clamp(hy - 8 - 156, 80, 110);
   const segments: WallSegment[] = [
     { x0: 0, x1: a12 + 14, depth: D },
     { x0: a12 + 14, x1: a23 - 2, depth: DT },
@@ -560,6 +586,8 @@ function widePlan(W: number, H: number, threads: number): Layout {
     readyRoom: null,
     lift: null,
     ramps: [],
+    panels: [],
+    seats: [],
   };
 
   // Aft: crew quarters over the engine room above the corridor, the cargo bay below it.
@@ -636,7 +664,7 @@ function widePlan(W: number, H: number, threads: number): Layout {
   // The bow: the bridge under the viewscreen (your office); the muster station below it,
   // the engine room under the bridge when there's height to spare.
   const vsSeg = segments[2]!;
-  plan.viewscreen = { x: vsSeg.x0 + 32, y: 6, w: W - Math.max(E, 4) - 6 - (vsSeg.x0 + 32), h: DV - 34 };
+  plan.viewscreen = { x: vsSeg.x0 + 32, y: 5, w: W - Math.max(E, 4) - 6 - (vsSeg.x0 + 32), h: DV - 33 };
   const topH = hy - 8 - DV;
   const serverTop = !stern && topH >= 250;
   const bridgeRect: Rect = { x: c3x, y: DV, w: c3w, h: serverTop ? Math.min(240, topH - 62) : topH };
@@ -804,6 +832,8 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
     readyRoom: null,
     lift: null,
     ramps: [],
+    panels: [],
+    seats: [],
   };
   let kitchen: Rect | null = null;
   let lounge: Rect | null = null;

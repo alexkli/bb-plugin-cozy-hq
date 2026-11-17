@@ -11,6 +11,7 @@ import type { Layout, Rect, Room } from "../../layout.ts";
 import { Grid, OUTLINE, drawPixelText, hash, mix, rect, shade } from "../../themekit.ts";
 import { P, hazard, panel, rivets } from "./pal.ts";
 import { planOf, type ShipPlan } from "./plan.ts";
+import { screenInset, screenPath } from "./space.ts";
 
 const blit = (ctx: CanvasRenderingContext2D, g: Grid, x: number, y: number) => ctx.drawImage(g.toCanvas(), Math.round(x), Math.round(y));
 
@@ -503,17 +504,26 @@ function hullWall(ctx: CanvasRenderingContext2D, x0: number, x1: number, d: numb
 function viewscreenFrame(ctx: CanvasRenderingContext2D, plan: ShipPlan): void {
   const v = plan.viewscreen;
   if (v.w <= 0) return;
+  // A curved screen: the bezel follows the curve (the ends come toward you), bending at two seams.
   const g = new Grid(v.w + 8, v.h + 8);
-  g.rrect(0, 0, v.w + 8, v.h + 8, P.steelDk, 3);
-  g.rrect(1, 1, v.w + 6, v.h + 6, P.steel, 3);
-  g.hline(3, 1, v.w + 2, P.panelLo);
-  g.rect(4, 4, v.w, v.h, null);
-  // Corner brackets and a label tab.
-  for (const [x, y] of [[1, 1], [v.w + 3, 1], [1, v.h + 3], [v.w + 3, v.h + 3]] as const) g.rect(x, y, 4, 4, P.orange).set(x + 1, y + 1, P.orangeHi);
-  g.rect(Math.floor(v.w / 2) - 5, v.h + 5, 18, 2, P.steelDeep);
+  const seams = [Math.round(v.w * 0.24), Math.round(v.w * 0.76)];
+  for (let gx = 0; gx < v.w + 8; gx++) {
+    const x = Math.min(v.x + v.w - 1, Math.max(v.x, v.x - 4 + gx));
+    const i = screenInset(v, x);
+    const top = 4 + i;
+    const bottom = 4 + v.h - i;
+    const end = gx < 4 || gx >= v.w + 4;
+    const seam = seams.includes(gx - 4);
+    for (let gy = top - 3; gy < (end ? bottom + 3 : top); gy++) g.set(gx, gy, gy === top - 3 ? P.panelLo : seam ? P.panelHi : P.steel);
+    if (!end) for (let gy = bottom; gy < bottom + 3; gy++) g.set(gx, gy, gy === bottom + 2 ? P.steelDeep : seam ? P.panelHi : P.steelDk);
+  }
+  // Corner brackets at the ends and a tab under the middle.
+  for (const [x, y] of [[0, 1], [v.w + 4, 1], [0, v.h + 3], [v.w + 4, v.h + 3]] as const) g.rect(x, y, 4, 4, P.orange).set(x + 1, y + 1, P.orangeHi);
+  g.rect(Math.floor(v.w / 2) - 5, v.h + 4 - screenInset(v, v.x + Math.floor(v.w / 2)) + 1, 18, 2, P.steelDeep);
   g.outline(OUTLINE);
   blit(ctx, g, v.x - 4, v.y - 4);
-  rect(ctx, v.x, v.y, v.w, v.h, "#03050c");
+  ctx.fillStyle = "#03050c";
+  ctx.fill(screenPath(v));
   // The console under it.
   const band = plan.ai?.y ?? v.y + v.h + 6;
   const cw = v.w + 4;

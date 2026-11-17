@@ -111,6 +111,18 @@ export interface SceneryActions extends PaintInfo {
   play(sound: string): void;
 }
 
+/** Who `drift` is asked about: one of your threads, you, or a pet. */
+export interface DriftOf {
+  kind: "agent" | "boss" | "dog" | "cat";
+  /** The thread id; "boss" for you, "dog" and "cat" for the pets. */
+  id: string;
+  /** Stable per person (0 for you and the pets). */
+  seed: number;
+  /** Feet position (native px). */
+  x: number;
+  y: number;
+}
+
 /** Someone about to be drawn, and the pose the office picked for them (see `Theme.pose`). */
 export interface PoseOf {
   /** "agent": one of your threads; "boss": you, at your desk. */
@@ -335,6 +347,15 @@ export interface Theme {
    * things in hand there. Your look (from the settings) is kept either way.
    */
   pose?(p: PoseOf, info: PaintInfo): { pose: CharPose; expr: Expression; facing?: Facing } | null;
+  /**
+   * Draw someone a little off where they are, for a moment: floating in zero
+   * gravity, swaying on a rolling deck. Asked every frame for each agent, for
+   * you and for the pets; `dx`, `dy` shift the sprite (native px; their name
+   * tag, speech bubble and click area follow), `tilt` turns it (radians, keep
+   * it small). Their shadow stays on the floor, and where they walk or sit
+   * doesn't change. Return null to draw them where they are; keep it cheap.
+   */
+  drift?(who: DriftOf, info: PaintInfo): { dx: number; dy: number; tilt?: number } | null;
 
   // ------------------------------------------------------------ things to click
   /**

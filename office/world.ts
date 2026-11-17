@@ -455,6 +455,8 @@ export class World {
   private bossWaveUntil = 0;
   /** When the scenery's tick runs next (theme.tick). */
   private nextSceneryTick = 0;
+  /** The scenery's drift for each person this frame (theme.drift), by id. */
+  private drifts = new Map<string, { dx: number; dy: number; tilt: number }>();
   /** This frame's PaintInfo, for hooks asked while drawing people (theme.pose). */
   private info: PaintInfo = { t: 0, hour: 12, night: 0, weather: "clear", date: new Date(), season: null };
   private labeled = new Set<string>();
@@ -1003,7 +1005,7 @@ export class World {
     for (const a of this.agents.values()) {
       if (a.leaving || !this.settled(a)) continue;
       const lying = this.mishap?.id === a.id && this.mishap.phase === "down";
-      out.push({ id: a.id, x: Math.round(a.x), y: Math.round(lying ? a.y - 22 : this.headTop(a)), mood: a.thread.mood, kind: a.thread.waitKind, unopened: a.thread.unopened === true });
+      out.push({ id: a.id, x: Math.round(this.drawX(a)), y: Math.round(lying ? a.y - 22 : this.headTop(a)), mood: a.thread.mood, kind: a.thread.waitKind, unopened: a.thread.unopened === true });
     }
     // Ones waiting on you claim the best spots first.
     const rank = (l: LabelAnchor) => (l.kind && l.kind !== "drafting" ? 0 : 1);
@@ -1020,13 +1022,14 @@ export class World {
       }
       if (id === "boss" && this.L) {
         const p = this.bossAt ?? this.L.boss.seat;
-        out.push({ id, x: Math.round(p.x), y: Math.round(p.y - ANCHOR_Y + 1), text: s.text });
+        const d = this.drifts.get("boss");
+        out.push({ id, x: Math.round(p.x + (d?.dx ?? 0)), y: Math.round(p.y - ANCHOR_Y + 1 + (d?.dy ?? 0)), text: s.text });
         continue;
       }
       const a = this.agents.get(id);
       if (a) {
         const lying = this.mishap?.id === id && this.mishap.phase === "down";
-        out.push({ id, x: Math.round(a.x), y: Math.round(lying ? a.y - 24 : this.headTop(a) - 2), text: s.text });
+        out.push({ id, x: Math.round(this.drawX(a)), y: Math.round(lying ? a.y - 24 : this.headTop(a) - 2), text: s.text });
         continue;
       }
       const n = this.npcs.find((m) => m.id === id);
@@ -1067,7 +1070,7 @@ export class World {
     const list = [...this.agents.values()].filter((a) => !a.leaving).sort((p, q) => q.y - p.y);
     for (const a of list) {
       const top = this.headTop(a) - 2;
-      out.push({ hit: { kind: "agent", id: a.id }, rect: { x: a.x - 8, y: top, w: 17, h: this.drawY(a) + 2 - top } });
+      out.push({ hit: { kind: "agent", id: a.id }, rect: { x: this.drawX(a) - 8, y: top, w: 17, h: this.drawY(a) + 2 - top } });
     }
     for (const h of this.crew.targets()) out.push({ hit: { kind: "helper", id: h.id, key: h.key }, rect: h.rect });
     for (const n of this.npcs) {
@@ -1181,7 +1184,7 @@ export class World {
   anchorOf(id: string): Point | null {
     const a = this.agents.get(id);
     if (!a) return null;
-    return { x: a.x, y: this.headTop(a) - 4 };
+    return { x: this.drawX(a), y: this.headTop(a) - 4 };
   }
 
   activityOf(id: string): string | null {
@@ -3470,8 +3473,40 @@ export class World {
   }
 
   private drawY(a: Agent): number {
-    if (this.settled(a) && a.spot!.lift) return a.y - a.spot!.lift;
-    return a.y;
+    const dy = this.drifts.get(a.id)?.dy ?? 0;
+    if (this.settled(a) && a.spot!.lift) return a.y - a.spot!.lift + dy;
+    return a.y + dy;
+  }
+
+  /** Where someone is drawn across: their x, shifted by the scenery's drift. */
+  private drawX(a: Agent): number {
+    return a.x + (this.drifts.get(a.id)?.dx ?? 0);
+  }
+
+  /** The scenery's drift for someone this frame (remembered for their tags, bubbles and click area). */
+  private driftFor(kind: "agent" | "boss" | "dog" | "cat", id: string, seed: number, x: number, y: number): { dx: number; dy: number; tilt: number } | null {
+    const d = this.theme.drift?.({ kind, id, seed, x, y }, this.info) ?? null;
+    if (!d || (d.dx === 0 && d.dy === 0 && !d.tilt)) {
+      this.drifts.delete(id);
+      return null;
+    }
+    const r = { dx: Math.round(d.dx), dy: Math.round(d.dy), tilt: d.tilt ?? 0 };
+    this.drifts.set(id, r);
+    return r;
+  }
+
+  /** Draw something shifted (and turned about its middle) by a drift. */
+  private drifted(ctx: CanvasRenderingContext2D, d: { dx: number; dy: number; tilt: number } | null, cx: number, cy: number, draw: () => void): void {
+    if (!d) return draw();
+    ctx.save();
+    ctx.translate(d.dx, d.dy);
+    if (d.tilt) {
+      ctx.translate(Math.round(cx), Math.round(cy));
+      ctx.rotate(d.tilt);
+      ctx.translate(-Math.round(cx), -Math.round(cy));
+    }
+    draw();
+    ctx.restore();
   }
 
   private headTop(a: Agent): number {
@@ -4077,6 +4112,12 @@ export class World {
   }
 
   private drawAgent(ctx: CanvasRenderingContext2D, a: Agent): void {
+    // drawY already carries the drift's dy: shift only across here (and turn about the middle).
+    const d = this.driftFor("agent", a.id, a.seed, a.x, a.y);
+    this.drifted(ctx, d && { ...d, dy: 0 }, a.x, this.drawY(a) - 14, () => this.paintAgent(ctx, a));
+  }
+
+  private paintAgent(ctx: CanvasRenderingContext2D, a: Agent): void {
     const picked = this.poseOf(a);
     const onChair = picked.seated;
     let { pose, expr, facing } = picked;
@@ -4508,8 +4549,10 @@ export class World {
     }
     const sx = Math.round(x - ANCHOR_X + lean);
     const sy = Math.round(y - ANCHOR_Y - hop);
-    ctx.drawImage(sprite, sx, sy);
-    this.theme.dressVisitor?.(ctx, { x: sx, y: sy, facing, pose, kind: "boss", look }, t);
+    this.drifted(ctx, this.driftFor("boss", "boss", 0, x, y), x, y - 14, () => {
+      ctx.drawImage(sprite, sx, sy);
+      this.theme.dressVisitor?.(ctx, { x: sx, y: sy, facing, pose, kind: "boss", look }, t);
+    });
     if (phase === "lost") drawRainCloud(ctx, Math.round(x + 3), Math.round(y - ANCHOR_Y - 9 + (Math.floor(t * 2) % 2)));
   }
 
@@ -4740,7 +4783,7 @@ export class World {
     ctx.fillStyle = "rgba(40,20,30,0.16)";
     ctx.fillRect(Math.round(d.x - 7), Math.round(d.y - 1), 14, 2);
     const dog = this.dressed(`pet|dog|${pose}|${facing}|${blink}`, () => this.theme.pet?.("dog", pose, facing, blink, () => dogSprite(pose, facing, blink)) ?? dogSprite(pose, facing, blink));
-    ctx.drawImage(dog, Math.round(d.x - 10), Math.round(d.y - 14));
+    this.drifted(ctx, this.driftFor("dog", "dog", 0, d.x, d.y), d.x, d.y - 7, () => ctx.drawImage(dog, Math.round(d.x - 10), Math.round(d.y - 14)));
     if (this.golf?.fetch?.step === 2) {
       // Your golf ball, in its mouth.
       const mx = Math.round(d.x + (facing === "left" ? -9 : 8));
@@ -4762,7 +4805,7 @@ export class World {
     const top = this.headTop(a);
     const urgent = kind === "question" || kind === "approval";
     const bounce = urgent ? Math.round(Math.abs(Math.sin(t * 4)) * 2) : 0;
-    const bx = Math.round(a.x + 3);
+    const bx = Math.round(this.drawX(a) + 3);
     const by = Math.round(top - 13 - bounce);
     if (kind === "error") {
       drawRainCloud(ctx, bx, by);
@@ -4826,10 +4869,10 @@ export class World {
           !this.labeled.has(a.id) &&
           a.spot?.kind !== "boss-guest" &&
           !((a.thread.waitKind === "done" || a.thread.waitKind === "plan") && (a.spot?.kind === "review" || a.spot?.kind === "present"));
-        marker(a.x, this.headTop(a) - (bubble ? 20 : 7) + bob);
+        marker(this.drawX(a), this.headTop(a) - (bubble ? 20 : 7) + bob);
         // The rest of its family (the thread that spawned it, the ones it spawned).
         if (a.thread.family) {
-          for (const b of this.agents.values()) if (b !== a && !b.leaving && b.thread.family === a.thread.family) marker(b.x, this.headTop(b) - 7 + bob);
+          for (const b of this.agents.values()) if (b !== a && !b.leaving && b.thread.family === a.thread.family) marker(this.drawX(b), this.headTop(b) - 7 + bob);
         }
         break;
       }
@@ -5071,7 +5114,7 @@ export class World {
     ctx.fillStyle = "rgba(40,20,30,0.16)";
     ctx.fillRect(Math.round(c.x - 6), Math.round(c.y - 1), 12, 2);
     const cat = this.dressed(`pet|cat|${pose}|${c.facing}|${blink}`, () => this.theme.pet?.("cat", pose, c.facing, blink, () => catSprite(pose, c.facing, blink)) ?? catSprite(pose, c.facing, blink));
-    ctx.drawImage(cat, Math.round(c.x - 8), Math.round(c.y - 12));
+    this.drifted(ctx, this.driftFor("cat", "cat", 0, c.x, c.y), c.x, c.y - 6, () => ctx.drawImage(cat, Math.round(c.x - 8), Math.round(c.y - 12)));
     if (c.state === "loaf" && this.rand() < 0.01) {
       this.particles.push({ kind: "zzz", x: c.x + 4, y: c.y - 12, vx: 2, vy: -4, life: 0, max: 2, color: "#ffffff" });
     }

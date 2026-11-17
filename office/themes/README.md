@@ -206,6 +206,15 @@ Two hooks let people do odd things on their own, without a click:
   sound. Pick from the clock rather than at random, keep it rare, and expect
   `gather` to fail during office events and when nobody's free.
 
+A third moves people a little off where they are, for a moment:
+
+- `drift(who, info)`: an offset (`dx`, `dy`, native px) and a small `tilt`
+  (radians) for an agent, for you or for a pet (`who.kind`), asked every
+  frame. Their name tag, speech bubble and click area follow; their shadow
+  stays on the floor, and where they walk or sit doesn't change. Return null
+  to draw them where they are. The Spaceship's gravity switch uses it to
+  float everyone (`spaceship/live.ts`).
+
 The Dusty Annex is the example (`annex/habits.ts`): the boss smokes, puts
 their feet up and naps behind the paper; the staff pop out for a smoke,
 feed the pigeons and microwave fish.

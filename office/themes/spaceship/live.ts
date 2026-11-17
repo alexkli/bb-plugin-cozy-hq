@@ -8,12 +8,12 @@ import type { WeatherKind } from "../../../contract.ts";
 import type { Layout, Rect } from "../../layout.ts";
 import type { CharPose, Expression } from "../../characters.ts";
 import type { Facing } from "../../layout.ts";
-import type { Drawable, Light, PaintInfo, PoseOf, Theme } from "../../theme.ts";
+import type { DriftOf, Drawable, Light, PaintInfo, PoseOf, Theme } from "../../theme.ts";
 import { Grid, OUTLINE, cached, drawPixelText, hash, mix, pixelTextWidth, shade } from "../../themekit.ts";
 import { P, done, fill, hazard, panel } from "./pal.ts";
 import { planOf, type ShipPlan } from "./plan.ts";
-import { drawHail, hullSpace, phenomenon, portholeView, systemOf, viewscreen } from "./space.ts";
-import { SHIP, since, type Visitor } from "./state.ts";
+import { drawHail, hullSpace, phenomenon, portholeView, screenPath, systemOf, viewscreen } from "./space.ts";
+import { SHIP, chairView, since, type Visitor, seatedShows } from "./state.ts";
 
 let deckW = 666;
 
@@ -342,7 +342,7 @@ function bridgeConsole(ctx: CanvasRenderingContext2D, plan: ShipPlan, t: number)
   }
   const s = plan.gravity;
   if (s) {
-    const off = since(SHIP.gravityAt, t, 7) >= 0;
+    const off = since(SHIP.gravityAt, t, 7.6) >= 0;
     const lx = s.x + Math.floor(s.w / 2) - 1;
     fill(ctx, lx - 1, off ? s.y + s.h - 6 : s.y + 5, 4, 3, OUTLINE);
     fill(ctx, lx, off ? s.y + s.h - 5 : s.y + 6, 2, 1, P.red);
@@ -350,23 +350,29 @@ function bridgeConsole(ctx: CanvasRenderingContext2D, plan: ShipPlan, t: number)
   }
 }
 
-/** The floating crew: settled people drift up a few pixels while the gravity is off (spot lifts, restored after). */
-const baseLift = new Map<object, number>();
-function zeroG(L: Layout, t: number): void {
-  const k = since(SHIP.gravityAt, t, 7);
-  if (k < 0) {
-    if (baseLift.size === 0) return;
-    for (const s of L.spots) if (baseLift.has(s)) s.lift = baseLift.get(s) || undefined;
-    baseLift.clear();
-    return;
-  }
-  const env = k < 0.8 ? k / 0.8 : k > 5.8 ? Math.max(0, (7 - k) / 1.2) : 1;
-  for (const s of L.spots) {
-    if (!baseLift.has(s)) baseLift.set(s, s.lift ?? 0);
-    const ph = (hash(s.id) % 100) / 16;
-    s.lift = (baseLift.get(s) ?? 0) + Math.round(env * (4 + 2 * Math.sin(t * 2.1 + ph)));
-  }
+/** How far up everything is with the gravity off (0..1): a slow rise, a long float, a soft landing. */
+export function floatK(t: number): number {
+  const k = since(SHIP.gravityAt, t, 9);
+  if (k < 0) return 0;
+  const ease = (x: number) => x * x * (3 - 2 * x);
+  return k < 1.5 ? ease(k / 1.5) : k > 7.2 ? ease(Math.max(0, (9 - k) / 1.8)) : 1;
 }
+
+/** Zero-g: everyone (and the pets) floats well up, bobbing slowly, drifting sideways with a little tilt. */
+function drift(who: DriftOf, info: PaintInfo): { dx: number; dy: number; tilt: number } | null {
+  const up = floatK(info.t);
+  if (up <= 0) return null;
+  const t = info.t;
+  const pet = who.kind === "dog" || who.kind === "cat";
+  const ph = who.kind === "agent" ? (who.seed % 97) / 15 : who.kind === "boss" ? 1.3 : who.kind === "dog" ? 2.6 : 4.1;
+  const lift = pet ? 9 : 12 + (who.seed % 7);
+  return {
+    dx: up * (pet ? 4 : 7) * Math.sin(t * 0.55 + ph * 1.7),
+    dy: -up * (lift + 4 * Math.sin(t * 1.1 + ph)),
+    tilt: up * 0.2 * Math.sin(t * 0.8 + ph),
+  };
+}
+
 
 // ------------------------------------------------------------------ the bridge
 
@@ -384,15 +390,82 @@ function consoleSprite(w: number, h: number): HTMLCanvasElement {
 }
 
 const STRIP = ["#ffc857", "#7fe3ff", "#ff8a6b", "#8ff0b5", "#b39cff"];
+const BR = { beige: "#d8c4a2", beigeHi: "#ead9bb", beigeLo: "#b49c78", wine: "#6e2f3e", wineHi: "#8a3c4e", wineLo: "#4e1f2b" };
+
+/** The captain's chair (22×26 at the seat's x−11, y−24): from the front (a high burgundy back behind you), side on, or from behind. */
+function chairSprite(view: "front" | "side" | "back"): HTMLCanvasElement {
+  return cached(`spaceship|captain-chair|${view}`, () => {
+    const g = new Grid(22, 26);
+    if (view === "front") {
+      g.rrect(3, 1, 16, 17, BR.beigeLo, 4);
+      g.rrect(4, 2, 14, 15, BR.wine, 3);
+      g.hline(6, 2, 10, BR.wineHi);
+      for (let y = 6; y < 15; y += 3) g.hline(6, y, 10, BR.wineLo);
+      g.rrect(4, 16, 14, 5, BR.wine, 2);
+      g.hline(5, 16, 12, BR.wineHi);
+      g.hline(5, 20, 12, BR.wineLo);
+      for (const x of [0, 17]) {
+        g.rrect(x, 12, 5, 8, BR.beige, 1);
+        g.hline(x + 1, 12, 3, BR.beigeHi);
+        g.rect(x + 1, 14, 3, 2, P.screen);
+      }
+      g.set(1, 14, P.amber).set(3, 15, P.cyan).set(18, 14, P.mint).set(20, 15, P.amber);
+    } else if (view === "side") {
+      // Side on, facing right: the back to the left, the seat and an arm reaching forward.
+      g.rrect(3, 1, 7, 18, BR.beigeLo, 3);
+      g.rrect(4, 2, 5, 16, BR.wine, 2);
+      g.vline(5, 3, 13, BR.wineHi);
+      g.rrect(5, 15, 13, 6, BR.wine, 2);
+      g.hline(6, 15, 11, BR.wineHi);
+      g.rrect(8, 12, 10, 4, BR.beige, 1);
+      g.rect(14, 13, 3, 1, P.screen);
+      g.set(15, 13, P.amber);
+    } else {
+      g.rrect(3, 10, 16, 11, BR.beigeLo, 3);
+      g.rrect(4, 10, 14, 10, BR.wine, 3);
+      g.hline(6, 10, 10, BR.wineHi);
+      g.vline(4, 12, 6, BR.wineHi);
+      for (let y = 13; y < 19; y += 2) g.hline(6, y, 10, BR.wineLo);
+      for (const x of [0, 17]) {
+        g.rrect(x, 14, 5, 7, BR.beige, 1);
+        g.hline(x + 1, 14, 3, BR.beigeHi);
+        g.rect(x + 1, 16, 3, 2, P.screen);
+      }
+      g.set(1, 16, P.amber).set(3, 17, P.cyan).set(18, 16, P.mint).set(20, 17, P.amber);
+    }
+    g.rect(9, 21, 4, 2, P.steelDk);
+    g.rrect(5, 23, 12, 2, BR.beigeLo, 1);
+    return done(g);
+  });
+}
+
+/** Bridge panels: a slim pedestal beside your chair, a standing panel on the rear deck, a display bank along the back wall. */
+function panelSprite(w: number, h: number): HTMLCanvasElement {
+  return cached(`spaceship|bridge-panel|${w}|${h}`, () => {
+    const g = new Grid(w, h);
+    if (w <= 4) {
+      g.rect(0, 0, w, h, BR.beigeLo);
+      g.rect(0, 0, w, 3, BR.beige);
+      g.rect(1, 1, w - 2, 1, P.screen);
+    } else {
+      g.rrect(0, 0, w, h, BR.beigeLo, 2);
+      g.rrect(0, 0, w, h - 2, BR.beige, 2);
+      g.hline(2, 0, w - 4, BR.beigeHi);
+      g.rect(2, 2, w - 4, Math.max(2, h - 7), "#141a28");
+      g.hline(2, h - 4, w - 4, BR.wine);
+    }
+    return done(g);
+  });
+}
 
 /** The live face of a console: rows of segmented strips that shift, and a couple of blinking readouts. */
-function consoleLights(ctx: CanvasRenderingContext2D, q: Rect, seed: number, t: number, alert: boolean): void {
+function consoleLights(ctx: CanvasRenderingContext2D, q: Rect, seed: number, t: number, alert: boolean, busy = false): void {
   const x0 = q.x + 3;
   const w = q.w - 6;
   for (let row = 0; row < Math.max(1, Math.floor((q.h - 8) / 2)); row++) {
     const y = q.y + 4 + row * 2;
     for (let x = 0; x < w; x += 4) {
-      const on = (Math.floor(t * (1.5 + row)) + x + seed + row * 3) % 7 !== 0;
+      const on = (Math.floor(t * (busy ? 9 : 1.5 + row)) + x + seed + row * 3) % (busy ? 3 : 7) !== 0;
       if (!on) continue;
       fill(ctx, x0 + x, y, Math.min(3, w - x), 1, alert ? (row % 2 ? "#ff6b6b" : "#ffb0a0") : STRIP[(seed + row + Math.floor(x / 8)) % STRIP.length]!);
     }
@@ -407,8 +480,8 @@ const alertK = (t: number) => since(SHIP.alertAt, t, 7);
 
 function underlay(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): void {
   deckW = L.W;
+  seatedShows();
   const plan = planOf(L);
-  zeroG(L, info.t);
   corridorLights(ctx, L, info.t, info.night);
   if (!plan) return;
   viewscreen(ctx, plan.viewscreen, info.t, info.weather, L.W);
@@ -452,19 +525,49 @@ function decor(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): Drawa
   const t = info.t;
   const out: Drawable[] = [];
   const alert = alertK(t) >= 0;
+  const busyAt = { helm: SHIP.helmAt, ops: SHIP.opsAt, rear: SHIP.scanAt, science: SHIP.scienceAt, side: SHIP.opsAt };
   plan.consoles.forEach((c, i) => {
+    const busy = since(busyAt[c.kind], t, 4) >= 0;
     if (c.kind === "rear") {
-      out.push({ z: c.rect.y + 13, draw: () => consoleLights(ctx, { x: c.rect.x + 2, y: c.rect.y - 1, w: c.rect.w - 4, h: 8 }, i * 5, t, alert) });
+      out.push({ z: c.rect.y + 13, draw: () => consoleLights(ctx, { x: c.rect.x + 2, y: c.rect.y - 1, w: c.rect.w - 4, h: 8 }, i * 5, t, alert, busy) });
       return;
     }
     out.push({
       z: c.rect.y + c.rect.h,
       draw: () => {
         ctx.drawImage(consoleSprite(c.rect.w, c.rect.h), c.rect.x, c.rect.y);
-        consoleLights(ctx, c.rect, i * 5, t, alert);
+        consoleLights(ctx, c.rect, i * 5, t, alert, busy);
       },
     });
   });
+  for (const [i, q] of plan.panels.entries()) {
+    out.push({
+      z: q.y + q.h,
+      draw: () => {
+        ctx.drawImage(panelSprite(q.w, q.h), q.x, q.y);
+        if (q.w <= 4) fill(ctx, q.x + 1, q.y + 1, 2, 1, Math.floor(t * 2 + i) % 3 ? (alert ? "#ff6b6b" : P.cyan) : P.amber);
+        else consoleLights(ctx, { x: q.x, y: q.y - 1, w: q.w, h: Math.max(8, q.h - 2) }, i * 7 + 3, t, alert);
+      },
+    });
+  }
+  // Your chair: facing the bridge, swivelling round to the screen and back.
+  const seat = L.boss.seat;
+  if (plan.captain) {
+    const view = chairView(t);
+    const sprite = chairSprite(view === "front" ? "front" : view === "back" ? "back" : "side");
+    out.push({
+      z: view === "back" ? seat.y + 1 : seat.y - 0.5,
+      draw: () => {
+        if (view === "turnFront") {
+          ctx.save();
+          ctx.translate(seat.x * 2, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(sprite, seat.x - 11, seat.y - 24);
+          ctx.restore();
+        } else ctx.drawImage(sprite, seat.x - 11, seat.y - 24);
+      },
+    });
+  }
   // The captain's arm consoles blink along.
   const cap = plan.captain;
   if (cap) {
@@ -639,7 +742,9 @@ function aiCaption(ctx: CanvasRenderingContext2D, plan: ShipPlan, t: number): vo
     else lines.push(w);
   }
   const h = lines.length * 7 + 4;
-  const y = v.y + v.h - h;
+  const y = v.y + v.h - h - Math.round(v.h * 0.05);
+  ctx.save();
+  ctx.clip(screenPath(v));
   ctx.fillStyle = "rgba(6,14,28,0.82)";
   ctx.fillRect(v.x, y, v.w, h);
   fill(ctx, v.x, y, v.w, 1, P.cyanDk);
@@ -647,23 +752,23 @@ function aiCaption(ctx: CanvasRenderingContext2D, plan: ShipPlan, t: number): vo
   lines.forEach((line, i) => {
     const part = line.slice(0, Math.max(0, left));
     left -= line.length + 1;
-    if (part) drawPixelText(ctx, part, v.x + 4, y + 3 + i * 7, i === lines.length - 1 && left < 0 && Math.floor(t * 4) % 2 ? P.white : P.cyan);
+    if (part) drawPixelText(ctx, part, v.x + 6, y + 3 + i * 7, i === lines.length - 1 && left < 0 && Math.floor(t * 4) % 2 ? P.white : P.cyan);
   });
+  ctx.restore();
 }
 
 /** Loose things floating about while the gravity's off. */
 function floaters(ctx: CanvasRenderingContext2D, L: Layout, t: number): void {
-  const k = since(SHIP.gravityAt, t, 7);
-  if (k < 0) return;
-  const env = k < 1 ? k : k > 5.8 ? Math.max(0, (7 - k) / 1.2) : 1;
-  const things = Math.min(24, L.desks.length + 8);
+  const env = floatK(t);
+  if (env <= 0) return;
+  const things = Math.min(28, L.desks.length + 10);
   for (let i = 0; i < things; i++) {
     const h = hash(`float${i}`);
     const d = L.desks[i % Math.max(1, L.desks.length)];
     const bx = d ? d.x + 6 + (h % 36) : (h % L.W);
     const by = d ? d.y + 4 + ((h >>> 8) % 10) : 100 + ((h >>> 8) % 200);
-    const x = Math.round(bx + Math.sin(t * 0.9 + i) * 4 * env);
-    const y = Math.round(by - env * (8 + ((h >>> 4) % 10)) + Math.cos(t * 1.3 + i) * 2);
+    const x = Math.round(bx + Math.sin(t * 0.7 + i) * 9 * env);
+    const y = Math.round(by - env * (16 + ((h >>> 4) % 16)) + Math.cos(t * 1.1 + i) * 3);
     switch (h % 4) {
       case 0:
         // A mug.
@@ -864,17 +969,21 @@ function outdoor(weather: WeatherKind, _night: boolean): string {
 }
 
 /**
- * You sit in the captain's chair facing the viewscreen: we see the chair's
- * back and your head over it, now and then a hand on the arm console. You
- * still turn round to wave back when clicked.
+ * The captain's chair faces the bridge (and you see your face, the big screen
+ * behind you); it swivels round to the screen for the moments that matter (a
+ * jump, a hail, red alert, the order) and back again: a side-on frame on the
+ * way round each time.
  */
 function pose(p: PoseOf, info: PaintInfo): { pose: CharPose; expr: Expression; facing?: Facing } | null {
   if (p.kind !== "boss" || p.pose === "raise" || p.pose === "cheer") return null;
-  const k = Math.floor(info.t / 3.1) % 5;
-  return { pose: k === 3 ? "type0" : k === 4 ? "type1" : "sit-back", expr: p.expr, facing: "back" };
+  const view = chairView(info.t);
+  if (view === "front") return null;
+  if (view === "turnBack" || view === "turnFront") return { pose: "sit-back", expr: p.expr, facing: view === "turnBack" ? "right" : "left" };
+  const k = Math.floor(info.t / 2.3) % 4;
+  return { pose: k === 3 ? "type0" : "sit-back", expr: p.expr, facing: "back" };
 }
 
-export const LIVE: Pick<Theme, "sky" | "outside" | "outdoor" | "wallLights" | "underlay" | "decor" | "overlay" | "lighting" | "doorOpen" | "openWindow" | "boardInk" | "pose"> = {
+export const LIVE: Pick<Theme, "sky" | "outside" | "outdoor" | "wallLights" | "underlay" | "decor" | "overlay" | "lighting" | "doorOpen" | "openWindow" | "boardInk" | "pose" | "drift"> = {
   // Space is dark whatever the hour; the hour only sets the ship's shift (night dims the lights).
   sky: (_hour, classic) => ({ top: "#05070f", bottom: "#0b1024", night: classic.night }),
   outside: (ctx, win, index, info) => portholeView(ctx, win, index, info.t, info.weather, deckW),
@@ -894,4 +1003,5 @@ export const LIVE: Pick<Theme, "sky" | "outside" | "outdoor" | "wallLights" | "u
   // Plans go up on the viewscreen in bright tactical colors.
   boardInk: ["#7fe3ff", "#ffc857", "#8ff0b5", "#ff9ac8"],
   pose,
+  drift,
 };
