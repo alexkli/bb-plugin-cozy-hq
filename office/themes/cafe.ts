@@ -14,11 +14,13 @@
 //   clicks.ts    things to click;  people.ts  outfits and visitors
 //   pets.ts      the café dog, the shop cat, the sweeping robot, the aquarium
 //   words.ts     names, lines and sounds
+//   eggs.ts      hidden Easter eggs (the terrace croissant, DO NOT UNPLUG, the busker's case)
 import type { Theme } from "../theme.ts";
 import { BACKGROUND } from "./cafe/backdrop.ts";
 import { cafeClickables, CLICK_SOUNDS, click } from "./cafe/clicks.ts";
 import { cafeChair, cafeDesk, cafeScreen, cafeSpeaker } from "./cafe/desks.ts";
 import { cafeDecor, cafeLights, cafeOverlay, cafeUnderlay, cafeWallLights } from "./cafe/live.ts";
+import { EGG_SOUNDS, eggClick, eggClickables, eggDecor, eggOverlay, eggPose, eggTick } from "./cafe/eggs.ts";
 import { cafeDress, cafeDressVisitor, cafeLook, cafeNpc } from "./cafe/people.ts";
 import { cafeFishTank, cafePet, cafeRoomba } from "./cafe/pets.ts";
 import { cafeLayout } from "./cafe/plan.ts";
@@ -45,8 +47,11 @@ export const CAFE: Theme = {
   outside: cafeOutside,
   wallLights: cafeWallLights,
   underlay: cafeUnderlay,
-  decor: cafeDecor,
-  overlay: cafeOverlay,
+  decor: (ctx, L, info) => [...cafeDecor(ctx, L, info), ...eggDecor(ctx, L, info)],
+  overlay: (ctx, L, info) => {
+    cafeOverlay(ctx, L, info);
+    eggOverlay(ctx, L, info);
+  },
   lighting: {
     tint: "30,18,40",
     // Warm and a bit dim at night: the pendant lamps, the fire and the screens glow.
@@ -65,8 +70,11 @@ export const CAFE: Theme = {
   pet: (kind, pose, facing, blink) => cafePet(kind, pose, facing, blink),
   roomba: () => cafeRoomba(),
   fishTank: cafeFishTank,
-  clickables: cafeClickables,
-  click,
+  // The hidden ones first, so they win where they sit on something clickable.
+  clickables: (L) => [...eggClickables(L), ...cafeClickables(L)],
+  click: (id, act) => (id.startsWith("egg-") ? eggClick(id, act) : click(id, act)),
+  tick: eggTick,
+  pose: eggPose,
   ...WORDS,
-  sounds: { ...WORDS.sounds, ...CLICK_SOUNDS },
+  sounds: { ...WORDS.sounds, ...CLICK_SOUNDS, ...EGG_SOUNDS },
 };
