@@ -446,6 +446,10 @@ export class World {
   private emit: Emit;
   private stars: { x: number; y: number; p: number }[] = [];
   private dark: HTMLCanvasElement | null = null;
+  /** The lights' colored glow, added onto the scene. */
+  private glow: HTMLCanvasElement | null = null;
+  /** When the darkness and glow were last drawn (this.time), -1 to redraw. */
+  private litAt = -1;
   private feedingUntil = 0;
   // Seeded from the clock: a different day at the office every time you open it.
   private rand = rng((Date.now() ^ 0x5eed) >>> 0);
@@ -637,6 +641,10 @@ export class World {
     this.dark = document.createElement("canvas");
     this.dark.width = L.W;
     this.dark.height = L.H;
+    this.glow = document.createElement("canvas");
+    this.glow.width = L.W;
+    this.glow.height = L.H;
+    this.litAt = -1;
     const r = rng(42);
     this.stars = L.wall.windows.flatMap((w) =>
       Array.from({ length: Math.round((w.w * w.h) / 140) }, () => ({
@@ -5739,6 +5747,18 @@ export class World {
     const darkness = lit?.darkness ? lit.darkness(sky.night, env.weather, classic) : classic;
     if (darkness < 0.02) return;
     const d = this.dark!;
+    const gl = this.glow!;
+    const lay = () => {
+      ctx.drawImage(d, 0, 0);
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.drawImage(gl, 0, 0);
+      ctx.restore();
+    };
+    // The pools of light are dozens of soft gradients: redraw them 10 times a
+    // second (they move slowly), lay them over every frame.
+    if (this.litAt >= 0 && this.time >= this.litAt && this.time - this.litAt < 0.1) return lay();
+    this.litAt = this.time;
     const dc = ctx2d(d);
     dc.globalCompositeOperation = "source-over";
     dc.clearRect(0, 0, L.W, L.H);
@@ -5810,18 +5830,19 @@ export class World {
       if (glow) lights.push([a.x, a.y - 10, 22, 0.5, GLOW_HAZE[glow], 0.14]);
     }
     for (const [x, y, r, k] of lights) if (r > 0) hole(x, y, r, k);
-    ctx.drawImage(d, 0, 0);
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
+    const gc = ctx2d(gl);
+    gc.globalCompositeOperation = "source-over";
+    gc.clearRect(0, 0, L.W, L.H);
+    gc.globalCompositeOperation = "lighter";
     for (const [x, y, r, , color, k] of lights) {
       if (r <= 0 || k <= 0) continue;
-      const g = ctx.createRadialGradient(x, y, 0, x, y, r * 0.8);
+      const g = gc.createRadialGradient(x, y, 0, x, y, r * 0.8);
       g.addColorStop(0, `${color}${Math.round(255 * k * sky.night).toString(16).padStart(2, "0")}`);
       g.addColorStop(1, `${color}00`);
-      ctx.fillStyle = g;
-      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+      gc.fillStyle = g;
+      gc.fillRect(x - r, y - r, r * 2, r * 2);
     }
-    ctx.restore();
+    lay();
   }
 
   /** 0 by day, 1 at night: drives overlay dimming in the view. */
