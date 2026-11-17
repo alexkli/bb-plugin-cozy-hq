@@ -737,7 +737,14 @@ export class World {
     this.eggs = eggSpots(L);
     this.eggsFound.clear();
     this.dogToBed(true);
-    for (const a of this.agents.values()) {
+    for (const a of [...this.agents.values()]) {
+      // On their way out: they're gone. Re-placing them would leave them with
+      // no path, and a leaving agent with no path never reaches the door (an
+      // archived thread shrinks the headcount, so this follows right after).
+      if (a.leaving) {
+        this.agents.delete(a.id);
+        continue;
+      }
       a.huddle = null;
       a.slow = false;
       const spot = (a.target && L.byId.get(a.target)) || (a.spot && L.byId.get(a.spot.id)) || L.byId.get(a.thread.spotId);
