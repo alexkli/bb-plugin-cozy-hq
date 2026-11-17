@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.2 (2026-11-17)
+
+Getting around: shorter walks, your own desk, and a shortcut to the office.
+
+- **Shorter walks**: people take the shortest way over the hallways, the aisles and every spot's lanes, changing over where two cross, instead of always going out to the hallway and back in. A newcomer walks from the door straight to the desks instead of down past them and back up; someone on the cabin sofa steps up to the hearth instead of going round the lodge. About 10% less walking over all sceneries, never through walls or furniture.
+- **Your own desk**: a thread picks a free desk at random across all the work rooms, and comes back to that same desk every time it works. Others leave it free while any other desk is; only a full office makes exceptions, and those don't change whose desk it is.
+- **Brisker errands**: walks between a desk and the waiting room, the meeting room or your office are 30% faster. Work doesn't wait.
+- **Cmd+Shift+H** (Ctrl+Shift+H) opens the office from anywhere in bb, and pressed again takes you back to where you were. Rebind it in Settings → Keyboard.
+- **N** toggles the name tags while the office has focus.
+- Fixed: archived threads could get stuck standing at the door on their way out.
+
 ## 0.6.1 (2026-11-17)
 
 - README: the office at a holiday party up top, and four sceneries below it (Redwood Camp, Neon City at night, Villain's Lair, Surf Villa) instead of the evening and phone screenshots.
