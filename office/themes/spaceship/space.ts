@@ -503,31 +503,14 @@ function jumpFlash(ctx: CanvasRenderingContext2D, r: Rect, t: number): void {
   ctx.fillRect(r.x, r.y, r.w, r.h);
 }
 
-/** The curved viewscreen's inset at the top and bottom of column x: none at the ends, the most in the middle (the ends come toward you). */
-export function screenInset(v: Rect, x: number): number {
-  const u = (x + 0.5 - (v.x + v.w / 2)) / (v.w / 2);
-  return Math.round(Math.max(3, Math.round(v.h * 0.15)) * (1 - u * u));
-}
-
 const paths = new Map<string, Path2D>();
-/** The curved screen's outline as a stepped (pixel-crisp) path. */
+/** The viewscreen's outline, for clipping what's shown on it. */
 export function screenPath(v: Rect): Path2D {
   const key = `${v.x},${v.y},${v.w},${v.h}`;
   let p = paths.get(key);
   if (!p) {
     p = new Path2D();
-    p.moveTo(v.x, v.y + screenInset(v, v.x));
-    for (let x = v.x; x < v.x + v.w; x++) {
-      const y = v.y + screenInset(v, x);
-      p.lineTo(x, y);
-      p.lineTo(x + 1, y);
-    }
-    for (let x = v.x + v.w - 1; x >= v.x; x--) {
-      const y = v.y + v.h - screenInset(v, x);
-      p.lineTo(x + 1, y);
-      p.lineTo(x, y);
-    }
-    p.closePath();
+    p.rect(v.x, v.y, v.w, v.h);
     paths.set(key, p);
   }
   return p;
@@ -587,11 +570,6 @@ export function viewscreen(ctx: CanvasRenderingContext2D, v: Rect, t: number, we
   }
   jumpFlash(ctx, v, t);
   stations(ctx, v, t, sys);
-  // The ends of the curve are turned toward you: a little darker.
-  for (let x = v.x; x < v.x + v.w; x++) {
-    const u = Math.abs((x + 0.5 - (v.x + v.w / 2)) / (v.w / 2));
-    if (u > 0.74) fill(ctx, x, v.y, 1, v.h, `rgba(0,0,0,${((u - 0.74) * 0.9).toFixed(2)})`);
-  }
   // The HUD: corner ticks, a reticle, the system's name and a faint scanline.
   ctx.fillStyle = "rgba(127,227,255,0.55)";
   for (const [x, y, dx, dy] of [[v.x + 2, v.y + 2, 1, 1], [v.x + v.w - 3, v.y + 2, -1, 1], [v.x + 2, v.y + v.h - 3, 1, -1], [v.x + v.w - 3, v.y + v.h - 3, -1, -1]] as const) {
@@ -606,7 +584,7 @@ export function viewscreen(ctx: CanvasRenderingContext2D, v: Rect, t: number, we
   ctx.fillRect(cx, cy - 3, 1, 2);
   ctx.fillRect(cx, cy + 2, 1, 2);
   const label = jumping ? "JUMPING" : sys.name;
-  drawPixelText(ctx, label, v.x + 6, v.y + v.h - 9 - screenInset(v, v.x + 6 + label.length * 4), j >= 0 && j < 4 && Math.floor(t * 4) % 2 ? "#ffffff" : "rgba(127,227,255,0.75)");
+  drawPixelText(ctx, label, v.x + 6, v.y + v.h - 9, j >= 0 && j < 4 && Math.floor(t * 4) % 2 ? "#ffffff" : "rgba(127,227,255,0.75)");
   ctx.fillStyle = "rgba(0,0,0,0.12)";
   const row = Math.floor(t * 12) % v.h;
   ctx.fillRect(v.x, v.y + row, v.w, 2);
