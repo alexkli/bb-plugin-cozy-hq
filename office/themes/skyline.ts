@@ -15,6 +15,7 @@ import { drawPendants, elevatorOpen } from "./skyline/luxe.ts";
 import { skylineDressVisitor, skylineFishTank, skylinePet, skylineRoomba } from "./skyline/critters.ts";
 import { CLICK_SOUNDS, LABELS, SOUNDS, skylineOutdoor } from "./skyline/words.ts";
 import { click, clickables, clickItems, clickLights, clickOutside, clickOverlay, clickUnderlay } from "./skyline/clicks.ts";
+import { EGG_SOUNDS, eggClick, eggClickables, eggDecor, eggDrift, eggOutside, eggOverlay, eggTick } from "./skyline/eggs.ts";
 
 export const SKYLINE: Theme = {
   id: "skyline",
@@ -33,6 +34,7 @@ export const SKYLINE: Theme = {
   outside: (ctx, win, index, info) => {
     skylineOutside(ctx, win, index, info);
     clickOutside(ctx, win, info);
+    eggOutside(ctx, win, info);
   },
   wallLights: skylineWallLights,
   underlay: (ctx, L, info) => {
@@ -41,13 +43,13 @@ export const SKYLINE: Theme = {
   },
   decor: (ctx, L, info) => {
     const out = skylineDecor(ctx, L, info);
-    const more = clickItems(ctx, L, info);
-    return more.length > 0 ? out.concat(more) : out;
+    return out.concat(clickItems(ctx, L, info), eggDecor(ctx, L, info));
   },
   overlay: (ctx, L, info) => {
     drawPendants(ctx, L, info);
     terraceOverlay(ctx, L, info);
     clickOverlay(ctx, L, info);
+    eggOverlay(ctx, L, info);
   },
   doorOpen: elevatorOpen,
   lighting: {
@@ -68,9 +70,12 @@ export const SKYLINE: Theme = {
   pet: (kind, pose, facing, blink) => skylinePet(kind, pose, facing, blink),
   roomba: () => skylineRoomba(),
   fishTank: skylineFishTank,
-  clickables,
-  click,
+  // The Easter eggs come first: they hide among the loft's own things.
+  clickables: (L) => [...eggClickables(L), ...clickables(L)],
+  click: (id, act) => eggClick(id, act) ?? click(id, act),
+  tick: eggTick,
+  drift: eggDrift,
   labels: LABELS,
-  sounds: { ...SOUNDS, ...CLICK_SOUNDS },
+  sounds: { ...SOUNDS, ...CLICK_SOUNDS, ...EGG_SOUNDS },
   outdoor: skylineOutdoor,
 };
