@@ -363,6 +363,8 @@
   box-shadow: 0 1cqw 0 rgba(0, 0, 0, 0.22);
 }
 .chq-tv-card.big { flex: 1; flex-direction: row; align-items: center; gap: 3cqw; }
+/* Never taller than the screen leaves it (the headline shrinks to fit instead). */
+.chq-tv-card { min-height: 0; overflow: hidden; }
 .chq-ch-tech .chq-tv-card { border-left-color: #ff7a1a; }
 .chq-ch-inbox .chq-tv-card { border-left-color: #a48bff; }
 .chq-tv-card:hover .chq-tv-text { text-decoration: underline; text-underline-offset: 2px; }
@@ -382,16 +384,22 @@
 .chq-tv-tag.tag-started { background: #b3cfff; }
 .chq-tv-tag.tag-left { background: #d9ccff; }
 .chq-tv-tag.tag-today { background: #ff9fd0; }
+/* The headline shrinks to fit its card (FitText); only when it can't, "…". */
 .chq-tv-text {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 100%;
   font-size: 5.4cqw;
   font-weight: 800;
   line-height: 1.18;
   overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.chq-tv-text.is-clamped {
   display: -webkit-box;
-  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
 }
-.chq-tv-card.big .chq-tv-text { font-size: 6cqw; -webkit-line-clamp: 3; }
+.chq-tv-card.big .chq-tv-text { font-size: 6cqw; }
 .chq-tv-time { font-size: 3.2cqw; color: #5b6b86; }
 .chq-tv-rank {
   flex: none;
@@ -511,6 +519,31 @@
 @keyframes chq-static {
   50% { background-position: 3px 2px, -2px 1px, 0 0; }
 }
+/* Back and forward through the stories, over the ticker's right end. */
+.chq-tv-nav {
+  position: absolute;
+  right: 1cqw;
+  bottom: 0.8cqh;
+  display: flex;
+  gap: 0.8cqw;
+  z-index: 2;
+}
+.chq-tv-nav button {
+  display: grid;
+  place-items: center;
+  width: max(14px, 7cqw);
+  height: max(12px, 11cqh);
+  padding: 0;
+  border: 0;
+  border-radius: 0.8cqw;
+  background: rgba(8, 12, 28, 0.9);
+  color: #fff4c2;
+  font: 900 max(11px, 6cqw) / 1 var(--chq-mono);
+  cursor: pointer;
+  opacity: 0.75;
+}
+.chq-tv-nav button:hover,
+.chq-tv-nav button:focus-visible { opacity: 1; background: #1d2a4a; }
 .chq-tv-ch {
   position: absolute;
   right: 1.5cqw;

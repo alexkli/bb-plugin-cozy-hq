@@ -2,7 +2,7 @@
 // HTML overlays sit on top of it (TV text, usage notes, sound controls,
 // tooltips, the sticky-note legend).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { InboxItem, Story, UsageCard, Weather, WeatherKind } from "../contract.ts";
 import { openLine, pickTopic, replyLine, type TalkContext, type Talker } from "./chatter.ts";
@@ -299,6 +299,8 @@ export function OfficeView(input: OfficeProps) {
   const [now, setNow] = useState(() => new Date());
   const [events, setEvents] = useState<OfficeEvent[]>(() => readJson(`${storageKey}:events`, { list: [] as OfficeEvent[] }).list);
   const [tvTick, setTvTick] = useState(0);
+  // Stories you stepped through with the TV's arrows; stepping also restarts its timer.
+  const [tvStep, setTvStep] = useState(0);
   const [channel, setChannel] = useState(0);
   // Developer overrides, set from devtools to preview other times and states:
   // localStorage["<storageKey>:debug"] = '{"hour":13,"rainy":false,"demo":true}'
@@ -779,12 +781,12 @@ export function OfficeView(input: OfficeProps) {
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 15_000);
-    const tv = window.setInterval(() => setTvTick((x) => x + 1), 9_000);
-    return () => {
-      window.clearInterval(id);
-      window.clearInterval(tv);
-    };
+    return () => window.clearInterval(id);
   }, []);
+  useEffect(() => {
+    const tv = window.setInterval(() => setTvTick((x) => x + 1), TV_STORY_MS);
+    return () => window.clearInterval(tv);
+  }, [tvStep]);
 
   // ------------------------------------------------------------ input
   const scale = fit ? fit.s / fit.dpr : 1; // CSS px per native px
@@ -889,6 +891,7 @@ export function OfficeView(input: OfficeProps) {
       case "tv":
         setChannel((c) => c + 1);
         setTvTick(0);
+        setTvStep(0);
         play("channel");
         break;
       case "pinboard":
@@ -1118,6 +1121,7 @@ export function OfficeView(input: OfficeProps) {
                 festival={festival}
                 channel={channel}
                 tick={tvTick}
+                step={tvStep}
                 events={events}
                 counts={counts}
                 news={props.newsEnabled ? props.news : []}
@@ -1127,7 +1131,13 @@ export function OfficeView(input: OfficeProps) {
                   sound.unlock();
                   setChannel((c) => c + 1);
                   setTvTick(0);
+                  setTvStep(0);
                   play("channel");
+                }}
+                onStep={(d) => {
+                  sound.unlock();
+                  setTvStep((x) => x + d);
+                  play("click");
                 }}
                 onOpenUrl={props.onOpenUrl}
                 onOpenThread={props.onOpenThread}
@@ -1603,17 +1613,21 @@ function Tv(props: {
   weatherLine: string;
   labels?: ThemeLabels;
   festival: string | null;
+  /** Stories stepped with the arrows (negative: back). */
+  step: number;
   onNext: () => void;
+  onStep: (delta: number) => void;
   onOpenUrl: (url: string) => void;
   onOpenThread: (id: string) => void;
 }) {
   const channels: Channel[] = ["hq", "office"];
   if (props.news.length > 0) channels.push("tech");
   if (props.inbox.enabled && props.inbox.available && props.inbox.items.length > 0) channels.push("inbox");
-  // Auto-flip channels every few items; clicks move to the next one.
-  const auto = Math.floor(props.tick / 4);
+  // Auto-flip channels every few stories; clicks move to the next one. The
+  // arrows step through the stories (without flipping the channel).
+  const auto = Math.floor(props.tick / TV_STORIES);
   const ch = channels[(props.channel + auto) % channels.length]!;
-  const item = props.tick % 4;
+  const item = mod((props.tick % TV_STORIES) + props.step, 1_000_000);
   const [static_, setStatic] = useState(false);
   const key = `${ch}-${props.channel}`;
   useEffect(() => {
@@ -1657,7 +1671,7 @@ function Tv(props: {
             }}
           >
             <span className={`chq-tv-tag tag-${special ? "today" : (e?.kind ?? "live")}`}>{headline.tag}</span>
-            <span className="chq-tv-text">{headline.text}</span>
+            <FitText text={headline.text} />
             {e ? (
               <span className="chq-tv-time">
                 {ago(Date.now() - e.at)}
@@ -1705,7 +1719,7 @@ function Tv(props: {
       </>
     );
   } else if (ch === "tech") {
-    const s = props.news[(props.tick + props.channel) % props.news.length]!;
+    const s = props.news[mod(props.tick + props.channel + props.step, props.news.length)]!;
     const rank = props.news.indexOf(s) + 1;
     // Feeds have no points: their badge says how fresh the headline is.
     const age = s.at === null ? null : ago(Date.now() - s.at);
@@ -1731,7 +1745,7 @@ function Tv(props: {
           }}
         >
           <span className="chq-tv-rank">{rank}</span>
-          <span className="chq-tv-text">{s.title}</span>
+          <FitText text={s.title} />
         </button>
         <div className="chq-tv-ticker">
           <i>{badge}</i>
@@ -1741,7 +1755,7 @@ function Tv(props: {
     );
   } else {
     const items = props.inbox.items;
-    const it = items[(props.tick + props.channel) % items.length]!;
+    const it = items[mod(props.tick + props.channel + props.step, items.length)]!;
     body = (
       <>
         {top("INBOX", "inbox", <span className={`chq-tv-src src-${it.source}`}>{SOURCE_LABEL[it.source] ?? it.source.toUpperCase()}</span>)}
@@ -1753,10 +1767,7 @@ function Tv(props: {
             props.onOpenUrl(it.url);
           }}
         >
-          <span className="chq-tv-text">
-            {it.unread ? <b className="chq-unread">● </b> : null}
-            {it.title}
-          </span>
+          <FitText text={it.title} lead={it.unread ? <b className="chq-unread">● </b> : null} />
         </button>
         <div className="chq-tv-ticker">
           <i>{it.author ?? "NEW"}</i>
@@ -1779,7 +1790,74 @@ function Tv(props: {
       <div className="chq-tv-ch">
         CH{channels.indexOf(ch) + 1}/{channels.length}
       </div>
+      {ch === "office" ? null : (
+        <div className="chq-tv-nav">
+          {([[-1, "‹", "Previous story"], [1, "›", "Next story"]] as const).map(([d, glyph, label]) => (
+            <button
+              key={d}
+              type="button"
+              aria-label={label}
+              title={label}
+              onClick={(ev) => {
+                ev.stopPropagation();
+                props.onStep(d);
+              }}
+            >
+              {glyph}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+/** How long a TV story stays up, and how many before the TV flips to the next channel. */
+const TV_STORY_MS = 16_000;
+const TV_STORIES = 4;
+/** The smallest a headline shrinks to fit, in CSS px; below that it's cut short with "…". */
+const TV_MIN_TEXT_PX = 9;
+
+const mod = (n: number, m: number) => ((n % m) + m) % m;
+
+/**
+ * A headline that shrinks until it fits its card, so a big TV shows all of
+ * it; when even the smallest readable size won't do, it's clamped with "…".
+ */
+function FitText(props: { text: string; lead?: ReactNode }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [box, setBox] = useState("");
+  useEffect(() => {
+    const el = ref.current?.parentElement;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setBox(`${el.clientWidth}x${el.clientHeight}`));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.fontSize = "";
+    el.style.webkitLineClamp = "";
+    el.classList.remove("is-clamped");
+    const base = parseFloat(getComputedStyle(el).fontSize);
+    const over = () => el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+    let px = base;
+    while (over() && px * 0.92 >= TV_MIN_TEXT_PX) {
+      px *= 0.92;
+      el.style.fontSize = `${px}px`;
+    }
+    if (over()) {
+      const line = parseFloat(getComputedStyle(el).lineHeight) || px * 1.18;
+      el.classList.add("is-clamped");
+      el.style.webkitLineClamp = String(Math.max(1, Math.floor(el.clientHeight / line)));
+    }
+  }, [props.text, box]);
+  return (
+    <span ref={ref} className="chq-tv-text">
+      {props.lead}
+      {props.text}
+    </span>
   );
 }
 
