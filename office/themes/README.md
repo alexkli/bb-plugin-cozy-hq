@@ -110,6 +110,12 @@ wrong). Return null for a size you don't handle to use the classic plan, but
 aim to cover wide panels (from 600×300) and the phone held upright (from
 340×600, `portrait`).
 
+A wide panel's scene is usually exactly 600 px wide (the panel only rounds to
+whole device pixels per pixel when that's close). If your plan needs more
+room, say a building plus a piazza beside it, ask for it with `minSize: { w,
+h }` and the panel zooms out a little to give it (the Coffee Shop asks for
+720×470, the Mountain Cabin for 700×470).
+
 **How people move.** Hallways (`net.halls`, y values) run the full width
 and aisles (`net.aisles`, x values) the full height; people walk along them
 between places, cutting corners a little. Every spot's `path` starts on a

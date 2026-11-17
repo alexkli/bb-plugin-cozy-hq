@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Lighter on your computer**: the office takes about half the CPU it did.
+  - The TV's ticker, glare and blinking LIVE no longer repaint the page at the display's 60–120 Hz; they move along with the office.
+  - Sprites and the scene are drawn on the CPU (hundreds of tiny blits a frame were hundreds of GPU draw calls), and only the canvas on the page uses the GPU.
+  - The office draws 24 times a second (was 30) and not at all while the panel is off screen; night lighting is redrawn 10 times a second; the buddy draws 15 times a second and only when it changed.
+  - At whole device pixels per pixel the page canvas stays at scene size instead of a copy four times bigger.
+- **Hidden easter eggs** in every scenery, two or three each, specific to the place. They aren't outlined when you hold Alt, and each happens on its own now and then.
+- **The TV**: a headline shrinks to fit its card instead of being cut off after three lines; a story stays up for 16 s (was 9); small ‹ › buttons step back and forth through the stories.
+- **Coffee Shop**: the piazza with its fountain and the terrace now show at every panel size, not only some (the café was laid out 600 px wide on most panels). Tall piazzas get lawn beds and a little bubbling pool; on a big panel the tables are checkerboarded with groups of plants in the gaps.
+- **Mountain Cabin**: a chairlift up the mountainside to ride (or to watch stop and swing, or carry a dog, or rarely a yeti), and now and then someone skis or snowboards down the piste: carving, over the kicker, or into the powder.
+- **Spaceship**: the viewscreen is rectangular again (the curve cut off captions and hails).
+- For scenery authors: `minSize: { w, h }` asks for a bigger scene on wide panels; offscreen canvases should use `ctx2d()` from `office/pixel.ts`.
 - Five new sceneries, each with its own floor plan, pets, visitors, words, sounds and things to click:
   - **Startup House**: a suburban ranch house turned founders' office, with a garage server room and a backyard pool, grill and hammock.
   - **Mountain Cabin**: a timber lodge above the treeline, with a fieldstone fireplace, a sun deck and sauna, peaks, a chairlift and skiers.

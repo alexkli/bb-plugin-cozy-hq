@@ -101,12 +101,16 @@ meetings, lunch, events, gags) stay the same:
 | 🗄️ Dusty Annex | Patchwork rooms off creaky corridors and stairs, an old hall with a stage, storerooms of junk; an old terrier and an alley cat |
 | 🏫 School | Classrooms off a corridor, the cafeteria, the principal's office, and a schoolyard with a field, swings and a bus stop; a reading dog and the class bunny |
 | 🏠 Startup House | A suburban ranch house turned founders' office: desks on the living-room carpet, an energy-drink pyramid, servers in the garage, a slightly green pool and a hammock out back; a bulldog and a backyard hen |
-| 🏔️ Mountain Cabin | A timber lodge above the treeline: a fieldstone fireplace, a mudroom, a sun deck with a sauna, snowy peaks, a chairlift and skiers through the windows; a mountain dog and a marmot |
+| 🏔️ Mountain Cabin | A timber lodge above the treeline: a fieldstone fireplace, a mudroom, a sun deck with a sauna, and outside on the rugged mountainside a chairlift you can ride and a piste for the odd skier or snowboarder; a mountain dog and a marmot |
 | 🌋 Villain's Lair | A secret base inside a volcano: a control room under a blinking world map, a countdown to the next coffee, a shark tank, a big red button and a monorail over the lava; a robot hound and a white cat |
 | 🚀 Spaceship | A deck on a long-haul starship: a grand bridge with your captain's chair under a huge viewscreen, crew stations, a galley with a food synthesizer, hydroponics, an engine core and an airlock; the crew in space suits; a robot dog and a fluffy critter |
-| ☕ Coffee Shop | A little brick café with a striped awning and a terrace of bistro tables: laptops at small round tables and a wall counter, baristas at the espresso bar with the server corner behind it, your wingback on a round rug, and an upstairs with the fireside sofa, the reserved table and an open-mic stage; a café dog and a shop cat |
+| ☕ Coffee Shop | A little brick café with a striped awning, a terrace of bistro tables and a piazza with a fountain and lawns beside it: laptops at small round tables (checkerboarded with groups of plants on a big panel) and a wall counter, baristas at the espresso bar with the server corner behind it, your wingback on a round rug, and an upstairs with the fireside sofa, the reserved table and an open-mic stage; a café dog and a shop cat |
 
 Your pick is kept per browser; the buddy dresses to match.
+
+Every scenery also hides a few easter eggs of its own: small things that
+aren't outlined when you hold Alt. Click around to find them, or just wait:
+each one happens on its own now and then.
 
 ## What else is going on
 
@@ -115,7 +119,8 @@ Your pick is kept per browser; the buddy dresses to match.
   clock (hover for the time) and a big TV: HQ news with live head counts, the
   office weather and clock, tech headlines (Hacker News, or another source you
   pick) and your Work Dashboard inbox, if you use that plugin. Click the TV to
-  switch channels.
+  switch channels; the small ‹ › buttons step through the stories. A long
+  headline shrinks to fit, so a big TV shows all of it.
 - **A small server room** with blinking racks and a glowing AI cluster (click
   it to train a model, and someone idle wanders over to have a look). Now and
   then someone messes with the cables, gets a (harmless) shock, lies on the
