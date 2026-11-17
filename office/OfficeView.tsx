@@ -14,6 +14,7 @@ import { SAMPLE_WEATHER, sampleNews, sampleRecap, sampleThreads, sampleUsage } f
 import {
   ago,
   assignSpots,
+  updateHomeDesks,
   diffEvents,
   deskStyleFor,
   moodLabel,
@@ -494,17 +495,17 @@ export function OfficeView(input: OfficeProps) {
       const { spots, overflow: over } = assignSpots(visible, world.allSpots(), previous, homeDesks.current, Date.now(), {
         event: world.eventActive,
       });
-      let desksChanged = false;
-      for (const [id, spot] of spots) {
-        // In a plan of separate homes, the desk of the home they're in: they come back to it.
+      // Their home desk: where they come back to each time they work. In a plan
+      // of separate homes, the desk of the home they're in.
+      const deskOf = (spot: string): number | null => {
         const home = L.homes ? L.byId.get(spot)?.home : undefined;
-        if (!spot.startsWith("desk-") && home === undefined) continue;
-        const index = home !== undefined ? L.homes![home]!.desk : Number(spot.slice(5));
-        if (homeDesks.current.get(id) !== index) {
-          homeDesks.current.set(id, index);
-          desksChanged = true;
-        }
-      }
+        if (home !== undefined) return L.homes![home]!.desk;
+        return spot.startsWith("desk-") ? Number(spot.slice(5)) : null;
+      };
+      const desksChanged = updateHomeDesks(homeDesks.current, visible, spots, deskOf, (i) => L.byId.has(`desk-${i}`), Date.now(), {
+        event: world.eventActive,
+        always: L.homes !== undefined,
+      });
       if (desksChanged) {
         const live = new Set(visible.map((t) => t.id));
         writeJson(`${storageKey}:desks`, Object.fromEntries([...homeDesks.current].filter(([id]) => live.has(id)).slice(-80)));

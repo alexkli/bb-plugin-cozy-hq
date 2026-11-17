@@ -250,16 +250,27 @@ export function assignSpots(
       spots.set(t.id, homeId);
     } else rest.push(t);
   }
-  // Pass 3: first free spot in the wanted area, or a fallback.
+  // Desks that are someone's home: kept free for them while others are free.
+  const homesOf = new Map<string, string>();
+  for (const t of sorted) {
+    const home = homeDesks.get(t.id);
+    if (home !== undefined && !homesOf.has(`desk-${home}`)) homesOf.set(`desk-${home}`, t.id);
+  }
+  // Pass 3: a free spot in the wanted area, or a fallback. A desk is picked at
+  // random across all the work rooms (it becomes their home desk), others' homes last.
   for (const t of rest) {
     let pick: Spot | undefined;
     const want = wantedGroup(t, now, event);
     for (const group of FALLBACK[want]) {
-      const free = layoutSpots.filter((s) => s.group === group && !taken.has(s.id));
+      let free = layoutSpots.filter((s) => s.group === group && !taken.has(s.id));
       // Extra plans to review wait at the table, leaving the whiteboard to the planners.
       if (want === "present" && group === "meeting") free.sort((a, b) => Number(b.kind === "meeting-seat") - Number(a.kind === "meeting-seat"));
+      if (group === "desk") {
+        const unclaimed = free.filter((s) => (homesOf.get(s.id) ?? t.id) === t.id);
+        if (unclaimed.length > 0) free = unclaimed;
+      }
       if (free.length > 0) {
-        pick = ORDERED.has(group) ? free[0] : free[seeded(t.id) % free.length];
+        pick = ORDERED.has(group) && group !== "desk" ? free[0] : free[seeded(t.id) % free.length];
         break;
       }
     }
@@ -338,6 +349,45 @@ function assignHomes(
     spots.set(t.id, pick.id);
   }
   return { spots, overflow };
+}
+
+/**
+ * Note the home desks of threads at work (in place): a thread's home desk is
+ * the first one it works at, and it stays its home when it has to sit
+ * elsewhere for a while because someone else is at it. It moves only when it
+ * is gone from the floor plan or another thread has it as its home too.
+ * `deskOf` gives a spot's desk number (null for spots that aren't desks).
+ * True when anything changed.
+ */
+export function updateHomeDesks(
+  homeDesks: Map<string, number>,
+  threads: readonly ThreadLike[],
+  spots: ReadonlyMap<string, string>,
+  deskOf: (spotId: string) => number | null,
+  hasDesk: (index: number) => boolean,
+  now: number,
+  opts: { event?: boolean; always?: boolean } = {},
+): boolean {
+  const owners = new Map<number, number>();
+  for (const [, d] of homeDesks) owners.set(d, (owners.get(d) ?? 0) + 1);
+  let changed = false;
+  for (const t of visibleThreads(threads).sort(byPriority)) {
+    const spot = spots.get(t.id);
+    const desk = spot === undefined ? null : deskOf(spot);
+    if (desk === null) continue;
+    // Only desks they work at (in a plan of separate homes, wherever they are at home).
+    if (!opts.always && wantedGroup(t, now, opts.event === true) !== "desk") continue;
+    const home = homeDesks.get(t.id);
+    if (home === desk) continue;
+    if (home !== undefined && hasDesk(home) && (owners.get(home) ?? 0) <= 1) continue;
+    // Someone else's home desk doesn't become theirs.
+    if ((owners.get(desk) ?? 0) > 0) continue;
+    if (home !== undefined) owners.set(home, (owners.get(home) ?? 1) - 1);
+    owners.set(desk, (owners.get(desk) ?? 0) + 1);
+    homeDesks.set(t.id, desk);
+    changed = true;
+  }
+  return changed;
 }
 
 /** Human text for a tooltip line. */

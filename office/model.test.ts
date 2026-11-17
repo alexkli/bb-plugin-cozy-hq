@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assignSpots, deskStyleFor, diffEvents, idleGroup, moodOf, topicOf, waitKindOf, wantedGroup, type ThreadLike } from "./model.ts";
+import { assignSpots, updateHomeDesks, deskStyleFor, diffEvents, idleGroup, moodOf, topicOf, waitKindOf, wantedGroup, type ThreadLike } from "./model.ts";
 import { buildLayout, connect, MIN_H_WIDE, MIN_W_WIDE, PORTRAIT_MIN_H, PORTRAIT_W, type Layout, type Point } from "./layout.ts";
 import { EVENTS, EVENT_KINDS, pickEventKind, planEvent } from "./life.ts";
 import { easterSunday, SEASONS, seasonOf, seasonsOf, thanksgivingDay } from "./seasons.ts";
@@ -99,6 +99,45 @@ test("assignments are stable and home desks are remembered", () => {
   assert.equal(first.spots.get("w2"), "desk-5");
   const second = assignSpots(ts, L.spots, first.spots, new Map(), NOW);
   assert.deepEqual([...second.spots].sort(), [...first.spots].sort());
+});
+
+test("new workers pick desks at random, not the first ones in order", () => {
+  const big = buildLayout(1200, 520, { threads: 16 });
+  const desks = big.spots.filter((s) => s.group === "desk").map((s) => s.id);
+  const ts = Array.from({ length: 4 }, (_, i) => thread(`worker-${i}`, { status: "active" }));
+  const { spots } = assignSpots(ts, big.spots, new Map(), new Map(), NOW);
+  const picked = ts.map((t) => spots.get(t.id)!);
+  assert.equal(new Set(picked).size, 4);
+  for (const id of picked) assert.ok(desks.includes(id));
+  assert.notDeepEqual(picked.sort(), desks.slice(0, 4).sort(), "not just the first four desks");
+});
+
+test("a home desk stays free for its thread while others are free, and stays its home after a detour", () => {
+  const big = buildLayout(1200, 520, { threads: 16 });
+  const desks = big.spots.filter((s) => s.group === "desk");
+  // Lots of newcomers while w1 is away: none of them takes w1's desk.
+  const homes = new Map([["w1", 3]]);
+  const newcomers = Array.from({ length: desks.length - 1 }, (_, i) => thread(`n${i}`, { status: "active" }));
+  const away = assignSpots([thread("w1"), ...newcomers], big.spots, new Map(), homes, NOW);
+  assert.ok(![...away.spots.values()].includes("desk-3"));
+  // Back at work: w1 goes to its desk.
+  const back = assignSpots([thread("w1", { status: "active" })], big.spots, new Map(), homes, NOW);
+  assert.equal(back.spots.get("w1"), "desk-3");
+  // Someone sits at it: w1 works elsewhere for now, but its home doesn't move.
+  const taken = assignSpots([thread("x", { status: "active" }), thread("w1", { status: "active" })], big.spots, new Map([["x", "desk-3"]]), homes, NOW);
+  assert.notEqual(taken.spots.get("w1"), "desk-3");
+  const deskOf = (s: string) => (s.startsWith("desk-") ? Number(s.slice(5)) : null);
+  const has = (i: number) => big.byId.has(`desk-${i}`);
+  updateHomeDesks(homes, [thread("x", { status: "active" }), thread("w1", { status: "active" })], taken.spots, deskOf, has, NOW);
+  assert.equal(homes.get("w1"), 3);
+  // A desk gone from the floor plan: the home moves to where they work now.
+  const moved = new Map([["w1", 999]]);
+  updateHomeDesks(moved, [thread("w1", { status: "active" })], new Map([["w1", "desk-2"]]), deskOf, has, NOW);
+  assert.equal(moved.get("w1"), 2);
+  // Not working (waiting for you at a fallback desk): no new home.
+  const none = new Map<string, number>();
+  updateHomeDesks(none, [thread("r", { status: "idle" })], new Map([["r", "desk-2"]]), deskOf, has, NOW);
+  assert.equal(none.has("r"), false);
 });
 
 test("a full area falls back instead of doubling up", () => {
