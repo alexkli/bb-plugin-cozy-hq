@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-11-16)
+
+Five new places, half the CPU, and secrets in every scenery.
 
 - **Lighter on your computer**: the office takes about half the CPU it did.
   - The TV's ticker, glare and blinking LIVE no longer repaint the page at the display's 60–120 Hz; they move along with the office.
