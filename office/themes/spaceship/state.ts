@@ -49,6 +49,8 @@ export const SHIP = {
   opsAt: NEVER,
   scanAt: NEVER,
   scienceAt: NEVER,
+  /** The boarding-party duel (a rare Easter egg, see duel.ts). */
+  duelAt: NEVER,
   /** Porthole visitors: the next one picked when a porthole is clicked, and those on show per window. */
   nextVisitor: "satellite" as Visitor,
   portholes: new Map<number, { visitor: Visitor; at: number; seen: number }>(),
@@ -91,4 +93,12 @@ export function seatedShows(): void {
     if (w.g.arrivedAt !== null) SHIP[w.show] = w.g.arrivedAt + 0.8;
     if (w.g.arrivedAt !== null || w.g.done) waiting.splice(i, 1);
   }
+}
+
+/** How far up everything is with the gravity off (0..1): a slow rise, a long float, a soft landing. */
+export function floatK(t: number): number {
+  const k = since(SHIP.gravityAt, t, 9);
+  if (k < 0) return 0;
+  const ease = (x: number) => x * x * (3 - 2 * x);
+  return k < 1.5 ? ease(k / 1.5) : k > 7.2 ? ease(Math.max(0, (9 - k) / 1.8)) : 1;
 }

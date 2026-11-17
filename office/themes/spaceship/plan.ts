@@ -74,6 +74,12 @@ export interface ShipPlan {
   panels: Rect[];
   /** The bridge's seats you can click to send someone over: where to sit, how to get there, the hit area. */
   seats: { id: string; kind: "officer" | "helm" | "ops" | "side" | "science" | "tactical"; x: number; y: number; facing: "back"; path: Point[]; rect: Rect }[];
+  /**
+   * The boarding-party duel (a rare Easter egg): where the fight runs (a lane
+   * across the bridge between the helm and your chair, x from x0 to x1), the
+   * door the boarders come in by, and the tiny unlabeled switch that starts it.
+   */
+  duel: { lane: number; x0: number; x1: number; cx: number; door: Point; corner: Point; switch: Rect; loose: boolean } | null;
 }
 
 export function planOf(L: Layout): ShipPlan | null {
@@ -201,6 +207,20 @@ function buildBridge(b: Builder, r: Rect, hallY: number, plan: ShipPlan): Layout
   // The ready room off the port wall, the lift to starboard.
   plan.readyRoom = { x: r.x - 5, y: r.y + 30, w: 10, h: 22 };
   if (size !== "mini") plan.lift = { x: r.x + r.w - 5, y: Math.min(r.y + r.h - 40, desk.y + 4), w: 10, h: 22 };
+  // The boarding-party duel's lane, door and switch (a tiny toggle just right of the red-alert button).
+  const lift = plan.lift;
+  plan.duel = {
+    lane: size === "mini" ? laneM + 2 : laneM - 2,
+    x0: r.x + 30,
+    x1: r.x + r.w - 30,
+    cx,
+    door: lift ? { x: lift.x - 4, y: lift.y + lift.h } : { x: doorX, y: r.y + r.h - 4 },
+    corner: { x: r.x + r.w - 26, y: size === "mini" ? ys + 4 : laneM + 16 },
+    // On a grand bridge, a toggle on the side of the starboard rear-deck panel; else a loose floor panel in the corner.
+    switch: size === "grand" ? { x: cx + 47, y: desk.y + 25, w: 4, h: 5 } : { x: r.x + r.w - 46, y: r.y + r.h - 20, w: 8, h: 5 },
+    loose: size !== "grand",
+  };
+  keep.push({ x: plan.duel.switch.x - 2, y: plan.duel.switch.y - 2, w: plan.duel.switch.w + 4, h: plan.duel.switch.h + 4 });
   // The light column, the dog's charging pad.
   const lampX = size === "grand" ? r.x + r.w - 22 : r.x + r.w - 20;
   const lampY = size === "grand" ? r.y + r.h - 64 : r.y + 4;
@@ -588,6 +608,7 @@ function widePlan(W: number, H: number, threads: number): Layout {
     ramps: [],
     panels: [],
     seats: [],
+    duel: null,
   };
 
   // Aft: crew quarters over the engine room above the corridor, the cargo bay below it.
@@ -834,6 +855,7 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
     ramps: [],
     panels: [],
     seats: [],
+    duel: null,
   };
   let kitchen: Rect | null = null;
   let lounge: Rect | null = null;

@@ -13,7 +13,8 @@ import { Grid, OUTLINE, cached, drawPixelText, hash, mix, pixelTextWidth, shade 
 import { P, done, fill, hazard, panel } from "./pal.ts";
 import { planOf, type ShipPlan } from "./plan.ts";
 import { drawHail, hullSpace, phenomenon, portholeView, screenPath, systemOf, viewscreen } from "./space.ts";
-import { SHIP, chairView, since, type Visitor, seatedShows } from "./state.ts";
+import { duelDecor, duelDoor, duelLights, duelOverlay, duelPose, duelWatch } from "./duel.ts";
+import { SHIP, chairView, floatK, since, type Visitor, seatedShows } from "./state.ts";
 
 let deckW = 666;
 
@@ -350,13 +351,6 @@ function bridgeConsole(ctx: CanvasRenderingContext2D, plan: ShipPlan, t: number)
   }
 }
 
-/** How far up everything is with the gravity off (0..1): a slow rise, a long float, a soft landing. */
-export function floatK(t: number): number {
-  const k = since(SHIP.gravityAt, t, 9);
-  if (k < 0) return 0;
-  const ease = (x: number) => x * x * (3 - 2 * x);
-  return k < 1.5 ? ease(k / 1.5) : k > 7.2 ? ease(Math.max(0, (9 - k) / 1.8)) : 1;
-}
 
 /** Zero-g: everyone (and the pets) floats well up, bobbing slowly, drifting sideways with a little tilt. */
 function drift(who: DriftOf, info: PaintInfo): { dx: number; dy: number; tilt: number } | null {
@@ -512,6 +506,7 @@ function underlay(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): vo
     }
   }
   bridgeConsole(ctx, plan, info.t);
+  duelDoor(ctx, plan, info.t);
   hullSpace(ctx, L.W, L.H, plan.edgeX, plan.edgeY, info.t, info.weather, info.night);
   // The airlock's status light over the hatch: amber while someone's out on a spacewalk.
   const d = L.wall.door;
@@ -553,7 +548,9 @@ function decor(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): Drawa
   // Your chair: facing the bridge, swivelling round to the screen and back.
   const seat = L.boss.seat;
   if (plan.captain) {
-    const view = chairView(t);
+    // (During a boarding-party duel it turns to follow the fight.)
+    const watch = duelWatch(t);
+    const view = watch ? (watch === "left" ? "turnFront" : "turnBack") : chairView(t);
     const sprite = chairSprite(view === "front" ? "front" : view === "back" ? "back" : "side");
     out.push({
       z: view === "back" ? seat.y + 1 : seat.y - 0.5,
@@ -683,6 +680,7 @@ function decor(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): Drawa
       },
     });
   }
+  out.push(...duelDecor(ctx, L, plan, t));
   return out;
 }
 
@@ -831,6 +829,7 @@ function overlay(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo): voi
       drawPixelText(ctx, "RED ALERT", v.x + v.w - 40, v.y + 3, "#ffb0a0");
     }
   }
+  if (plan) duelOverlay(ctx, L, plan, t);
   // An ion storm outside: the lights stutter with the arcs.
   if (phenomenon(info.weather) === "ion") {
     const beat = Math.floor(t * 1.3);
@@ -879,6 +878,7 @@ function lights(L: Layout, info: PaintInfo): Light[] {
   for (const hy of L.net.halls) for (let x = 24; x < L.W; x += 72) out.push([x, hy, 30, 0.5, "#7fe3ff", 0.05]);
   const d = L.wall.door;
   out.push([d.x + d.w + 3, d.y + 3, 10, 0.8, since(SHIP.evaAt, t, 16) >= 0 ? P.amber : P.mint, 0.2]);
+  if (plan) out.push(...duelLights(plan, t));
   return out;
 }
 
@@ -975,6 +975,8 @@ function outdoor(weather: WeatherKind, _night: boolean): string {
  * way round each time.
  */
 function pose(p: PoseOf, info: PaintInfo): { pose: CharPose; expr: Expression; facing?: Facing } | null {
+  const dp = duelPose(p, info.t);
+  if (dp !== undefined) return dp;
   if (p.kind !== "boss" || p.pose === "raise" || p.pose === "cheer") return null;
   const view = chairView(info.t);
   if (view === "front") return null;

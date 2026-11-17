@@ -188,6 +188,9 @@ are bubbles and sounds after they've all arrived, and the returned
 gathering when it returns null (everyone's busy). `act.near` and `act.say`
 are for a quick word from whoever's close. Redwood Camp's campfire, trees
 and creek are an example (`redwoods/clicks.ts`).
+Mark one `secret: true` to leave it for people to find, like the office's
+Easter eggs: it still clicks and shows its hover text, but holding Alt
+doesn't outline it (the Spaceship's boarding-party switch, `spaceship/duel.ts`).
 
 ## Habits
 

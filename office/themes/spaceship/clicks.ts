@@ -7,6 +7,7 @@
 // drawn in live.ts from the state these set (state.ts).
 import type { Layout, Point, Rect } from "../../layout.ts";
 import type { GatherCue, GatherSpot, SceneryActions, SceneryClickable, SoundRecipe, SynthKit, Theme } from "../../theme.ts";
+import { DUEL_SOUND, duelTick, startDuel } from "./duel.ts";
 import { planOf } from "./plan.ts";
 import { CALLER_COUNT, SYSTEMS, systemOf } from "./space.ts";
 import { SHIP, afterSeated, faceScreen, since, type CrateKind, type StationShow, type SynthItem } from "./state.ts";
@@ -132,6 +133,8 @@ function clickables(L: Layout): SceneryClickable[] {
   const add = (id: string, rect: Rect | null, hover: string) => {
     if (rect && rect.w > 0 && rect.h > 0) out.push({ id, rect, hover });
   };
+  // First, so it wins over red alert next to it; left out of the Alt outline (it's for finding).
+  if (plan.duel) out.push({ id: "duel-switch", rect: plan.duel.switch, hover: "A tiny switch. No label.", secret: true });
   add("viewscreen", plan.viewscreen, HOVER.viewscreen);
   add("helm", plan.helm, HOVER.helm);
   add("captain", plan.captain, HOVER.captain);
@@ -382,6 +385,8 @@ function seat(act: SceneryActions, id: string): string | null {
 function click(id: string, act: SceneryActions): string | null {
   if (!planOf(act.L)) return null;
   switch (id) {
+    case "duel-switch":
+      return startDuel(act);
     case "viewscreen":
       return hail(act);
     case "helm":
@@ -440,10 +445,12 @@ export const CLICK_SOUNDS: Record<string, SoundRecipe> = {
     k.swell(0, 0.5, 0.06, 1800, 900, 1);
     k.tone(220, 0.42, 0.06, "sine", 0.03);
   },
+  // The boarding-party duel, start to finish (duel.ts).
+  "ship-duel": DUEL_SOUND,
   "ship-zero-g": (k) => {
     WORDS.sounds?.["ship-gravity-off"]?.(k);
     WORDS.sounds?.["ship-gravity-on"]?.(later(k, 7.6));
   },
 };
 
-export const CLICKS: Pick<Theme, "clickables" | "click"> = { clickables, click };
+export const CLICKS: Pick<Theme, "clickables" | "click" | "tick"> = { clickables, click, tick: duelTick };

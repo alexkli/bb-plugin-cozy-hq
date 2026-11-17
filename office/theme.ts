@@ -52,6 +52,8 @@ export interface SceneryClickable {
   id: string;
   rect: Rect;
   hover: string;
+  /** Left for you to find (an Easter egg): clickable, but not outlined when Alt is held. */
+  secret?: boolean;
 }
 
 /** Where someone stands (or sits) when a scenery asks people over. */

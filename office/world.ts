@@ -1108,7 +1108,7 @@ export class World {
       const area = d.side === "north" ? { x: d.x + 20, y: d.y - 10, w: 22, h: 30 } : { x: d.x + 20, y: d.y + 12, w: 24, h: 32 };
       out.push({ hit: { kind: "desk", index: d.index }, rect: area });
     }
-    for (const c of this.sceneryClickables()) out.push({ hit: { kind: "scenery", id: c.id, hover: c.hover }, rect: c.rect });
+    for (const c of this.sceneryClickables()) out.push({ hit: { kind: "scenery", id: c.id, hover: c.hover }, rect: c.rect, secret: c.secret });
     return out;
   }
 

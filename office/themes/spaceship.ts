@@ -13,6 +13,7 @@
 //   props.ts     furniture; desks.ts the crew stations
 //   people.ts    space suits (station suits, helmets off, helmets on) and visitors; critters.ts the pets, drone and sphere
 //   clicks.ts    things to click; words.ts names and sounds
+//   duel.ts      a rare Easter egg: a boarding party duels on the bridge
 import type { Theme } from "../theme.ts";
 import { BACKGROUND } from "./spaceship/backdrop.ts";
 import { CLICK_SOUNDS, CLICKS } from "./spaceship/clicks.ts";
