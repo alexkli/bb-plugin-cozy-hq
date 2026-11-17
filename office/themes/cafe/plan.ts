@@ -73,7 +73,7 @@ export interface Counter {
 }
 
 /** What someone squeezed in with a laptop sits on. */
-export type NookSeat = "armchair" | "bistro";
+export type NookSeat = "armchair" | "bistro" | "bench";
 
 /** A squeeze-in workplace (a desk-group spot after the real desks): feet position and seat. */
 export interface Nook {
@@ -96,7 +96,12 @@ export interface CafePlan {
   /** The shop's front wall seen from outside (null when the panel's too short): the doors' x. */
   facade: { y: number; h: number; doors: number[] } | null;
   terrace: Rect | null;
+  /** The road along the bottom (two lanes and a crosswalk at the door). */
   street: Rect | null;
+  /** The little piazza beside the café: its paving, the fountain in it, benches (seat feet). */
+  piazza: Rect | null;
+  fountain: { x: number; y: number; rx: number; ry: number } | null;
+  benches: Point[];
   /** The fireplace in the back wall. */
   fireplace: Rect | null;
   /** Chalkboard menus (over the counter). */
@@ -132,7 +137,7 @@ export function planOf(L: Layout): CafePlan | null {
 const HALF = 10; // hallways are 20 px wide
 /** Squeeze-in spot ids start with this (never `desk-`: those are the real desks). */
 export const NOOK = "laptop-";
-const LIFT: Record<NookSeat, number> = { armchair: 3, bistro: 2 };
+const LIFT: Record<NookSeat, number> = { armchair: 3, bistro: 2, bench: 2 };
 
 // ------------------------------------------------------------------ tables
 
@@ -172,21 +177,22 @@ function table(b: Builder, dx: number, py: number, kind: Table["kind"], above: n
   tables.push({ x: dx, y: py, w: 48, kind });
 }
 
-/** How much lower every other table sits (the rows of tables are this much deeper than a desk pair). */
-const STAGGER = 6;
-const BAND = 114 + STAGGER;
+/** Tables sit this far apart (just room between them for a helper and a chair). */
+const PITCH = 54;
+const BAND = 114;
+/** The shop front's height, the road's. */
+const FAC = 32;
+const ROAD = 30;
 
-/** Tables spread along [x0, x1] (at least 12 px apart), round ones mostly, a square one now and then. */
+/** Tables close together along [x0, x1], centered: round ones mostly, a square one now and then, every other one a little lower when there's room. */
 function tablesIn(b: Builder, x0: number, x1: number, py: number, above: number, below: number | null, tables: Table[]): void {
-  const n = Math.floor((x1 - x0 + 12) / 60);
-  if (n <= 0) return;
-  const pitch = n > 1 ? Math.floor((x1 - x0 - 48) / (n - 1)) : 0;
-  const start = n > 1 ? x0 : x0 + Math.floor((x1 - x0 - 48) / 2);
+  if (x1 - x0 < 48) return;
+  const n = Math.floor((x1 - x0 - 48) / PITCH) + 1;
+  const start = x0 + Math.floor((x1 - x0 - 48 - (n - 1) * PITCH) / 2);
   for (let i = 0; i < n; i++) {
-    const dx = start + i * pitch;
-    // Not in rows: every other table sits a little lower, a square one here and there.
+    const dx = start + i * PITCH;
     const kind = hash(`cafe-table-${dx}-${py}`) % 3 === 0 ? "square" : "round";
-    table(b, dx, py + (i % 2) * STAGGER, kind, above, below, tables);
+    table(b, dx, py, kind, above, below, tables);
   }
 }
 
@@ -537,6 +543,63 @@ function terrace(b: Builder, t: Rect, x0: number, x1: number, hall: number, door
   }
 }
 
+/**
+ * The piazza beside the café (wide panels): paving with a stone fountain in
+ * the middle, benches along its edges (squeeze-ins with a laptop) and one by
+ * the fountain, all reached from the terrace's lane (people step onto a
+ * bench from the side). Greens are dressed round them in live.ts.
+ */
+function piazza(b: Builder, P: Rect, lane: number, hall: number, door: number, benches: Point[], pending: Pending[]): CafePlan["fountain"] {
+  const cx = Math.round(P.x + P.w / 2);
+  const rx = Math.max(14, Math.min(24, Math.floor(P.w / 2) - 30));
+  const ry = Math.round(rx * 0.6);
+  const fy = Math.round(P.y + P.h * 0.5);
+  const to = (x: number, col: number, y: number): Point[] => [{ x: door, y: hall, c: true }, { x: door, y: lane }, { x: col, y: lane }, { x: col, y }, { x, y }];
+  // By the fountain: a bench for two watching the water.
+  const by = fy + ry + 26;
+  if (by < lane - 8) {
+    for (const [i, dx] of [-10, 10].entries()) {
+      const x = cx + dx;
+      benches.push({ x, y: by });
+      b.spot({ id: `fountain-${i}`, kind: "bench", group: "lounge", x, y: by, facing: "front", pose: "sit-front", path: [{ x: door, y: hall, c: true }, { x: door, y: lane }, { x, y: lane }, { x, y: by }], activity: "watching the fountain", lift: 2 });
+    }
+  }
+  // Along the edges, every so often: a bench with a laptop on it.
+  const le = P.x + 12;
+  const re = P.x + P.w - 12;
+  for (let y = P.y + 70, k = 0; y <= lane - 22; y += 64, k++) {
+    const x = k % 2 ? re : le;
+    const col = k % 2 ? re - 14 : le + 14;
+    benches.push({ x, y });
+    pending.push({ x, y, seat: "bench", path: to(x, col, y), activity: "working on a bench in the piazza" });
+  }
+  return { x: cx, y: fy, rx, ry };
+}
+
+/**
+ * The phone's strip of piazza under the terrace: the fountain under one of
+ * the terrace's table columns, benches down the gaps between the tables
+ * (people come down those from the terrace's lane).
+ */
+function piazzaStrip(b: Builder, P: Rect, x0: number, x1: number, lane: number, hall: number, door: number, benches: Point[], pending: Pending[]): CafePlan["fountain"] {
+  const first = x0 + 22;
+  const k = Math.round((P.x + P.w / 2 - first) / 62);
+  const cx = first + k * 62;
+  const rx = 22;
+  const ry = 13;
+  const fy = P.y + Math.round(P.h / 2) - 4;
+  const y = P.y + P.h - 8;
+  let n = 0;
+  for (let gx = first + 31; gx + 10 <= x1; gx += 62) {
+    if (Math.abs(gx - cx) < rx + 12 || Math.abs(gx - door) < 16) continue;
+    benches.push({ x: gx, y });
+    const path: Point[] = [{ x: door, y: hall, c: true }, { x: door, y: lane }, { x: gx, y: lane }, { x: gx, y }];
+    if (n++ % 2 === 0) pending.push({ x: gx, y, seat: "bench", path, activity: "working on a bench in the piazza" });
+    else b.spot({ id: `fountain-${n}`, kind: "bench", group: "lounge", x: gx, y, facing: "front", pose: "sit-front", path, activity: "watching the fountain", lift: 2 });
+  }
+  return { x: cx, y: fy, rx, ry };
+}
+
 // ------------------------------------------------------------------ the wall
 
 /** Chalkboard menus hanging between x0 and x1 from `y`, 30–64 px wide. */
@@ -614,14 +677,17 @@ const wanted = (threads: number) => Math.max(8, threads + 2);
 // ------------------------------------------------------------------ wide panels
 
 function wide(W: number, H: number, threads: number): Layout {
-  if (H < 424) return short(W, H);
+  if (H < 410) return short(W, H);
   const b = new Builder();
+  // The building on the left of its lot, the piazza on the right.
   const M = clamp(Math.round(W * 0.03), 10, 36);
+  // (The upstairs needs about 510 px; a narrow panel has no piazza.)
+  const roomFor = W - 2 * M - 12 - 510;
+  const pw = roomFor >= 96 ? clamp(Math.round(W * 0.18), 96, Math.min(150, roomFor)) : 0;
   const x0 = M + 6;
-  const x1 = W - M - 6;
-  const roomy = H >= 470;
-  const wallD = roomy ? 64 : 56;
-  const hU = wallD + (roomy ? 80 : 76);
+  const x1 = pw ? W - pw - 6 : W - M - 6;
+  const wallD = 56;
+  const hU = wallD + 76;
   const edge = hU + HALF;
   const kY = edge + 16;
   const hG1 = kY + 94;
@@ -643,15 +709,15 @@ function wide(W: number, H: number, threads: number): Layout {
   const ax = x1 - 28;
   buildArcade(b, ax, wallD - 10, [{ x: ax + 12, y: hU, c: true }, { x: ax + 12, y: wallD + 48 }]);
   const rest0 = fx + fw + 8;
-  const sw = clamp(Math.round((ax - 8 - rest0) * 0.55), 100, 150);
+  const sw = Math.min(clamp(Math.round((ax - 8 - rest0) * 0.55), 90, 150), ax - 8 - rest0);
   const readX1 = ax - 8 - sw - 8;
-  armchairRow(b, rest0, readX1, wallD + 36, hU, armchairs, pending);
-  const sx0 = readX1 + 8;
+  if (readX1 - rest0 >= 24) armchairRow(b, rest0, readX1, wallD + 36, hU, armchairs, pending);
+  const sx0 = Math.max(rest0, readX1 + 8);
   const stage: Rect = { x: sx0 + 2, y: wallD + 2, w: sw - 4, h: 26 };
   const eventArea: Rect = { x: sx0, y: wallD + 32, w: sw, h: hU - HALF - (wallD + 32) };
 
   // ---- downstairs: the counter along the wall, the stairs, the back of house, the espresso bar
-  const barSeats = clamp(Math.floor((W * 0.36 - x0) / 48), 3, 8);
+  const barSeats = clamp(Math.floor((inner * 0.37) / 48), 2, 8);
   const stairX = x0 + barSeats * 48 + 18;
   wallBar(b, x0, barSeats, kY + 4, hG1, tables);
   const { server, roaster } = backOfHouse(b, { x: stairX + 14, y: kY + 4, w: 72, h: 62 }, stairX);
@@ -667,10 +733,10 @@ function wide(W: number, H: number, threads: number): Layout {
   const halls = [hU, hG1];
   let hall = hG1;
   // Your corner, with room for the putting strip beside your guests.
-  const bossW = 230;
+  const bossW = 200;
   const bossR: Rect = { x: x1 - bossW, y: hG1 + 12, w: bossW, h: 92 };
   const boss = buildArmchair(b, bossR, hG1);
-  for (let row = 0; row === 0 || (b.desks.length < wanted(threads) && hall + BAND + 12 + 40 + 60 <= H); row++) {
+  for (let row = 0; row === 0 || (b.desks.length < wanted(threads) && hall + BAND + 12 + FAC + 30 + ROAD + 4 <= H); row++) {
     const py = hall + 22;
     const below = hall + BAND;
     tablesIn(b, x0, stairX - 14, py, hall, below, tables);
@@ -679,14 +745,27 @@ function wide(W: number, H: number, threads: number): Layout {
     halls.push(hall);
   }
 
-  // ---- the shop's front, the terrace, the street
+  // ---- the shop's front, the terrace, the piazza beside it, the road
   const fy = hall + 12;
   const doors = [stairX, stairX + Math.round((x1 - stairX) / 2)];
-  const facade = { y: fy, h: 40, doors };
-  const tY = fy + 40;
+  const facade = { y: fy, h: FAC, doors };
+  const tY = fy + FAC;
+  const road: Rect | null = H - tY >= ROAD + 4 ? { x: 0, y: H - ROAD, w: W, h: ROAD } : null;
+  const tEnd = (road ? road.y : H) - 4;
   const bistro: CafePlan["bistro"] = [];
-  const terraceR: Rect | null = H - 8 - tY >= 24 ? { x: 0, y: tY, w: W, h: H - 8 - tY } : null;
-  if (terraceR) terrace(b, terraceR, x0, x1, hall, doors, bistro, pending);
+  const benches: Point[] = [];
+  // No room beside the café (a narrow panel): a strip of piazza under the terrace instead, when it's tall.
+  const strip = !pw && tEnd - tY >= 66 + 56;
+  const terraceR: Rect | null = tEnd - tY >= 22 ? { x: 0, y: tY, w: W, h: strip ? 66 : tEnd - tY } : null;
+  let piazzaR: Rect | null = pw ? { x: x1 + 6, y: 0, w: W - (x1 + 6), h: terraceR ? tY : (road ? road.y : H) } : null;
+  let fountain: CafePlan["fountain"] = null;
+  if (terraceR) terrace(b, terraceR, x0, pw ? W - 12 : x1, hall, doors, bistro, pending);
+  if (piazzaR) {
+    fountain = terraceR ? piazza(b, piazzaR, tY + 6, hall, doors[1]!, benches, pending) : { x: Math.round(piazzaR.x + piazzaR.w / 2), y: Math.round(piazzaR.h * 0.5), rx: 22, ry: 13 };
+  } else if (strip && terraceR) {
+    piazzaR = { x: 0, y: tY + 66, w: W, h: tEnd - (tY + 66) };
+    fountain = piazzaStrip(b, piazzaR, x0, x1, tY + 6, hall, stairX, benches, pending);
+  }
   const nooks = addNooks(b, pending);
 
   const net: Network = { halls, aisles: [stairX] };
@@ -706,7 +785,7 @@ function wide(W: number, H: number, threads: number): Layout {
     lamp: boss.lamp,
     wallTv,
   });
-  const pw = clamp(sw - 30, 64, 100);
+  const pinW = clamp(sw - 30, 64, 100);
   return done(
     L,
     {
@@ -716,7 +795,10 @@ function wide(W: number, H: number, threads: number): Layout {
       stairs: { x: stairX, y0: hU, y1: kY + 6 },
       facade,
       terrace: terraceR,
-      street: terraceR ? { x: 0, y: H - 8, w: W, h: 8 } : null,
+      street: road,
+      piazza: piazzaR,
+      fountain,
+      benches,
       fireplace,
       menus: menuBoards(kx + 40, kx + kw - 12, edge - 2, 26),
       tables,
@@ -736,11 +818,11 @@ function wide(W: number, H: number, threads: number): Layout {
       ],
     },
     {
-      pin: { x: sx0 + 2, y: 4, w: pw, h: Math.min(50, wallD - 14) },
+      pin: { x: sx0 + 2, y: 4, w: pinW, h: Math.min(50, wallD - 14) },
       clock: { x: ax + 12, y: 16 },
       windows: [...windowsIn(x0 + 6 + clamp(rw - 134, 56, 72) + 12, x0 + rw - 4, wallD), ...windowsIn(rest0 + 2, readX1 - 2, wallD)],
-      door: { x: stairX - 10, y: fy + 6, w: 20, h: 34 },
-      entrance: { x: stairX, y: Math.min(H - 2, fy + 46) },
+      door: { x: stairX - 10, y: fy + 4, w: 20, h: FAC - 4 },
+      entrance: { x: stairX, y: Math.min(H - 2, fy + FAC + 6) },
       hall,
     },
   );
@@ -804,6 +886,9 @@ function short(W: number, H: number): Layout {
       facade: null,
       terrace: null,
       street: null,
+      piazza: null,
+      fountain: null,
+      benches: [],
       fireplace,
       menus: menuBoards(kx + 36, x1 - 34, 6, 24),
       tables,
@@ -876,7 +961,7 @@ function portrait(W: number, H: number, threads: number): Layout {
   const halls = [hU, hG1];
   let hall = hG1;
   const lastH = 122;
-  for (let row = 0; row === 0 || (b.desks.length < wanted(threads) && hall + BAND + lastH + 40 + 40 <= H - 4); row++) {
+  for (let row = 0; row === 0 || (b.desks.length < wanted(threads) && hall + BAND + lastH + FAC + 30 + ROAD <= H - 4); row++) {
     const below = hall + BAND;
     tablesIn(b, x0, cr, hall + 22, hall, below, tables);
     hall = below;
@@ -887,14 +972,29 @@ function portrait(W: number, H: number, threads: number): Layout {
   const reserved: Rect = { x: x0 + 168, y: hall + 10, w: cr - x0 - 168, h: 108 };
   const whiteboard = buildReserved(b, reserved, { hallY: hall, aisleX: reserved.x + reserved.w - 4 });
 
-  // ---- the shop's front and the terrace, when there's room
+  // ---- the shop's front, the terrace, a strip of piazza with the fountain, the road, as far as there's room
   const fy = hall + lastH;
-  const front = H - fy >= 40;
-  const facade = front ? { y: fy, h: 40, doors: [stairX] } : null;
-  const tY = fy + 40;
+  const front = H - fy >= FAC;
+  const facade = front ? { y: fy, h: FAC, doors: [stairX] } : null;
+  const tY = fy + FAC;
+  const room = H - tY;
   const bistro: CafePlan["bistro"] = [];
-  const terraceR: Rect | null = front && H - 8 - tY >= 24 ? { x: 0, y: tY, w: W, h: H - 8 - tY } : null;
-  if (terraceR) terrace(b, terraceR, x0, x1, hall, [stairX], bistro, pending);
+  const benches: Point[] = [];
+  let terraceR: Rect | null = null;
+  let road: Rect | null = null;
+  let piazzaR: Rect | null = null;
+  let fountain: CafePlan["fountain"] = null;
+  if (front && room >= 24) {
+    const tH = room >= 30 + ROAD ? 30 : room;
+    terraceR = { x: 0, y: tY, w: W, h: tH };
+    terrace(b, terraceR, x0, x1, hall, [stairX], bistro, pending);
+    if (room - tH >= ROAD) road = { x: 0, y: H - ROAD, w: W, h: ROAD };
+    const pzH = (road ? road.y : H) - (tY + tH);
+    if (pzH >= 56) {
+      piazzaR = { x: 0, y: tY + tH, w: W, h: pzH };
+      fountain = piazzaStrip(b, piazzaR, x0, x1, tY + 6, hall, stairX, benches, pending);
+    }
+  }
   const nooks = addNooks(b, pending);
 
   const net: Network = { halls, aisles: [stairX] };
@@ -923,7 +1023,10 @@ function portrait(W: number, H: number, threads: number): Layout {
       stairs: { x: stairX, y0: hU, y1: kY + 6 },
       facade,
       terrace: terraceR,
-      street: terraceR ? { x: 0, y: H - 8, w: W, h: 8 } : null,
+      street: road,
+      piazza: piazzaR,
+      fountain,
+      benches,
       fireplace,
       menus: menuBoards(K.x + 40, K.x + K.w - 10, edge - 2, 26),
       tables,
@@ -946,8 +1049,8 @@ function portrait(W: number, H: number, threads: number): Layout {
       pin: { x: pinX, y: 4, w: Math.max(40, Math.min(64, cr - pinX - 26)), h: Math.min(50, wallD - 14) },
       clock: { x: ax + 12, y: 16 },
       windows: [],
-      door: front ? { x: stairX - 10, y: fy + 6, w: 20, h: 34 } : { x: stairX - 10, y: wallD - 42, w: 20, h: 42 },
-      entrance: front ? { x: stairX, y: Math.min(H - 2, fy + 46) } : { x: stairX, y: wallD + 2 },
+      door: front ? { x: stairX - 10, y: fy + 4, w: 20, h: FAC - 4 } : { x: stairX - 10, y: wallD - 42, w: 20, h: 42 },
+      entrance: front ? { x: stairX, y: Math.min(H - 2, fy + FAC + 6) } : { x: stairX, y: wallD + 2 },
       hall: front ? hall : hU,
     },
   );

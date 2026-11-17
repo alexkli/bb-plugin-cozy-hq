@@ -40,6 +40,7 @@ const HOVER = {
   fire: "The fireplace · put another log on",
   roaster: "The roaster · small batches, big smells",
   cups: "The pickup · whose flat white is this?",
+  fountain: "The fountain · toss a coin and make a wish",
 };
 
 const SPECIALS = ["MAPLE OAT LATTE", "CARDAMOM BUN", "SMOKED CHAI", "HONEY LAVENDER", "FIG AND RYE", "BROWN BUTTER MOCHA", "ORANGE CORTADO", "PEAR TART", "SESAME LATTE", "COLD BREW TONIC", "DATE SCONE", "MINT MOCHA"];
@@ -58,6 +59,9 @@ const LINES = {
   fireAlone: ["Nice and toasty.", "That's the stuff.", "Crackle crackle."],
   roast: ["Smells amazing.", "First crack!", "Is that the new single origin?", "I could live in this smell."],
   cups: ["That's mine!", "Oh, that's me.", "Ooh, a swan."],
+  wish: ["Make a wish!", "I wished for a green build.", "No more merge conflicts, please.", "Can't tell. It won't come true."],
+  boat: ["Ahoy!", "She floats!", "Full steam ahead.", "Fold, sail, ship."],
+  pigeon: ["Bath time.", "Hey, that's for wishes!", "Someone's having fun."],
   abstract: ["It's… abstract.", "Is that a cat?", "Bold choice."],
 };
 
@@ -65,6 +69,13 @@ const LINES = {
 
 /** Click-only sounds: a guitar strum, a ukulele, finger snaps, mic feedback, a log on the fire, beans pouring, first crack. */
 export const CLICK_SOUNDS: Record<string, SoundRecipe> = {
+  "cafe-splash": (k) => {
+    // Wings, then splashing in the water.
+    k.noise(0, 0.15, 0.05, 2400);
+    k.noise(0.4, 0.3, 0.05, 1800);
+    k.noise(0.8, 0.25, 0.04, 2600);
+    k.tone(1400, 0.45, 0.05, "sine", 0.02, 900);
+  },
   "cafe-strum": (k) => {
     // A G chord strummed down, then up.
     const chord = [98, 123, 147, 196, 247, 392];
@@ -113,6 +124,7 @@ let show: { kind: "folk" | "poetry" | "uke" | "squeal"; t0: number; g?: Gatherin
 let fire: { t0: number; g?: Gathering } | null = null;
 let roast: { t0: number } | null = null;
 let latte: { t0: number; art: Art; name: string } | null = null;
+let splash: { kind: "wish" | "boat" | "pigeon"; t0: number; g?: Gathering | null } | null = null;
 
 type Art = "heart" | "rosetta" | "tulip" | "swan" | "abstract";
 
@@ -126,6 +138,7 @@ function bind(L: Layout): void {
   fire = null;
   roast = null;
   latte = null;
+  splash = null;
   // The special keeps across layouts (resizes); a fresh office picks today's.
   if (menu.special < 0) menu = { special: new Date().getDate() % SPECIALS.length, prev: -1, t0: -99 };
 }
@@ -172,6 +185,8 @@ export function cafeClickables(L: Layout): SceneryClickable[] {
   if (plan.stage) add("stage", { x: plan.stage.x, y: plan.stage.y - 18, w: plan.stage.w, h: plan.stage.h + 18 });
   if (plan.fireplace) add("fire", fireOf(plan.fireplace));
   if (plan.roaster) add("roaster", roasterRect(plan.roaster));
+  const f = plan.fountain;
+  if (f && plan.terrace) add("fountain", { x: f.x - f.rx - 2, y: f.y - f.ry - 24, w: f.rx * 2 + 4, h: f.ry * 2 + 26 });
   return out;
 }
 
@@ -196,6 +211,8 @@ export function click(id: string, act: SceneryActions): string | null {
       return clickRoaster(act, plan);
     case "cups":
       return clickCups(act, plan);
+    case "fountain":
+      return clickFountain(act, plan);
     default:
       return null;
   }
@@ -394,6 +411,40 @@ function clickRoaster(act: SceneryActions, plan: CafePlan): string | null {
   return "cafe-crack";
 }
 
+/**
+ * The fountain: someone comes over to toss a coin in and make a wish, or to
+ * sail a paper boat round the basin; or a pigeon drops in for a bath.
+ */
+function clickFountain(act: SceneryActions, plan: CafePlan): string | null {
+  const f = plan.fountain;
+  const t = plan.terrace;
+  if (!f || !t || (splash && act.t - splash.t0 < 6)) return null;
+  const kind = weighted<"wish" | "boat" | "pigeon">([["wish", 3], ["boat", 2], ["pigeon", 2]]);
+  if (kind === "pigeon") {
+    splash = { kind, t0: act.t };
+    mutter(act, f.x, f.y + f.ry + 20, LINES.pigeon, 1.2, 90);
+    return "cafe-splash";
+  }
+  // Up from the terrace's lane beside the fountain, to stand at its rim.
+  const door = plan.facade!.doors[plan.facade!.doors.length - 1]!;
+  const hall = Math.max(...act.L.net.halls.filter((h) => h < plan.facade!.y));
+  const lane = t.y + 6;
+  const x = f.x - f.rx - 6;
+  const y = f.y + 3;
+  const spot: GatherSpot = {
+    x,
+    y,
+    facing: "right",
+    pose: "stand",
+    activity: kind === "wish" ? "making a wish at the fountain" : "sailing a paper boat",
+    path: [{ x: door, y: hall, c: true }, { x: door, y: lane }, { x, y: lane }, { x, y }],
+  };
+  const g = act.gather([spot], kind === "wish" ? 6 : 12, [{ at: kind === "wish" ? 1.4 : 0.8, who: 0, say: pick(kind === "wish" ? LINES.wish : LINES.boat), seconds: 2.6, sound: kind === "wish" ? "clink" : undefined }]);
+  if (!g) return null;
+  splash = { kind, t0: act.t, g };
+  return "click";
+}
+
 function clickCups(act: SceneryActions, plan: CafePlan): string {
   const art = weighted<Art>([["heart", 3], ["rosetta", 3], ["tulip", 2], ["swan", 2], ["abstract", 1]]);
   latte = { t0: act.t, art, name: `${pick(DRINKS)} FOR ${pick(NAMES)}!` };
@@ -575,6 +626,13 @@ export function clickDecor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
     const p = plan.roaster;
     if (k > 24) roast = null;
     else out.push({ z: p.y + 1, draw: () => drawRoast(ctx, p, k) });
+  }
+  const f = plan.fountain;
+  if (splash && f) {
+    const sp = splash;
+    const since = sp.g ? (sp.g.arrivedAt === null ? -1 : t - sp.g.arrivedAt) : t - sp.t0;
+    if ((sp.g && sp.g.done) || (!sp.g && since > 5) || t - sp.t0 > 40) splash = null;
+    else if (since >= 0) out.push({ z: f.y + f.ry + 0.6, draw: () => drawSplash(ctx, f, sp.kind, since, t) });
   }
   return out;
 }
@@ -806,6 +864,61 @@ function drawLogAndSparks(ctx: Ctx, f: Rect, k: number): void {
     fill(ctx, Math.round(x), Math.round(y), 1, 1, i % 3 ? "#ffd27a" : "#ff8a3a");
   }
   ctx.globalAlpha = 1;
+}
+
+/** What happens in the fountain: a coin's arc and its ripple, a paper boat sailing round, a pigeon splashing about. */
+function drawSplash(ctx: Ctx, f: { x: number; y: number; rx: number; ry: number }, kind: "wish" | "boat" | "pigeon", k: number, t: number): void {
+  const px = (x: number, y: number, w: number, h: number, c: string) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(Math.round(x), Math.round(y), w, h);
+  };
+  if (kind === "wish") {
+    const k0 = k - 1.2;
+    if (k0 < 0) return;
+    if (k0 < 0.7) {
+      // The coin's arc from the hand into the water, glinting.
+      const p = k0 / 0.7;
+      const sx = f.x - f.rx - 2;
+      const ex = f.x - 4;
+      px(sx + (ex - sx) * p, f.y - 14 - Math.sin(p * Math.PI) * 14 + p * 16, 2, 2, Math.floor(t * 12) % 2 ? "#ffe68a" : "#d6a64a");
+    } else if (k0 < 2.4) {
+      const r = (k0 - 0.7) * 10;
+      ctx.strokeStyle = "rgba(220,240,250,0.8)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(f.x - 4, f.y + 2, r, r * 0.55, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      if (k0 < 1.4) for (let i = 0; i < 4; i++) px(f.x - 4 + Math.cos(i * 1.6 + k0 * 6) * 5, f.y - 6 - (k0 - 0.7) * 8 + i, 1, 1, "#fff6c8");
+    }
+    return;
+  }
+  if (kind === "boat") {
+    // Folded paper, a triangle sail, going round with a little wake.
+    const a = k * 0.9;
+    const bx = f.x + Math.cos(a) * (f.rx - 8);
+    const by = f.y + 2 + Math.sin(a) * (f.ry - 5);
+    px(bx - 4, by, 9, 2, "#f6efe4");
+    px(bx - 3, by + 2, 7, 1, "#d8cfbf");
+    px(bx, by - 4, 1, 4, "#f6efe4");
+    px(bx + 1, by - 3, 2, 2, "#ffffff");
+    px(bx - Math.sin(a) * 6, by + 3 - Math.cos(a) * 2, 2, 1, "rgba(220,240,250,0.8)");
+    return;
+  }
+  // The pigeon: lands on the rim, hops in, splashes, shakes off.
+  const rx = f.x + f.rx - 8;
+  const ry = f.y - 1;
+  const inWater = k > 1 && k < 4;
+  const yy = inWater ? ry + 2 : ry - 2;
+  px(rx, yy - 3, 4, 3, "#7a7e8a");
+  px(rx + 3, yy - 4, 2, 2, "#5a5e6a");
+  px(rx + 4, yy - 3, 1, 1, "#e8a066");
+  if (inWater && Math.floor(t * 8) % 2) {
+    px(rx - 3, yy - 6, 1, 1, "#cfe9f5");
+    px(rx + 6, yy - 7, 1, 1, "#cfe9f5");
+    px(rx + 1, yy - 9, 1, 1, "#cfe9f5");
+    px(rx - 1, yy - 1, 6, 1, "rgba(220,240,250,0.8)");
+  }
+  if (k < 1) px(rx - 2 + (Math.floor(t * 10) % 2), yy - 5, 3, 1, "#9a9ea8");
 }
 
 function drawRoast(ctx: Ctx, p: Point, k: number): void {

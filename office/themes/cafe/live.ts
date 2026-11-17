@@ -56,6 +56,8 @@ function tableSprite(t: Table): HTMLCanvasElement {
         g.rect(0, 11, w, 4, C.walnutLo).hline(0, 11, w, C.walnutDk);
         for (let x = 8; x < w - 4; x += 48) g.rect(x, 15, 2, 5, C.iron).rect(x - 2, 15, 6, 1, C.iron);
         g.rect(w - 14, 4, 10, 4, C.chrome).set(w - 12, 5, OUTLINE).set(w - 9, 5, OUTLINE).set(w - 6, 5, OUTLINE);
+        // Succulents between the seats.
+        for (let x = 46; x < w - 10; x += 96) g.rect(x, 3, 5, 4, C.terra).rect(x, 1, 5, 2, C.leafHi).set(x + 2, 0, C.leaf);
         break;
       }
     }
@@ -111,6 +113,12 @@ const pastrySprite = () =>
     g.set(4, 2, "#ffffff").set(5, 2, "#ffffff");
   });
 
+const herbSprite = () =>
+  sprite("herbs", 8, 12, (g) => {
+    g.rect(1, 7, 6, 5, C.terra).hline(1, 7, 6, "#de9068");
+    g.ellipse(4, 4, 3.5, 3.5, C.leaf).set(2, 2, C.leafHi).set(5, 3, C.leafHi).set(4, 0, C.leafLo);
+  });
+
 const cupsSprite = () =>
   sprite("cups", 12, 8, (g) => {
     for (const x of [0, 4, 8]) {
@@ -136,6 +144,9 @@ function counterThings(c: Counter): { x: number; y: number; s: HTMLCanvasElement
     { x: c.pickup.x, y: c.pickup.y - 10, s: bellSprite() },
   ];
   if (c.register) out.push({ x: c.register.x, y: c.register.y, s: registerSprite() });
+  // A pot of herbs halfway along, where there's room.
+  const hx = c.register ? c.register.x + c.register.w + 4 : c.tips.x + c.tips.w + 3;
+  if (hx + 8 < c.pastry.x - 2) out.push({ x: hx, y: c.y - 4, s: herbSprite() });
   return out;
 }
 
@@ -262,34 +273,166 @@ function bubble(ctx: Ctx, text: string, cx: number, bottom: number): void {
   drawPixelText(ctx, text, x + 3, y + 2, C.walnutDk);
 }
 
-// ------------------------------------------------------------------ the street out front
+// ------------------------------------------------------------------ the road, the piazza
 
-const WALKERS: [number, number, string][] = [
-  [9, 0, "#c4673f"],
-  [-7, 140, "#3e7cc4"],
-  [11, 300, C.mustard],
-  [-24, 60, C.green],
-  [8, 520, "#8a5fd6"],
-  [-10, 410, "#e5544b"],
+/** What drives by: [lane (0 the far one, going left; 1 the near one, going right), speed, phase, kind, color]. */
+type Vehicle = [0 | 1, number, number, "car" | "bus" | "van" | "scooter" | "bike", string];
+const TRAFFIC: Vehicle[] = [
+  [1, 44, 0, "car", "#e5484d"],
+  [0, 38, 180, "car", "#3e7cc4"],
+  [1, 26, 420, "bus", C.mustard],
+  [0, 52, 520, "scooter", "#9fd0e6"],
+  [1, 30, 760, "bike", C.green],
+  [0, 34, 820, "van", "#e8e2d8"],
+  [1, 48, 1000, "car", "#5f8f4e"],
+  [0, 22, 1180, "bike", C.rust],
 ];
 
-/** People and the odd cyclist going by on the cobbles. */
-function streetLife(ctx: Ctx, L: Layout, st: Rect, info: PaintInfo): void {
-  const span = L.W + 60;
-  const y = st.y + st.h - 1;
-  for (const [i, [speed, phase, color]] of WALKERS.entries()) {
+const SIDEWALK: [number, number, string][] = [
+  [9, 0, "#c4673f"],
+  [-7, 160, "#3e7cc4"],
+  [11, 320, C.mustard],
+  [-10, 470, "#e5544b"],
+  [8, 600, "#8a5fd6"],
+];
+
+/** Cars, a bus, a scooter and bikes on the two lanes; people strolling along the curb. */
+function roadLife(ctx: Ctx, L: Layout, r: Rect, info: PaintInfo): void {
+  const span = L.W + 160;
+  const night = info.night > 0.3;
+  for (const [lane, speed, phase, kind, color] of TRAFFIC) {
+    const dir = lane === 1 ? 1 : -1;
+    const along = (((phase + speed * info.t) % span) + span) % span - 80;
+    const x = Math.round(dir > 0 ? along : L.W - along);
+    const base = lane === 0 ? r.y + Math.round(r.h / 2) - 1 : r.y + r.h - 2;
+    const len = kind === "bus" ? 34 : kind === "van" ? 22 : kind === "car" ? 18 : 8;
+    const h = kind === "bus" ? 11 : kind === "van" ? 9 : kind === "car" ? 7 : 6;
+    if (x < -len - 4 || x > L.W + 4) continue;
+    if (kind === "scooter" || kind === "bike") {
+      rect(ctx, x - 3, base - 3, 3, 3, OUTLINE);
+      rect(ctx, x + 4, base - 3, 3, 3, OUTLINE);
+      rect(ctx, x - 1, base - 4, 6, 2, color);
+      rect(ctx, x, base - 10, 3, 3, kind === "scooter" ? "#ffffff" : "#c98a5e");
+      rect(ctx, x - 1, base - 7, 4, 3, kind === "scooter" ? "#3a3d46" : color);
+      if (night) rect(ctx, dir > 0 ? x + 7 : x - 4, base - 4, 1, 1, "#fff2b0");
+      continue;
+    }
+    const left = dir > 0 ? x - len : x;
+    rect(ctx, left, base - h, len, h, OUTLINE);
+    rect(ctx, left + 1, base - h + 1, len - 2, h - 2, color);
+    rect(ctx, left + 1, base - h + 1, len - 2, 1, "#ffffff55");
+    if (kind === "bus") for (let wx = left + 3; wx < left + len - 4; wx += 5) rect(ctx, wx, base - h + 2, 3, 3, "#bfe0ee");
+    else rect(ctx, left + 4, base - h + 1, len - 8, 2, "#bfe0ee");
+    rect(ctx, left + 2, base - 1, 3, 2, OUTLINE);
+    rect(ctx, left + len - 5, base - 1, 3, 2, OUTLINE);
+    if (night) {
+      const front = dir > 0 ? left + len : left - 1;
+      rect(ctx, front, base - 4, 1, 2, "#fff2b0");
+      ctx.fillStyle = `rgba(255,240,180,${(0.25 * info.night).toFixed(2)})`;
+      ctx.fillRect(dir > 0 ? front + 1 : front - 12, base - 5, 12, 4);
+      rect(ctx, dir > 0 ? left - 1 : left + len, base - 4, 1, 2, "#ff4a3a");
+    }
+  }
+  const y = r.y - 1;
+  for (const [i, [speed, phase, color]] of SIDEWALK.entries()) {
     if (info.night > 0.6 && i % 2 === 1) continue;
-    const x = Math.round(((((phase + speed * info.t) % span) + span) % span) - 30);
-    if (Math.abs(speed) > 20) {
-      // A cyclist.
-      rect(ctx, x - 4, y - 3, 3, 3, OUTLINE);
-      rect(ctx, x + 4, y - 3, 3, 3, OUTLINE);
-      rect(ctx, x - 2, y - 4, 8, 1, color);
-      rect(ctx, x, y - 10, 3, 3, "#c98a5e");
-      rect(ctx, x - 1, y - 7, 4, 3, "#3a3d46");
-    } else drawPerson(ctx, x, y, color, info.t, Math.sign(speed), info, i);
+    const x = Math.round((((phase + speed * info.t) % span) + span) % span - 60);
+    drawPerson(ctx, x, y, color, info.t, Math.sign(speed), info, i);
   }
 }
+
+/** The fountain: a round stone basin, a pedestal with a bowl, jets arcing into rippling water; a pigeon on the rim now and then. */
+function drawFountain(ctx: Ctx, f: { x: number; y: number; rx: number; ry: number }, t: number, frozen: boolean): void {
+  const { x, y, rx, ry } = f;
+  const basin = memoBasin(rx, ry);
+  ctx.drawImage(basin, x - rx - 3, y - ry - 3);
+  // The water, shimmering.
+  ctx.fillStyle = frozen ? "#dce8f0" : "#5a9ec0";
+  for (let yy = -ry + 3; yy <= ry - 2; yy++) {
+    const span = Math.floor(Math.sqrt(Math.max(0, 1 - (yy * yy) / ((ry - 2) * (ry - 2)))) * (rx - 3));
+    ctx.fillRect(x - span, y + yy, span * 2 + 1, 1);
+  }
+  if (!frozen) {
+    ctx.fillStyle = "#9fd0e6";
+    for (let i = 0; i < 6; i++) {
+      const p = (t * 0.6 + i / 6) % 1;
+      const a = i * 1.1;
+      const r = 3 + p * (rx - 6);
+      ctx.fillRect(Math.round(x + Math.cos(a) * r), Math.round(y + Math.sin(a) * r * (ry / rx)), 2, 1);
+    }
+  }
+  // The pedestal and the bowl.
+  rect(ctx, x - 2, y - 14, 4, 14, "#a8a094");
+  rect(ctx, x - 2, y - 14, 1, 14, "#c9c2b5");
+  rect(ctx, x - 7, y - 16, 14, 3, OUTLINE);
+  rect(ctx, x - 6, y - 16, 12, 2, "#c9c2b5");
+  rect(ctx, x - 1, y - 20, 2, 4, "#a8a094");
+  if (!frozen) {
+    // The jets falling from the bowl.
+    ctx.fillStyle = "#cfe9f5";
+    for (let i = 0; i < 8; i++) {
+      const p = (t * 1.4 + i / 8) % 1;
+      const side = i % 2 ? 1 : -1;
+      ctx.fillRect(Math.round(x + side * (6 + p * 5)), Math.round(y - 16 + p * p * 14), 1, 2);
+    }
+    ctx.fillRect(x, y - 23 - (Math.floor(t * 8) % 2), 1, 3);
+  }
+  // A pigeon on the rim, some of the time.
+  if (Math.floor(t / 9) % 3 === 1) {
+    const px = x + rx - 6;
+    const py = y - ry + 1;
+    rect(ctx, px, py - 3, 4, 3, "#7a7e8a");
+    rect(ctx, px + 3, py - 4, 2, 2, "#5a5e6a");
+    rect(ctx, px + 4, py - 3, 1, 1, "#e8a066");
+    rect(ctx, px + 1, py, 1, 1, "#e8a066");
+  }
+}
+
+function memoBasin(rx: number, ry: number): HTMLCanvasElement {
+  return sprite(`basin-${rx}-${ry}`, rx * 2 + 6, ry * 2 + 9, (g) => {
+    const cx = rx + 3;
+    const cy = ry + 3;
+    g.ellipse(cx, cy + 3, rx + 2, ry + 2, "#8f877a");
+    g.ellipse(cx, cy, rx + 2, ry + 2, "#d4cdbf");
+    g.ellipse(cx, cy, rx, ry, "#b0a898");
+    g.ellipse(cx, cy + 1, rx - 1, ry - 1, "#3e6e88");
+  });
+}
+
+const benchSprite = () =>
+  sprite("bench", 22, 14, (g) => {
+    // A park bench from the front: slatted back and seat, iron ends.
+    g.rect(1, 0, 20, 2, C.oakHi).rect(1, 3, 20, 2, C.oak).rect(1, 7, 20, 3, C.oakHi).hline(1, 9, 20, C.oakLo);
+    g.rect(0, 0, 2, 14, C.iron).rect(20, 0, 2, 14, C.iron).rect(0, 10, 22, 1, C.iron);
+  });
+
+const treeSprite = () =>
+  sprite("plane-tree", 34, 52, (g) => {
+    // A young plane tree in a grate.
+    g.rect(15, 26, 4, 22, "#8a7a62").vline(15, 26, 22, "#a8987c");
+    g.ellipse(17, 16, 15, 14, C.leafLo).ellipse(14, 12, 10, 9, C.leaf).ellipse(21, 14, 8, 7, C.leaf).set(10, 8, C.leafHi).set(13, 7, C.leafHi).set(22, 10, C.leafHi);
+    g.rect(9, 47, 16, 4, C.iron).rect(10, 48, 14, 2, "#4a4c54");
+  });
+
+const hedgeSprite = () =>
+  sprite("hedge", 30, 16, (g) => {
+    // A box hedge in a long stone planter.
+    g.rect(0, 9, 30, 7, "#b0a898").hline(0, 9, 30, "#d4cdbf");
+    g.rrect(1, 1, 28, 10, C.leafLo, 3).rect(3, 2, 24, 3, C.leaf).set(6, 2, C.leafHi).set(15, 3, C.leafHi).set(23, 2, C.leafHi);
+  });
+
+const flowerPotSprite = () =>
+  sprite("flower-pot", 16, 18, (g) => {
+    g.rect(2, 9, 12, 9, C.terra).hline(2, 9, 12, "#de9068").rect(3, 16, 10, 2, C.terraLo);
+    g.ellipse(8, 5, 7, 5, C.leaf);
+    for (const [x, y, c] of [[4, 3, "#e5484d"], [8, 2, "#f4dc8a"], [11, 4, "#f2a7b8"], [6, 6, "#ffffff"], [10, 6, "#e5484d"]] as const) g.set(x, y, c);
+  });
+
+const lampPostSprite = () =>
+  sprite("lamp-post", 10, 46, (g) => {
+    g.rect(4, 8, 2, 36, C.iron).rect(2, 43, 6, 3, C.iron);
+    g.rect(1, 0, 8, 8, C.iron).rect(2, 2, 6, 5, "#ffe6a8").rect(3, 0, 4, 1, C.ironHi);
+  });
 
 // ------------------------------------------------------------------ the stage, the roaster, the fire
 
@@ -480,6 +623,10 @@ function fillers(L: Layout, plan: CafePlan): Placed[] {
     for (const r of L.rooms) if (r.walls) taken.push({ x: r.rect.x - 4, y: r.rect.y - 12, w: r.rect.w + 8, h: r.rect.h + 16 });
     // The mezzanine's edge, the menus and the back counter under it.
     if (plan.upstairs) taken.push({ x: 0, y: plan.upstairs.edge - 12, w: L.W, h: 44 });
+    const f = plan.fountain;
+    if (f) taken.push({ x: f.x - f.rx - 16, y: f.y - f.ry - 26, w: f.rx * 2 + 32, h: f.ry * 2 + 36 });
+    for (const p of plan.benches) taken.push({ x: p.x - 12, y: p.y - 14, w: 24, h: 16 });
+    if (plan.street) taken.push({ x: 0, y: plan.street.y - 18, w: L.W, h: L.H });
     const clash = (r: Rect) => taken.some((q) => r.x < q.x + q.w + 2 && q.x < r.x + r.w + 2 && r.y < q.y + q.h + 2 && q.y < r.y + r.h + 2);
     const put = (region: Rect, items: Filler[], spread = 3) => {
       for (const make of items) {
@@ -496,7 +643,10 @@ function fillers(L: Layout, plan: CafePlan): Placed[] {
     put(plan.reserved, [plant("LARGE_PLANT"), papersSprite], 2);
     // Inside the building, wherever's still bare.
     const inside: Rect = { x: plan.bldg.x0, y: plan.wallD, w: plan.bldg.x1 - plan.bldg.x0, h: (plan.facade?.y ?? L.H) - plan.wallD - 2 };
-    put(inside, [plant("LARGE_PLANT"), plant("PLANT_2"), papersSprite, plant("PLANT")], 1.3);
+    put(inside, [plant("LARGE_PLANT"), plant("PLANT_2"), plant("LARGE_PLANT"), papersSprite, plant("PLANT"), plant("PLANT_2"), plant("LARGE_PLANT")], 1.3);
+    // The piazza: a plane tree, box hedges, pots of flowers, a lamp post.
+    const pz = plan.piazza;
+    if (pz) put(pz, [treeSprite, hedgeSprite, flowerPotSprite, lampPostSprite, hedgeSprite, flowerPotSprite, treeSprite, flowerPotSprite], 1.4);
     const d = L.wall.door;
     const by = plan.facade ? plan.facade.y - 44 : plan.wallD - 30;
     put({ x: d.x - 46, y: by, w: 92, h: 44 }, [coatRackSprite, umbrellaSprite], 1);
@@ -533,6 +683,7 @@ function staticItems(L: Layout, plan: CafePlan): Placed[] {
     }
     if (plan.roaster) out.push({ x: plan.roaster.x - 15, y: plan.roaster.y - 38, z: plan.roaster.y, s: roasterSprite() });
     for (const p of plan.armchairs) out.push({ x: p.x - 11, y: p.y - 20, z: p.y - 1, s: armchairSprite() });
+    for (const p of plan.benches) out.push({ x: p.x - 11, y: p.y - 12, z: p.y - 1, s: benchSprite() });
     for (const b of plan.bistro) {
       out.push({ x: b.x - 7, y: b.y - 12, z: b.y + 1, s: bistroTableSprite() });
       for (const x of b.chairs) out.push({ x: x - 6, y: b.y - 15, z: b.y - 1, s: rattanSprite() });
@@ -543,7 +694,7 @@ function staticItems(L: Layout, plan: CafePlan): Placed[] {
       const ax = door.x + door.w + 26 <= L.W ? door.x + door.w + 6 : door.x - 20;
       out.push({ x: ax, y: t.y + 8, z: t.y + 29, s: menuSignSprite() });
       // A bike parked at the curb.
-      if (plan.street) out.push({ x: Math.min(L.W - 28, door.x + door.w + 96), y: plan.street.y - 8, z: plan.street.y + 8, s: bikeSprite() });
+      if (plan.street) out.push({ x: Math.min(L.W - 28, door.x + door.w + 96), y: plan.street.y - 15, z: plan.street.y, s: bikeSprite() });
       // Parasols over every third table.
       plan.bistro.forEach((b, i) => {
         if ((Math.floor(b.x / 62) * 5 + Math.floor(b.y / 36) * 3) % 7 === 1) out.push({ x: b.x - 15, y: b.y - 40, z: b.y + 3, s: parasolSprite(i % 2) });
@@ -564,7 +715,9 @@ export function cafeDecor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
   const n = c.w >= 140 ? 3 : 2;
   for (let i = 0; i < n; i++) out.push({ z: c.staffY + 0.1, draw: () => drawBarista(ctx, c, i, info.t) });
   const st = plan.street;
-  if (st) out.push({ z: st.y + st.h + 30, draw: () => streetLife(ctx, L, st, info) });
+  if (st) out.push({ z: st.y + st.h + 30, draw: () => roadLife(ctx, L, st, info) });
+  const f = plan.fountain;
+  if (f) out.push({ z: f.y + f.ry, draw: () => drawFountain(ctx, f, info.t, info.weather === "snow") });
   // The PICKUP sign over the bell.
   const pk = c.pickup;
   out.push({
@@ -717,6 +870,11 @@ function staticLights(L: Layout): Light[] {
     if (L.server) out.push([L.server.x + L.server.w / 2, L.server.y + 8, 30, 0.35, "#ffe8c0", 0.2]);
     out.push([L.tv.x + L.tv.w / 2, L.tv.y + L.tv.h / 2, 46, 0.45, "#bfe0ff", 0.25]);
     for (const p of plan.armchairs) out.push([p.x, p.y - 14, 20, 0.3, "#ffd9a0", 0.15]);
+    const fo = plan.fountain;
+    if (fo) out.push([fo.x, fo.y - 4, fo.rx + 18, 0.6, "#bfe6ff", 0.45]);
+    // The piazza's lamp posts.
+    const lamp = lampPostSprite();
+    for (const f of fillers(L, plan)) if (f.s === lamp) out.push([f.x + 5, f.y + 4, 46, 0.75, "#ffe0a0", 0.6]);
     const f = plan.facade;
     if (f) {
       // The shop windows glowing out onto the terrace, the lamps by the door.

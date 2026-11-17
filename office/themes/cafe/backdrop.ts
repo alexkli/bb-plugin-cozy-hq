@@ -96,15 +96,6 @@ function pavement(x: number, y: number): string {
   return h2(Math.floor((x + off) / 14), row) < 0.2 ? "#c1b9aa" : C.pavement;
 }
 
-/** Cobbles: little rounded stones. */
-function cobbles(x: number, y: number): string {
-  const row = Math.floor(y / 3);
-  const off = row % 2 ? 2 : 0;
-  if (y % 3 === 2 || (x + off) % 4 === 3) return "#4a4650";
-  const k = h2(Math.floor((x + off) / 4), row);
-  return k < 0.3 ? "#6e6a72" : k > 0.8 ? "#8c8890" : "#7a767e";
-}
-
 /** A woven rug: a striped border round a field of small diamonds, a fringe at the ends. */
 function rug(ctx: CanvasRenderingContext2D, r: Rect, field: string, border: string, motif: string): void {
   if (r.w < 12 || r.h < 12) return;
@@ -164,9 +155,10 @@ function floor(ctx: CanvasRenderingContext2D, L: Layout): void {
     return;
   }
   const { x0, x1 } = plan.bldg;
-  // The lot: pavement all round, cobbles at the bottom.
+  // The lot: pavement all round, the piazza's cobbles and lawns beside the café, the road at the bottom.
   pixels(ctx, { x: 0, y: 0, w: L.W, h: L.H }, pavement);
-  if (plan.street) pixels(ctx, plan.street, cobbles);
+  if (plan.piazza) piazzaFloor(ctx, plan);
+  if (plan.street) road(ctx, plan.street, L.wall.door.x + L.wall.door.w / 2);
   const bottom = plan.facade ? plan.facade.y : L.H;
   const top = plan.upstairs ? plan.upstairs.edge + 16 : plan.wallD;
   pixels(ctx, { x: x0, y: top, w: x1 - x0, h: bottom - top }, oak);
@@ -181,6 +173,54 @@ function floor(ctx: CanvasRenderingContext2D, L: Layout): void {
   rect(ctx, d.x - 4, my, d.w + 8, 10, OUTLINE);
   rect(ctx, d.x - 3, my + 1, d.w + 6, 8, "#6b4a2a");
   for (let x = d.x - 2; x < d.x + d.w + 2; x += 2) rect(ctx, x, my + 2, 1, 6, "#7d5a36");
+}
+
+/** Grass: two greens and a few darker blades. */
+function grass(x: number, y: number): string {
+  const k = h2(x * 3 + (y >> 1), y);
+  return k < 0.15 ? "#5f8f4e" : k > 0.85 ? "#8fbf6a" : (x + y) % 5 === 0 ? "#6ea256" : "#78ac5c";
+}
+
+/** The piazza: fan-laid cobbles, a lawn round the fountain and a strip of lawn with a flower border along its far side. */
+function piazzaFloor(ctx: CanvasRenderingContext2D, plan: CafePlan): void {
+  const P = plan.piazza!;
+  pixels(ctx, P, (x, y) => {
+    // Fans of small setts.
+    const fx = ((x % 16) + 16) % 16 - 8;
+    const fy = ((y % 12) + 12) % 12;
+    const r = Math.round(Math.hypot(fx, fy));
+    if (r % 3 === 2) return "#9c958a";
+    return h2(Math.floor(x / 3), Math.floor(y / 3)) < 0.3 ? "#b4ada0" : "#c2bbae";
+  });
+  const f = plan.fountain;
+  if (f) {
+    const g = new Grid(f.rx * 2 + 30, f.ry * 2 + 22);
+    const cx = f.rx + 15;
+    const cy = f.ry + 11;
+    g.ellipse(cx, cy, f.rx + 14, f.ry + 10, "#78ac5c");
+    for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) if (g.get(x, y)) g.set(x, y, grass(x + f.x, y + f.y));
+    // A ring of flowers round the lawn.
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * Math.PI * 2;
+      g.set(Math.round(cx + Math.cos(a) * (f.rx + 12)), Math.round(cy + Math.sin(a) * (f.ry + 8)), ["#e5484d", "#f4dc8a", "#f2a7b8", "#ffffff"][i % 4]!);
+    }
+    paint(ctx, g, f.x - cx, f.y - cy);
+  }
+  // The lawn strip along the far edge, with a border of flowers.
+  const lx = P.x + P.w - 8;
+  pixels(ctx, { x: lx, y: P.y, w: 8, h: P.h - 4 }, grass);
+  for (let y = P.y + 3; y < P.y + P.h - 6; y += 4) rect(ctx, lx, y, 1, 1, ["#e5484d", "#f4dc8a", "#f2a7b8"][(y >> 2) % 3]!);
+}
+
+/** The road: a curb, two lanes with a dashed line between them, a zebra crossing outside the door. */
+function road(ctx: CanvasRenderingContext2D, r: Rect, crossX: number): void {
+  pixels(ctx, r, (x, y) => (h2(x >> 1, y >> 1) < 0.12 ? "#44454d" : "#4e4f58"));
+  rect(ctx, r.x, r.y, r.w, 3, "#c9c2b5");
+  rect(ctx, r.x, r.y + 2, r.w, 1, "#8f897e");
+  const mid = r.y + Math.round(r.h / 2) + 1;
+  for (let x = r.x + 2; x < r.x + r.w; x += 12) rect(ctx, x, mid, 6, 1, "#e8dfb8");
+  // The crossing: white bars across both lanes.
+  for (let x = Math.round(crossX) - 13; x < crossX + 13; x += 5) rect(ctx, x, r.y + 4, 3, r.h - 5, "#e8e4da");
 }
 
 // ------------------------------------------------------------------ the walls
@@ -219,8 +259,46 @@ function wall(ctx: CanvasRenderingContext2D, L: Layout): void {
     rect(ctx, x + 1, d, 4, bottom - d, C.brickLo);
     rect(ctx, x + 1, d, 1, bottom - d, C.brickHi);
   }
+  shelfPlants(ctx, plan, L);
   if (plan.upstairs) mezzanine(ctx, plan, L);
   if (plan.facade) facade(ctx, plan, L);
+}
+
+/** A pot of pothos at (x, y) (its top-left), the vines trailing `len` px down. */
+function trailing(ctx: CanvasRenderingContext2D, x: number, y: number, len: number, seed: number): void {
+  rect(ctx, x, y, 7, 5, OUTLINE);
+  rect(ctx, x + 1, y + 1, 5, 3, C.terra);
+  rect(ctx, x + 1, y + 1, 5, 1, "#de9068");
+  rect(ctx, x - 1, y - 2, 9, 3, C.leaf);
+  rect(ctx, x + 1, y - 3, 3, 1, C.leafHi);
+  for (const [dx, l] of [[0, len], [4, len - 4], [7, len - 2]] as const) {
+    for (let k = 0; k < l; k++) {
+      const vx = x + dx + (((k + seed) >> 2) % 2 ? 1 : 0);
+      rect(ctx, vx, y + 4 + k, 1, 1, k % 3 === 0 ? C.leafHi : C.leaf);
+      if (k % 4 === 2) rect(ctx, vx + 1, y + 4 + k, 1, 1, C.leafLo);
+    }
+  }
+}
+
+/** Little potted plants along the back wall's ledge wherever the wall's free (not behind the board, the screen, the fire, the windows or the notes). */
+function shelfPlants(ctx: CanvasRenderingContext2D, plan: CafePlan, L: Layout): void {
+  const y = plan.wallD - 13;
+  const busy: Rect[] = [L.wall.pinboard, L.wall.calendar, L.wall.status, L.tv, ...L.speakers, ...L.wall.windows, L.whiteboard];
+  if (plan.fireplace) busy.push({ x: plan.fireplace.x - 10, y: 0, w: plan.fireplace.w + 20, h: plan.wallD });
+  if (!plan.upstairs) busy.push(plan.counter.r);
+  const arcade = L.arcade;
+  if (arcade) busy.push(arcade);
+  const kinds = [C.leaf, C.leafHi, "#7d9a68", C.leafLo];
+  for (let x = plan.bldg.x0 + 6, i = 0; x < plan.bldg.x1 - 12; x += 14, i++) {
+    if (busy.some((r) => x + 8 > r.x - 2 && x < r.x + r.w + 2)) continue;
+    if (h2(i, 31) < 0.35) continue;
+    const c = kinds[i % kinds.length]!;
+    rect(ctx, x, y + 5, 7, 6, OUTLINE);
+    rect(ctx, x + 1, y + 6, 5, 4, i % 3 ? C.terra : C.cream);
+    rect(ctx, x, y, 7, 6, c);
+    rect(ctx, x + 2, y - 2, 3, 2, c);
+    rect(ctx, x + 1, y + 1, 2, 1, C.leafHi);
+  }
 }
 
 /** The chimney breast in the back wall: an oak mantel over a stone surround, the firebox (the fire is live). */
@@ -314,6 +392,11 @@ function mezzanine(ctx: CanvasRenderingContext2D, plan: CafePlan, L: Layout): vo
     rect(ctx, a, e - 8, b - a, 2, C.walnutHi);
     rect(ctx, a, e, b - a, 1, C.walnutDk);
   }
+  // Pothos in pots on the rail, trailing down over the riser.
+  for (let x = x0 + 18, i = 0; x < x1 - 10; x += 58, i++) {
+    if (Math.abs(x - st.x) < 24 || plan.menus.some((m) => x > m.x - 8 && x < m.x + m.w + 8)) continue;
+    trailing(ctx, x, e - 12, 8 + ((i * 5) % 9), i);
+  }
   // The back counter and the menus over it.
   const K = plan.counter.r;
   backCounter(ctx, K.x - 2, K.y - 10, K.w + 4, 22);
@@ -369,14 +452,15 @@ function facade(ctx: CanvasRenderingContext2D, plan: CafePlan, L: Layout): void 
       const ww = Math.min(60, b - wx);
       if (ww < 30) break;
       const lx = wx - x;
-      g.rect(lx, 14, ww, 18, C.green);
-      g.rect(lx + 2, 16, ww - 4, 14, "#3a3540");
-      g.rect(lx + 2, 16, ww - 4, 2, "#5a5462");
-      for (let i = 0; i < 3; i++) g.set(lx + 5 + i * 9, 26 - i * 3, "#6e6878").set(lx + 6 + i * 9, 25 - i * 3, "#6e6878");
-      g.vline(lx + Math.floor(ww / 2), 16, 14, C.green);
-      // The flower box.
-      g.rect(lx + 1, 32, ww - 2, 4, C.terra).hline(lx + 1, 32, ww - 2, "#de9068").hline(lx + 1, 35, ww - 2, C.terraLo);
-      for (let i = 2; i < ww - 2; i += 3) g.set(lx + i, 31, i % 2 ? C.leaf : C.leafHi).set(lx + i, 30, i % 6 === 2 ? "#e5484d" : i % 6 === 5 ? C.chalkPink : C.leaf);
+      // The window (its top under the awning), the flower box under it.
+      const wb = f.h - 8;
+      g.rect(lx, 13, ww, wb - 13, C.green);
+      g.rect(lx + 2, 15, ww - 4, wb - 17, "#3a3540");
+      g.rect(lx + 2, 15, ww - 4, 2, "#5a5462");
+      for (let i = 0; i < 3; i++) g.set(lx + 5 + i * 9, wb - 4 - i * 2, "#6e6878").set(lx + 6 + i * 9, wb - 5 - i * 2, "#6e6878");
+      g.vline(lx + Math.floor(ww / 2), 15, wb - 17, C.green);
+      g.rect(lx + 1, wb, ww - 2, 4, C.terra).hline(lx + 1, wb, ww - 2, "#de9068").hline(lx + 1, wb + 3, ww - 2, C.terraLo);
+      for (let i = 2; i < ww - 2; i += 3) g.set(lx + i, wb - 1, i % 2 ? C.leaf : C.leafHi).set(lx + i, wb - 2, i % 6 === 2 ? "#e5484d" : i % 6 === 5 ? C.chalkPink : C.leaf);
       wx += ww + 8;
     }
   }
@@ -403,8 +487,8 @@ function facade(ctx: CanvasRenderingContext2D, plan: CafePlan, L: Layout): void 
       const stripe = Math.floor((ax - a) / 4) % 2 ? C.awning : C.awningStripe;
       const k = (ax - a) % 8;
       const drop = k === 3 || k === 4 ? 2 : k === 2 || k === 5 ? 1 : 0;
-      rect(ctx, ax, f.y + 12, 1, 7 + drop, stripe);
-      rect(ctx, ax, f.y + 19 + drop, 1, 1, OUTLINE);
+      rect(ctx, ax, f.y + 12, 1, 5 + drop, stripe);
+      rect(ctx, ax, f.y + 17 + drop, 1, 1, OUTLINE);
     }
     rect(ctx, a - 2, f.y + 12, b - a + 4, 1, OUTLINE);
   }
