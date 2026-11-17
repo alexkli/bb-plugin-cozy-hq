@@ -12,6 +12,7 @@ import type { Layout, Point, Rect } from "../../layout.ts";
 import { charSprite, type CharPose, type Look } from "../../characters.ts";
 import type { Facing } from "../../layout.ts";
 import { cached, drawPixelText, floorPlan, pixelTextWidth } from "../../themekit.ts";
+import { hash } from "../../pixel.ts";
 import { cafePlant } from "./props.ts";
 import { C, OUTLINE, rect, sprite } from "./kit.ts";
 import { planOf, type CafePlan, type Counter, type Table } from "./plan.ts";
@@ -634,6 +635,22 @@ const olivePotSprite = () =>
     g.ellipse(9, 7, 8, 6, C.leafLo).ellipse(8, 6, 6, 4, "#7d9a68").set(5, 4, "#a4b98e").set(11, 5, "#a4b98e").set(8, 8, "#a4b98e");
   });
 
+/**
+ * A little group of plants in a gap between tables: a tall one at the back,
+ * smaller pots in front, arranged a little differently from gap to gap.
+ */
+function groveOf(r: Rect): Placed[] {
+  const plant = (name: "LARGE_PLANT" | "PLANT_2" | "PLANT") => cafePlant(name) ?? sprite("noplant", 1, 1, () => undefined, false);
+  const at = (s: HTMLCanvasElement, x: number, feet: number): Placed => ({ x: r.x + x, y: r.y + feet - s.height, z: r.y + feet, s });
+  const v = hash(`grove-${r.x}-${r.y}`) % 3;
+  const back = v === 1 ? olivePotSprite() : plant("LARGE_PLANT");
+  const out = [at(back, Math.round((r.w - back.width) / 2) + (v === 2 ? -6 : 4), 52)];
+  out.push(at(plant(v === 0 ? "PLANT" : "PLANT_2"), v === 2 ? 26 : 2, 74));
+  out.push(at(flowerPotSprite(), v === 2 ? 4 : 28, 80));
+  if (v !== 1) out.push(at(plant("PLANT_2"), v === 0 ? 30 : 16, 64));
+  return out;
+}
+
 type Filler = () => HTMLCanvasElement;
 
 /** Odds and ends on free floor (clear of furniture, seats and everyone's ways): plants, chairs, racks. */
@@ -654,6 +671,7 @@ function fillers(L: Layout, plan: CafePlan): Placed[] {
       else taken.push({ x: lawn.x + Math.round(lawn.w / 2) - 6, y: lawn.y, w: 12, h: lawn.h });
     }
     for (const p of plan.benches) taken.push({ x: p.x - 12, y: p.y - 14, w: 24, h: 16 });
+    taken.push(...plan.groves);
     if (plan.street) taken.push({ x: 0, y: plan.street.y - 18, w: L.W, h: L.H });
     const clash = (r: Rect) => taken.some((q) => r.x < q.x + q.w + 2 && q.x < r.x + r.w + 2 && r.y < q.y + q.h + 2 && q.y < r.y + r.h + 2);
     const put = (region: Rect, items: Filler[], spread = 3) => {
@@ -716,6 +734,7 @@ function staticItems(L: Layout, plan: CafePlan): Placed[] {
     if (plan.roaster) out.push({ x: plan.roaster.x - 15, y: plan.roaster.y - 38, z: plan.roaster.y, s: roasterSprite() });
     for (const p of plan.armchairs) out.push({ x: p.x - 11, y: p.y - 20, z: p.y - 1, s: armchairSprite() });
     for (const p of plan.benches) out.push({ x: p.x - 11, y: p.y - 12, z: p.y - 1, s: benchSprite() });
+    for (const g of plan.groves) out.push(...groveOf(g));
     for (const b of plan.bistro) {
       out.push({ x: b.x - 7, y: b.y - 12, z: b.y + 1, s: bistroTableSprite() });
       for (const x of b.chairs) out.push({ x: x - 6, y: b.y - 15, z: b.y - 1, s: rattanSprite() });

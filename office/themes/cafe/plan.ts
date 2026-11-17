@@ -103,6 +103,8 @@ export interface CafePlan {
   fountain: { x: number; y: number; rx: number; ry: number } | null;
   /** Lawn beds in a tall piazza, above and below the fountain, the upper one with a little pool of its own. */
   gardens: { lawn: Rect; pool: { x: number; y: number; rx: number; ry: number } | null }[];
+  /** The gaps between checkerboarded tables, each with a little group of plants. */
+  groves: Rect[];
   benches: Point[];
   /** The fireplace in the back wall. */
   fireplace: Rect | null;
@@ -186,13 +188,30 @@ const BAND = 106;
 const FAC = 32;
 const ROAD = 30;
 
+/**
+ * Every other table slot, the next row the others (rows of tables
+ * checkerboarded, a group of plants in each gap). The slots are laid out
+ * along [x0, gx1] for every row so they line up, tables stop at x1.
+ */
+interface Stagger {
+  gx1: number;
+  keep: 0 | 1;
+  groves: Rect[];
+}
+
 /** Tables close together along [x0, x1], centered: round ones mostly, a square one now and then, every other one a little lower when there's room. */
-function tablesIn(b: Builder, x0: number, x1: number, py: number, above: number, below: number | null, tables: Table[]): void {
-  if (x1 - x0 < 48) return;
-  const n = Math.floor((x1 - x0 - 48) / PITCH) + 1;
-  const start = x0 + Math.floor((x1 - x0 - 48 - (n - 1) * PITCH) / 2);
+function tablesIn(b: Builder, x0: number, x1: number, py: number, above: number, below: number | null, tables: Table[], alt?: Stagger): void {
+  const gx1 = alt?.gx1 ?? x1;
+  if (gx1 - x0 < 48) return;
+  const n = Math.floor((gx1 - x0 - 48) / PITCH) + 1;
+  const start = x0 + Math.floor((gx1 - x0 - 48 - (n - 1) * PITCH) / 2);
   for (let i = 0; i < n; i++) {
     const dx = start + i * PITCH;
+    if (dx + 48 > x1) break;
+    if (alt && i % 2 !== alt.keep) {
+      alt.groves.push({ x: dx, y: py - 10, w: 48, h: 84 });
+      continue;
+    }
     const kind = hash(`cafe-table-${dx}-${py}`) % 3 === 0 ? "square" : "round";
     table(b, dx, py, kind, above, below, tables);
   }
@@ -754,11 +773,16 @@ function wide(W: number, H: number, threads: number): Layout {
   const bossW = 200;
   const bossR: Rect = { x: x1 - bossW, y: hG1 + 12, w: bossW, h: 92 };
   const boss = buildArmchair(b, bossR, hG1);
-  for (let row = 0; row === 0 || (b.desks.length < wanted(threads) && hall + BAND + 12 + FAC + 22 + ROAD + 4 <= H); row++) {
+  // Room for two rows (a big panel): checkerboard them, with plants in the gaps.
+  const rowFits = (hall: number) => hall + BAND + 12 + FAC + 22 + ROAD + 4 <= H;
+  const stagger = rowFits(hG1 + BAND);
+  const groves: Rect[] = [];
+  for (let row = 0; row === 0 || (b.desks.length < wanted(threads) && rowFits(hall)); row++) {
     const py = hall + 22;
     const below = hall + BAND;
-    tablesIn(b, x0, stairX - 14, py, hall, below, tables);
-    tablesIn(b, stairX + 14, row === 0 ? bossR.x - 8 : x1, py, hall, below, tables);
+    const keep = (row % 2) as 0 | 1;
+    tablesIn(b, x0, stairX - 14, py, hall, below, tables, stagger ? { gx1: stairX - 14, keep, groves } : undefined);
+    tablesIn(b, stairX + 14, row === 0 ? bossR.x - 8 : x1, py, hall, below, tables, stagger ? { gx1: x1, keep, groves } : undefined);
     hall = below;
     halls.push(hall);
   }
@@ -818,6 +842,7 @@ function wide(W: number, H: number, threads: number): Layout {
       piazza: piazzaR,
       fountain,
       gardens,
+      groves,
       benches,
       fireplace,
       menus: menuBoards(kx + 40, kx + kw - 12, edge - 2, 26),
@@ -909,6 +934,7 @@ function short(W: number, H: number): Layout {
       piazza: null,
       fountain: null,
       gardens: [],
+      groves: [],
       benches: [],
       fireplace,
       menus: menuBoards(kx + 36, x1 - 34, 6, 24),
@@ -1048,6 +1074,7 @@ function portrait(W: number, H: number, threads: number): Layout {
       piazza: piazzaR,
       fountain,
       gardens: [],
+      groves: [],
       benches,
       fireplace,
       menus: menuBoards(K.x + 40, K.x + K.w - 10, edge - 2, 26),
