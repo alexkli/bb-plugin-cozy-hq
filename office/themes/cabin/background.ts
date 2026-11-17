@@ -9,6 +9,7 @@ import { Grid, OUTLINE, rect, shade } from "../../themekit.ts";
 import { C, h2, knitBand, stones } from "./kit.ts";
 import { isOpen, planOf, type CabinPlan } from "./plan.ts";
 import { paintEaves, paintShell, paintTerrain } from "./terrain.ts";
+import { paintPiste } from "./lift.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -567,8 +568,9 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
         if (gap > 0) rail(ctx, { x: gap + 9, y: d.y + d.h - 2, w: d.x + d.w - gap - 9, h: 3 }, "x");
         for (const x of [d.x, d.x + d.w - 3]) rail(ctx, { x, y: d.y + 6, w: 3, h: d.h - 8 }, "y");
       }
-      deckWall(ctx, p);
     }
+    paintPiste(ctx, p);
+    deckWall(ctx, p);
     paintShell(ctx, L, p);
   },
   wall(ctx, L) {

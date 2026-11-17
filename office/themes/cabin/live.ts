@@ -14,6 +14,7 @@ import { bootRack, deckChair, lantern, saunaHut, skiRack, skiWall, snowman, tele
 import { clickDecor, clickLights, clickOverlay, clickUnderlay, fireBoost, sledGone } from "./clicks.ts";
 import { nookDecor, nookLights } from "./nooks.ts";
 import { blizzard, outdoorRects, sledSprite, terrainUnder } from "./terrain.ts";
+import { liftDecor, liftLights, liftUnder } from "./lift.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -283,7 +284,8 @@ export function underlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
     ctx.fillRect(rack.x + 12, Math.round(rack.y + 6 + ph * 7), 1, 1);
   }
   terrainUnder(ctx, L, p, info, lvl);
-  slopeLife(ctx, p, info);
+  if (p.lift) liftUnder(ctx, L, info);
+  else slopeLife(ctx, p, info);
   clickUnderlay(ctx, L, info);
 }
 
@@ -338,6 +340,7 @@ export function decor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
   if (sled && !sledGone(info.t)) out.push({ z: sled.y, draw: () => ctx.drawImage(sledSprite(), sled.x - 9, sled.y - 8) });
   out.push(...nookDecor(ctx, L, info));
   out.push(...clickDecor(ctx, L, info));
+  out.push(...liftDecor(ctx, L, info));
   return out;
 }
 
@@ -456,12 +459,13 @@ export function lights(L: Layout, info: PaintInfo): Light[] {
   }
   for (const g of p.deckWall?.gaps ?? []) {
     // A lantern by each door out to the deck.
-    if (p.deckSide === "east") out.push([p.deckWall!.x0 + 8, g[0] - 6, 34, 0.85, "#ffd28a", 0.2]);
+    if (p.deckWall!.x0 === p.deckWall!.x1) out.push([p.deckWall!.x0 + 8, g[0] - 6, 34, 0.85, "#ffd28a", 0.2]);
     else out.push([g[1] + 6, p.deckWall!.y0 + 4, 34, 0.85, "#ffd28a", 0.2]);
   }
   out.push([L.kitchen.x + 30, L.kitchen.y + 4, 40, 0.6, "#ffb46a", 0.12]);
   out.push(...nookLights(L, info));
   out.push(...clickLights(L, info));
+  out.push(...liftLights(L, info));
   return out;
 }
 

@@ -17,6 +17,7 @@ import { click, clickables } from "./cabin/clicks.ts";
 import { pet, plow, troutTank } from "./cabin/critters.ts";
 import { chair, desk } from "./cabin/desks.ts";
 import { darkness, decor, doorOpen, lights, overlay, underlay, wallLights } from "./cabin/live.ts";
+import { liftPose, liftTick } from "./cabin/lift.ts";
 import { dress, dressVisitor, look, npc } from "./cabin/people.ts";
 import { cabinPlan } from "./cabin/plan.ts";
 import { plant, prop, speaker } from "./cabin/props.ts";
@@ -29,6 +30,8 @@ export const CABIN: Theme = {
   blurb: "A timber lodge above the treeline: a stone fireplace, snowy peaks and a chairlift",
   icon: "🏔️",
   layout: (W, H, opts) => cabinPlan(W, H, opts),
+  // Room beside the lodge for the chairlift up the mountainside, and its piste.
+  minSize: { w: 700, h: 470 },
   background: BACKGROUND,
   prop,
   plant: (name) => plant(name),
@@ -54,6 +57,7 @@ export const CABIN: Theme = {
   screenColors: { bg: "#1c1a1e", code: ["#ffcf7a", "#e8e4da", "#8ac8e8", "#a8d89a", "#e88a7a", "#9a948a"] },
   look: (l, id) => look(l, id),
   npc,
+  pose: (p, info) => liftPose(p, info),
   dress: (ctx, a, t) => dress(ctx, a, t),
   dressVisitor: (ctx, v) => dressVisitor(ctx, v),
   pet: (kind, pose, facing, blink) => pet(kind, pose, facing, blink),
@@ -65,4 +69,6 @@ export const CABIN: Theme = {
   // The fireplace, the woodpile, the fondue pot, the sauna, the telescope, the chairlift and the skis.
   clickables,
   click,
+  // Now and then, on a bright day, someone skis down the piste on their own.
+  tick: liftTick,
 };

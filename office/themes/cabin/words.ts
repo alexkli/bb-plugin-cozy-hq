@@ -257,6 +257,13 @@ export const SOUNDS: Record<string, SoundRecipe> = {
     k.noise(0.13, 0.05, 0.14, 1300);
     k.tone(320, 0, 0.3, "triangle", 0.03, 300);
   },
+  // The lift hut's bell.
+  "cab-ding": (k) => {
+    for (const at of [0, 0.32]) {
+      k.tone(1320, at, 0.9, "sine", 0.09, 1310);
+      k.tone(2640, at, 0.4, "sine", 0.03);
+    }
+  },
   // Far off: a slough of snow rumbling down a face.
   "cab-rumble": (k) => {
     k.swell(0, 3, 0.3, 70, 160, 0.7, "lowpass");

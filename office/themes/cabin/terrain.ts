@@ -192,7 +192,7 @@ export function paintShell(ctx: Ctx, L: Layout, p: CabinPlan): void {
   const yBot = lo.y + lo.h;
   // Side walls: stacked log ends seen from above.
   for (const x of [x0, x1 - 5]) {
-    if (p.deckSide === "east" && x === x1 - 5) continue;
+    if (x === x1 - 5 && p.deckWall && p.deckWall.x0 === p.deckWall.x1) continue;
     rect(ctx, x - 1, yTop, 7, yBot - yTop, OUTLINE);
     for (let y = yTop; y < yBot; y++) rect(ctx, x, y, 5, 1, (y - yTop) % 6 < 2 ? C.beamHi : (y - yTop) % 6 === 5 ? C.beamDk : C.beam);
   }
@@ -219,7 +219,7 @@ export function paintShell(ctx: Ctx, L: Layout, p: CabinPlan): void {
   for (let y = yTop + 6; y < yBot; y++) {
     const k = Math.round(2 + Math.sin(y * 0.11) * 1.5 + Math.sin(y * 0.037) * 1.5);
     rect(ctx, x0 - 1 - k, y, k, 1, (y % 7) ? C.snow : C.snowShade);
-    if (p.deckSide !== "east") rect(ctx, x1 + 1, y, k, 1, (y % 5) ? C.snow : C.snowShade);
+    if (!p.deckWall || p.deckWall.x0 !== p.deckWall.x1) rect(ctx, x1 + 1, y, k, 1, (y % 5) ? C.snow : C.snowShade);
   }
 }
 

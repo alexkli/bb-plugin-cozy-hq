@@ -18,6 +18,7 @@ import { C, clamp } from "./kit.ts";
 import { planOf, type CabinPlan } from "./plan.ts";
 import { towelGuy } from "./outdoor.ts";
 import { sledSprite } from "./terrain.ts";
+import { liftClick, liftClickables } from "./lift.ts";
 
 const px = (ctx: Ctx, c: string, x: number, y: number, w = 1, h = 1) => {
   ctx.fillStyle = c;
@@ -185,7 +186,9 @@ export function clickables(L: Layout): SceneryClickable[] {
     out.push({ id: "sauna", rect: { x: s.x, y: s.y + s.h - 44, w: s.w, h: 44 }, hover: "The sauna · steam, then the snow" });
   }
   if (p.telescope) out.push({ id: "telescope", rect: { x: p.telescope.x - 7, y: p.telescope.y - 26, w: 15, h: 28 }, hover: "The telescope · what's up on the peaks?" });
-  if (p.slope) out.push({ id: "lift", rect: p.slope, hover: "The chairlift · who's riding up?" });
+  // The lodge's own lift (see lift.ts), or on a small phone just the strip of it beyond the rail.
+  if (p.lift) out.push(...liftClickables(p));
+  else if (p.slope) out.push({ id: "lift", rect: p.slope, hover: "The chairlift · who's riding up?" });
   const t = p.terrain;
   if (t.tarn) out.push({ id: "tarn", rect: t.tarn, hover: "The frozen tarn · is the ice thick enough?" });
   if (t.sled) out.push({ id: "sled", rect: { x: t.sled.x - 9, y: t.sled.y - 9, w: 18, h: 10 }, hover: "The sled · one run down" });
@@ -306,7 +309,10 @@ export function click(id: string, act: SceneryActions): string | null {
       sayNear(act, s.x, s.y, 130, SAY[kind], 1.2);
       return "cab-scope";
     }
+    case "lift-hut":
+      return p.lift ? liftClick(id, act) : null;
     case "lift": {
+      if (p.lift) return liftClick(id, act);
       const kind = Math.random() < 0.12 ? "yeti" : weighted<"wave" | "dog" | "mitten">([["wave", 3], ["dog", 2], ["mitten", 2]]);
       const s = p.slope!;
       const along = p.deckSide === "east" ? clamp(act.at.y + 50, s.y + 30, s.y + s.h) : clamp(act.at.x - 50, s.x, s.x + s.w - 30);
