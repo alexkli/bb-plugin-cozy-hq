@@ -1,11 +1,12 @@
-// Coffee Shop: the office moves into a neighborhood café on a street corner.
-// Laptops at café tables and along the window bar, the espresso bar with
-// baristas pulling shots under the chalkboard menus, the pickup stools
-// where threads wait for you, the fireside corner, the big table under the
-// RESERVED sign, your usual snug in the corner, an open-mic stage and the
-// storeroom with the router and the roaster.
+// Coffee Shop: the office moves into a small brick café. Laptops at little
+// round tables and along the wall counter, the espresso bar with baristas
+// pulling shots under the chalkboard menus, the pickup stools where threads
+// wait for you, the back room with the router and the AI box, your armchair
+// on a round rug; up the stairs the cozy mezzanine (the fireside sofa, the
+// reserved table, armchairs, the open-mic stage); out front the striped
+// awning and the terrace on the pavement.
 // See office/themes/README.md for the hooks; the pieces live in ./cafe/:
-//   plan.ts      the floor plan (tables, the counter, the snug, the stage)
+//   plan.ts      the floor plan (the mezzanine, the counter, tables, your armchair, the terrace)
 //   backdrop.ts  floors, the storefront, the fireplace and back-bar walls, the wall fixtures
 //   props.ts     furniture and plants;  desks.ts  chairs, laptops, speakers
 //   view.ts      the street out the shop windows, the door and windows opening
@@ -28,7 +29,7 @@ import { WORDS } from "./cafe/words.ts";
 export const CAFE: Theme = {
   id: "cafe",
   name: "Coffee Shop",
-  blurb: "A corner café: laptops at every table, baristas behind the counter, your usual snug in the corner",
+  blurb: "A little brick café: laptops at round tables, baristas behind the counter, a cozy upstairs, a terrace out front",
   icon: "☕",
   layout: cafeLayout,
   background: BACKGROUND,

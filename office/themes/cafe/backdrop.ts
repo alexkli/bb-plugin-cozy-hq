@@ -1,14 +1,16 @@
-// Coffee Shop: the baked backdrop. An oak herringbone floor, cement tiles at
-// the counter, rugs by the fire and under the reserved table, the open-mic
-// stage's boards, your snug's raised platform. The wall is three walls: the
-// storefront (green-painted shop windows onto the street, a brick pier with
-// the community corkboard, the glass door with its brass bell), the chimney
-// breast with the fireplace between built-in bookshelves, and the back bar
-// (white subway tiles, open shelves of cups and bean jars, chalkboard menus,
-// the back counter where the baristas grind and steam).
+// Coffee Shop: the baked backdrop. The café is a small brick building on
+// its lot: the pavement round it, a sliver of cobbled street at the bottom.
+// Upstairs, wide pine boards and the back wall of brick (the chalkboard of
+// the reserved table, the chimney breast with the fireplace, windows over
+// the rooftops); the mezzanine's balustrade and the stairs down; downstairs
+// an oak herringbone floor, cement tiles at the counter, the back counter
+// under the mezzanine with the menus hanging over it, sockets over the
+// wall counter; the back room's brick walls with a doorway; and out front
+// the shop's face: the sign, the striped awning, big windows with flower
+// boxes, the door with its bell, French doors onto the terrace.
 import type { Layout, Rect, Room } from "../../layout.ts";
 import type { BackgroundSteps } from "../../theme.ts";
-import { Grid, OUTLINE, pixelTextWidth, drawPixelText } from "../../themekit.ts";
+import { drawPixelText, Grid, OUTLINE, pixelTextWidth } from "../../themekit.ts";
 import { C, chalkLine, h2, rect } from "./kit.ts";
 import { planOf, type CafePlan } from "./plan.ts";
 
@@ -22,8 +24,9 @@ const hex = (c: string): [number, number, number] => [parseInt(c.slice(1, 3), 16
 function pixels(ctx: CanvasRenderingContext2D, r: Rect, color: (x: number, y: number) => string): void {
   const x0 = Math.max(0, Math.floor(r.x));
   const y0 = Math.max(0, Math.floor(r.y));
-  const w = Math.max(1, Math.floor(r.w));
-  const h = Math.max(1, Math.floor(r.h));
+  const w = Math.min(ctx.canvas.width - x0, Math.max(1, Math.floor(r.w)));
+  const h = Math.min(ctx.canvas.height - y0, Math.max(1, Math.floor(r.h)));
+  if (w <= 0 || h <= 0) return;
   const img = ctx.getImageData(x0, y0, w, h);
   const d = img.data;
   const cache = new Map<string, [number, number, number]>();
@@ -51,7 +54,6 @@ function pixels(ctx: CanvasRenderingContext2D, r: Rect, color: (x: number, y: nu
 function oak(x: number, y: number): string {
   const col = Math.floor(x / 12);
   const lx = x - col * 12;
-  // Each column of boards leans one way or the other.
   const yy = col % 2 ? y + lx : y - lx + 12;
   const row = Math.floor(yy / 8);
   const ly = ((yy % 8) + 8) % 8;
@@ -61,6 +63,17 @@ function oak(x: number, y: number): string {
   if (k < 0.25) return "#ab7546";
   if (k > 0.8) return "#bb8452";
   return C.oak;
+}
+
+/** Wide pine boards upstairs, running across. */
+function pine(x: number, y: number): string {
+  const row = Math.floor(y / 6);
+  const ly = y % 6;
+  const seam = (x + row * 53) % 71 === 0;
+  if (ly === 5 || seam) return "#a87a4c";
+  const k = h2(row, Math.floor((x + row * 53) / 71));
+  if (ly === 0) return "#dcb07c";
+  return k < 0.3 ? "#c6955f" : k > 0.8 ? "#d6a670" : "#cf9f68";
 }
 
 /** Cement tiles: cream with a small terracotta and green flower in each 8 px tile. */
@@ -75,8 +88,26 @@ function cement(x: number, y: number): string {
   return C.tile;
 }
 
+/** Big pale paving slabs out front. */
+function pavement(x: number, y: number): string {
+  const row = Math.floor(y / 10);
+  const off = row % 2 ? 7 : 0;
+  if (y % 10 === 0 || (x + off) % 14 === 0) return C.pavementLo;
+  return h2(Math.floor((x + off) / 14), row) < 0.2 ? "#c1b9aa" : C.pavement;
+}
+
+/** Cobbles: little rounded stones. */
+function cobbles(x: number, y: number): string {
+  const row = Math.floor(y / 3);
+  const off = row % 2 ? 2 : 0;
+  if (y % 3 === 2 || (x + off) % 4 === 3) return "#4a4650";
+  const k = h2(Math.floor((x + off) / 4), row);
+  return k < 0.3 ? "#6e6a72" : k > 0.8 ? "#8c8890" : "#7a767e";
+}
+
 /** A woven rug: a striped border round a field of small diamonds, a fringe at the ends. */
 function rug(ctx: CanvasRenderingContext2D, r: Rect, field: string, border: string, motif: string): void {
+  if (r.w < 12 || r.h < 12) return;
   const g = new Grid(r.w, r.h);
   g.rect(0, 0, r.w, r.h, border);
   g.rect(2, 2, r.w - 4, r.h - 4, C.cream);
@@ -84,34 +115,33 @@ function rug(ctx: CanvasRenderingContext2D, r: Rect, field: string, border: stri
   g.rect(5, 5, r.w - 10, r.h - 10, field);
   for (let x = 4; x < r.w - 4; x += 3) g.set(x, 4, motif).set(x + 1, r.h - 5, motif);
   for (let y = 4; y < r.h - 4; y += 3) g.set(4, y, motif).set(r.w - 5, y + 1, motif);
-  // Small diamonds on a lattice.
   for (let y = 9; y < r.h - 8; y += 8) {
     for (let x = 10 + ((y / 8) % 2 ? 4 : 0); x < r.w - 9; x += 8) {
       g.set(x, y - 1, motif).set(x - 1, y, motif).set(x + 1, y, motif).set(x, y + 1, motif).set(x, y, C.cream);
     }
   }
-  // Fringe at the ends.
   for (let y = 1; y < r.h - 1; y += 2) g.set(0, y, C.cream).set(r.w - 1, y, C.cream);
   paint(ctx, g, r.x, r.y);
 }
 
-function floor(ctx: CanvasRenderingContext2D, L: Layout): void {
-  pixels(ctx, { x: 0, y: 0, w: L.W, h: L.H }, oak);
-  const plan = planOf(L);
-  if (!plan) return;
-  for (const t of plan.tiles) pixels(ctx, t, cement);
-  // A doormat inside the front door.
-  const d = L.wall.door;
-  const seg = L.segments.find((s) => d.x + d.w / 2 >= s.x0 && d.x + d.w / 2 < s.x1);
-  const my = (seg?.depth ?? 70) + 2;
-  rect(ctx, d.x - 4, my, d.w + 8, 10, OUTLINE);
-  rect(ctx, d.x - 3, my + 1, d.w + 6, 8, "#6b4a2a");
-  for (let x = d.x - 2; x < d.x + d.w + 2; x += 2) rect(ctx, x, my + 2, 1, 6, "#7d5a36");
-  for (const r of plan.rugs) rug(ctx, r, C.rust, C.rustLo, C.mustard);
-  const m = plan.reserved;
-  const table = L.props.find((p) => p.kind === "meeting-table");
-  if (table) rug(ctx, { x: Math.max(m.x + 2, table.x - 14), y: table.y - 30, w: Math.min(m.w - 4, 96), h: 92 }, C.velvet, C.velvetLo, C.mustard);
-  if (plan.stage) stageBoards(ctx, plan.stage);
+/** Your round rug: rings of rust, mustard and cream round a green middle. */
+function roundRug(ctx: CanvasRenderingContext2D, c: { x: number; y: number; rx: number; ry: number }): void {
+  const w = c.rx * 2 + 2;
+  const h = c.ry * 2 + 2;
+  const g = new Grid(w, h);
+  const cx = c.rx + 1;
+  const cy = c.ry + 1;
+  const rings = [C.rustLo, C.rust, C.cream, C.mustard, C.rust, C.velvet, C.velvetLo, C.velvet];
+  rings.forEach((col, i) => {
+    const k = 1 - i * 0.11;
+    if (k > 0.1) g.ellipse(cx, cy, c.rx * k, c.ry * k, col);
+  });
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    g.set(Math.round(cx + Math.cos(a) * c.rx * 0.72), Math.round(cy + Math.sin(a) * c.ry * 0.72), C.cream);
+  }
+  g.outline(OUTLINE);
+  paint(ctx, g, c.x - cx, c.y - cy);
 }
 
 /** The open-mic stage: a low platform of dark boards with a lit front edge. */
@@ -127,185 +157,262 @@ function stageBoards(ctx: CanvasRenderingContext2D, s: Rect): void {
   paint(ctx, g, s.x, s.y);
 }
 
+function floor(ctx: CanvasRenderingContext2D, L: Layout): void {
+  const plan = planOf(L);
+  if (!plan) {
+    pixels(ctx, { x: 0, y: 0, w: L.W, h: L.H }, oak);
+    return;
+  }
+  const { x0, x1 } = plan.bldg;
+  // The lot: pavement all round, cobbles at the bottom.
+  pixels(ctx, { x: 0, y: 0, w: L.W, h: L.H }, pavement);
+  if (plan.street) pixels(ctx, plan.street, cobbles);
+  const bottom = plan.facade ? plan.facade.y : L.H;
+  const top = plan.upstairs ? plan.upstairs.edge + 16 : plan.wallD;
+  pixels(ctx, { x: x0, y: top, w: x1 - x0, h: bottom - top }, oak);
+  if (plan.upstairs) pixels(ctx, { x: x0, y: plan.wallD, w: x1 - x0, h: plan.upstairs.edge - plan.wallD }, pine);
+  for (const t of plan.tiles) pixels(ctx, t, cement);
+  for (const r of plan.rugs) rug(ctx, r, C.rust, C.rustLo, C.mustard);
+  roundRug(ctx, plan.rug);
+  if (plan.stage) stageBoards(ctx, plan.stage);
+  // A doormat inside the door.
+  const d = L.wall.door;
+  const my = plan.facade ? plan.facade.y - 12 : plan.wallD + 2;
+  rect(ctx, d.x - 4, my, d.w + 8, 10, OUTLINE);
+  rect(ctx, d.x - 3, my + 1, d.w + 6, 8, "#6b4a2a");
+  for (let x = d.x - 2; x < d.x + d.w + 2; x += 2) rect(ctx, x, my + 2, 1, 6, "#7d5a36");
+}
+
 // ------------------------------------------------------------------ the walls
 
-type WallKind = "storefront" | "chimney" | "backbar";
-
-function kindOf(plan: CafePlan | null, s: { x0: number; x1: number }): WallKind {
-  if (!plan) return "backbar";
-  const mid = (s.x0 + s.x1) / 2;
-  if (mid >= plan.storefront.x0 && mid < plan.storefront.x1) return "storefront";
-  if (plan.fireplace && plan.fireplace.x >= s.x0 && plan.fireplace.x < s.x1) return "chimney";
-  return "backbar";
+/** Brick into a grid (running bond, lit from the top left); `ox` keeps the bond continuous. */
+function brickInto(g: Grid, x: number, y: number, w: number, h: number, ox: number, seed: number, hi = false): void {
+  for (let yy = 0; yy < h; yy++) {
+    for (let xx = 0; xx < w; xx++) {
+      const row = Math.floor(yy / 4);
+      const off = row % 2 ? 4 : 0;
+      const bx = Math.floor((xx + ox + off) / 8);
+      const mortar = yy % 4 === 3 || (xx + ox + off) % 8 === 7;
+      const k = h2(row * 17 + bx, seed);
+      g.set(x + xx, y + yy, mortar ? C.mortar : hi ? (k < 0.3 ? C.brick : C.brickHi) : k < 0.22 ? C.brickLo : k > 0.86 ? C.brickHi : C.brick);
+    }
+  }
 }
 
 function wall(ctx: CanvasRenderingContext2D, L: Layout): void {
   const plan = planOf(L);
-  for (const s of L.segments) {
-    const w = s.x1 - s.x0;
-    const d = s.depth;
-    switch (kindOf(plan, s)) {
-      case "storefront":
-        storefront(ctx, s.x0, w, d);
-        break;
-      case "chimney":
-        chimneyWall(ctx, s.x0, w, d, plan!);
-        break;
-      case "backbar":
-        backBar(ctx, s.x0, w, d, plan, L);
-        break;
-    }
-    // The skirting where the wall meets the floor.
-    rect(ctx, s.x0, d - 2, w, 2, C.walnutDk);
-    rect(ctx, s.x0, d, w, 1, "#5a3a22");
+  if (!plan) return;
+  const { x0, x1 } = plan.bldg;
+  const d = plan.wallD;
+  // The back wall, brick, with a cornice.
+  const g = new Grid(x1 - x0 + 12, d);
+  brickInto(g, 0, 0, x1 - x0 + 12, d, x0 - 6, 5);
+  g.rect(0, 0, x1 - x0 + 12, 3, C.walnut).hline(0, 0, x1 - x0 + 12, C.walnutHi);
+  g.rect(0, d - 6, x1 - x0 + 12, 6, C.walnutLo).hline(0, d - 6, x1 - x0 + 12, C.walnut);
+  paint(ctx, g, x0 - 6, 0);
+  if (plan.fireplace) fireplace(ctx, plan.fireplace, d);
+  if (!plan.upstairs) backBar(ctx, plan, L);
+  // The side walls, down to the front.
+  const bottom = plan.facade ? plan.facade.y : L.H;
+  for (const x of [x0 - 6, x1]) {
+    rect(ctx, x, d, 6, bottom - d, OUTLINE);
+    rect(ctx, x + 1, d, 4, bottom - d, C.brickLo);
+    rect(ctx, x + 1, d, 1, bottom - d, C.brickHi);
   }
-  // Posts where the walls step in or out.
-  for (const x of L.wall.pillars) {
-    const depth = Math.max(...L.segments.filter((s) => Math.abs(s.x0 - x) < 2 || Math.abs(s.x1 - x) < 2).map((s) => s.depth));
-    rect(ctx, x - 3, 0, 6, depth, OUTLINE);
-    rect(ctx, x - 2, 0, 4, depth - 1, C.walnut);
-    rect(ctx, x - 2, 0, 1, depth - 1, C.walnutHi);
-  }
+  if (plan.upstairs) mezzanine(ctx, plan, L);
+  if (plan.facade) facade(ctx, plan, L);
 }
 
-/** The shopfront from inside: a green fascia, the window wall (windows cut in later), a paneled green bulkhead under the sill. */
-function storefront(ctx: CanvasRenderingContext2D, x: number, w: number, d: number): void {
-  // Brick between and around the windows (most of it ends up glass).
-  const g = new Grid(w, d);
-  for (let y = 0; y < d; y++) {
-    for (let xx = 0; xx < w; xx++) {
-      const row = Math.floor(y / 4);
-      const off = row % 2 ? 4 : 0;
-      const bx = Math.floor((xx + off) / 8);
-      const mortar = y % 4 === 3 || (xx + off) % 8 === 7;
-      const k = h2(row * 13 + bx, 3);
-      g.set(xx, y, mortar ? C.mortar : k < 0.2 ? C.brickLo : k > 0.85 ? C.brickHi : C.brick);
-    }
-  }
-  // The fascia along the top.
-  g.rect(0, 0, w, 6, C.green).hline(0, 0, w, C.greenHi).hline(0, 5, w, C.greenDk);
-  for (let xx = 4; xx < w; xx += 10) g.set(xx, 3, C.brass);
-  // The sill and the bulkhead under the windows.
-  const sill = d - 12;
-  g.rect(0, sill, w, 2, C.walnutHi).rect(0, sill + 2, w, 1, C.walnutLo);
-  g.rect(0, sill + 3, w, d - sill - 3, C.green);
-  for (let xx = 2; xx + 12 < w; xx += 16) {
-    g.rect(xx, sill + 4, 13, d - sill - 7, C.greenLo).rect(xx + 1, sill + 5, 11, d - sill - 9, C.green).hline(xx + 1, sill + 5, 11, C.greenHi);
-  }
-  paint(ctx, g, x, 0);
-}
-
-/** Exposed brick, built-in bookshelves either side and the fireplace in the chimney breast. */
-function chimneyWall(ctx: CanvasRenderingContext2D, x: number, w: number, d: number, plan: CafePlan): void {
-  const g = new Grid(w, d);
-  for (let y = 0; y < d; y++) {
-    for (let xx = 0; xx < w; xx++) {
-      const row = Math.floor(y / 4);
-      const off = row % 2 ? 4 : 0;
-      const bx = Math.floor((xx + x + off) / 8);
-      const mortar = y % 4 === 3 || (xx + x + off) % 8 === 7;
-      const k = h2(row * 17 + bx, 5);
-      g.set(xx, y, mortar ? C.mortar : k < 0.22 ? C.brickLo : k > 0.86 ? C.brickHi : C.brick);
-    }
-  }
-  const f = plan.fireplace!;
-  const fx = f.x - x;
-  // Built-in shelves of books either side of the chimney.
-  const shelf = (sx: number, sw: number) => {
-    if (sw < 14) return;
-    const top = 10;
-    const bottom = d - 6;
-    g.rect(sx, top, sw, bottom - top, C.walnutDk);
-    g.rect(sx, top, sw, 2, C.walnutHi).rect(sx, top, 2, bottom - top, C.walnut).rect(sx + sw - 2, top, 2, bottom - top, C.walnut);
-    for (let sy = top + 2, row = 0; sy + 12 < bottom; sy += 14, row++) {
-      g.rect(sx + 2, sy + 12, sw - 4, 2, C.walnut);
-      let bx = sx + 3;
-      let i = 0;
-      while (bx < sx + sw - 4) {
-        const k = h2(row * 29 + i + sx, 11);
-        if (k < 0.12) {
-          // A potted plant or a jar now and then.
-          g.rect(bx, sy + 6, 5, 6, C.terra).rect(bx - 1, sy + 2, 7, 4, C.leaf).set(bx + 1, sy + 2, C.leafHi);
-          bx += 7;
-        } else {
-          const bw = 2 + Math.floor(k * 3);
-          const bh = 8 + Math.floor(h2(i, row) * 4);
-          const col = [C.rust, C.green, C.mustard, C.cream, C.velvet, "#5b6f8f", C.leather][Math.floor(k * 7)]!;
-          g.rect(bx, sy + 12 - bh, bw, bh, col).vline(bx, sy + 12 - bh, bh, C.walnutDk);
-          bx += bw + (k > 0.8 ? 2 : 0);
-        }
-        i++;
-      }
-    }
-  };
-  shelf(4, fx - 10);
-  shelf(fx + f.w + 6, w - (fx + f.w + 6) - 4);
-  // The chimney breast: lighter brick with a stone surround and an oak mantel.
-  g.rect(fx - 2, 0, f.w + 4, d, C.brickHi);
-  for (let y = 0; y < d; y += 4) g.hline(fx - 2, y + 3, f.w + 4, C.mortar);
-  for (let y = 0, row = 0; y < d; y += 4, row++) for (let xx = fx - 2 + (row % 2 ? 4 : 0); xx < fx + f.w + 2; xx += 8) g.vline(xx, y, 3, C.mortar);
+/** The chimney breast in the back wall: an oak mantel over a stone surround, the firebox (the fire is live). */
+function fireplace(ctx: CanvasRenderingContext2D, f: Rect, d: number): void {
+  const g = new Grid(f.w + 12, d);
+  brickInto(g, 0, 0, f.w + 12, d, f.x, 9, true);
+  const fx = 6;
   const fy = f.y;
   g.rect(fx - 4, fy - 4, f.w + 8, 4, C.oakHi).hline(fx - 4, fy - 4, f.w + 8, "#d9a46e").hline(fx - 4, fy - 1, f.w + 8, C.oakDk);
   g.rect(fx + 2, fy, f.w - 4, d - fy, "#9a958c").rect(fx + 2, fy, f.w - 4, 1, "#b5b0a6");
   g.rect(fx + 8, fy + 6, f.w - 16, d - fy - 8, "#1b1416").rect(fx + 8, fy + 6, f.w - 16, 2, "#2a2024");
-  // Fire bricks at the back of the firebox.
   for (let y = fy + 9; y < d - 4; y += 3) for (let xx = fx + 10 + (y % 2 ? 2 : 0); xx < fx + f.w - 10; xx += 5) g.set(xx, y, "#3a2622");
-  // Things on the mantel: candles, a little plant, a framed photo.
+  // On the mantel: candles, a framed photo, a little plant.
   g.rect(fx + 4, fy - 9, 2, 5, C.cream).set(fx + 4, fy - 10, C.amber);
   g.rect(fx + 8, fy - 7, 2, 3, C.cream).set(fx + 8, fy - 8, C.amber);
   g.rect(fx + f.w - 14, fy - 10, 8, 6, C.walnut).rect(fx + f.w - 13, fy - 9, 6, 4, C.chalkBlue);
   g.rect(fx + f.w - 5, fy - 7, 4, 3, C.terra).rect(fx + f.w - 6, fy - 10, 6, 3, C.leaf);
-  paint(ctx, g, x, 0);
+  paint(ctx, g, f.x - 6, 0);
 }
 
-/** The back bar: subway tiles, open shelves of cups and jars, menus, the back counter at its foot. */
-function backBar(ctx: CanvasRenderingContext2D, x: number, w: number, d: number, plan: CafePlan | null, L: Layout): void {
-  const g = new Grid(w, d);
-  // Dark green upper wall, white subway tiles below.
-  const tileTop = Math.max(26, d - 34);
-  g.rect(0, 0, w, tileTop, C.greenLo);
-  for (let xx = 0; xx < w; xx += 6) g.vline(xx, 0, tileTop, C.green);
+/** One floor (short panels): the back bar on the wall over the counter: shelves of cups and jars, the menus, the back counter. */
+function backBar(ctx: CanvasRenderingContext2D, plan: CafePlan, L: Layout): void {
+  const K = plan.counter.r;
+  const d = plan.wallD;
+  const x = K.x - 4;
+  const w = K.w + 8;
+  const g = new Grid(w, d - 6);
+  g.rect(0, 0, w, d - 6, C.greenLo);
+  for (let xx = 0; xx < w; xx += 6) g.vline(xx, 0, d - 6, C.green);
   g.hline(0, 0, w, C.greenHi);
-  for (let y = tileTop; y < d; y++) {
-    for (let xx = 0; xx < w; xx++) {
-      const row = Math.floor((y - tileTop) / 3);
-      const off = row % 2 ? 4 : 0;
-      const grout = (y - tileTop) % 3 === 2 || (xx + off) % 8 === 7;
-      g.set(xx, y, grout ? "#d6d2c8" : (y - tileTop) % 3 === 0 ? "#ffffff" : "#f1eee8");
-    }
-  }
-  // Open shelves on the tiles: cups, glasses and jars of beans.
-  const busy: [number, number][] = [];
-  if (plan) for (const m of plan.menus) busy.push([m.x - x - 3, m.x - x + m.w + 3]);
-  busy.push([L.tv.x - x - 18, L.tv.x - x + L.tv.w + 18]);
-  const shelfY = tileTop + 6;
-  for (let xx = 4; xx < w - 4; xx++) {
-    if (busy.some(([a, z]) => xx >= a && xx < z) && shelfY < L.tv.y + L.tv.h + 2) continue;
+  const shelfY = d - 16;
+  shelfStuff(g, 4, w - 8, shelfY);
+  g.outline(OUTLINE);
+  paint(ctx, g, x, 0);
+  for (const [i, m] of plan.menus.entries()) menuBoard(ctx, m, i);
+  backCounter(ctx, x, d - 16, w, 22);
+  void L;
+}
+
+/** Cups, jars of beans and syrup bottles on a shelf at `y`. */
+function shelfStuff(g: Grid, x0: number, w: number, y: number): void {
+  for (let xx = x0; xx < x0 + w; xx++) {
     const k = h2(xx >> 3, 9);
     const lx = xx & 7;
     if (lx === 7) continue;
     if (k < 0.4) {
-      // Stacked cups.
-      if (lx < 6) g.rect(xx, shelfY - 6, 1, 6, lx % 2 ? "#ffffff" : "#e8e2d8");
+      if (lx < 6) g.rect(xx, y - 6, 1, 6, lx % 2 ? "#ffffff" : "#e8e2d8");
     } else if (k < 0.7) {
-      // A jar of beans.
-      if (lx >= 1 && lx <= 5) g.vline(xx, shelfY - 7, 7, lx === 1 ? C.glass : lx === 5 ? "#8fb6c8" : C.espresso).set(xx, shelfY - 8, C.walnut);
+      if (lx >= 1 && lx <= 5) g.vline(xx, y - 7, 7, lx === 1 ? C.glass : lx === 5 ? "#8fb6c8" : C.espresso).set(xx, y - 8, C.walnut);
     } else if (k < 0.85) {
-      // Syrup bottles.
-      if (lx % 3 === 1) g.vline(xx, shelfY - 8, 8, [C.rust, C.mustard, C.velvet][lx % 3]!).set(xx, shelfY - 9, C.chromeLo);
+      if (lx % 3 === 1) g.vline(xx, y - 8, 8, [C.rust, C.mustard, C.velvet][lx % 3]!).set(xx, y - 9, C.chromeLo);
     }
   }
-  g.rect(2, shelfY, w - 4, 2, C.walnut).hline(2, shelfY, w - 4, C.walnutHi);
-  for (let xx = 8; xx < w - 8; xx += 30) g.rect(xx, shelfY + 2, 1, 3, C.iron);
-  paint(ctx, g, x, 0);
-  // Chalkboard menus (the special's line is chalked live; the rest is baked here).
-  if (plan) for (const [i, m] of plan.menus.entries()) menuBoard(ctx, m, i);
-  // The back counter along the wall's foot (where it's the counter's wall).
-  if (plan?.counter.walled) {
-    const K = plan.counter.r;
-    const x0 = Math.max(x, K.x - 4);
-    const x1 = Math.min(x + w, K.x + K.w + 4);
-    if (x1 - x0 > 20 && Math.abs(K.y - d) < 4) backCounter(ctx, x0, d - 16, x1 - x0, 22);
+  g.rect(x0 - 2, y, w + 4, 2, C.walnut).hline(x0 - 2, y, w + 4, C.walnutHi);
+}
+
+/**
+ * The mezzanine's edge: the balustrade along it (open at the stairs), the
+ * paneled riser under it with sockets over the wall counter, the back
+ * counter of the espresso bar at its foot with the menus hanging over it,
+ * and the stairs coming down.
+ */
+function mezzanine(ctx: CanvasRenderingContext2D, plan: CafePlan, L: Layout): void {
+  const { x0, x1 } = plan.bldg;
+  const e = plan.upstairs!.edge;
+  const st = plan.stairs!;
+  // The riser: walnut panels.
+  const g = new Grid(x1 - x0, 16);
+  g.rect(0, 0, x1 - x0, 16, C.walnut);
+  for (let x = 2; x + 20 < x1 - x0; x += 24) g.rect(x, 4, 20, 9, C.walnutLo).rect(x + 1, 5, 18, 7, C.walnut).hline(x + 1, 5, 18, C.walnutHi);
+  g.hline(0, 15, x1 - x0, C.walnutDk);
+  paint(ctx, g, x0, e);
+  // Sockets over the wall counter.
+  for (const t of plan.tables) {
+    if (t.kind !== "bar") continue;
+    for (let x = t.x + 10; x < t.x + t.w; x += 48) {
+      rect(ctx, x, e + 6, 6, 5, OUTLINE);
+      rect(ctx, x + 1, e + 7, 4, 3, C.cream);
+      rect(ctx, x + 2, e + 8, 1, 1, OUTLINE);
+      rect(ctx, x + 4, e + 8, 1, 1, OUTLINE);
+    }
+  }
+  // The balustrade on top.
+  for (let x = x0; x < x1; x++) {
+    if (Math.abs(x - st.x) <= 13) continue;
+    if ((x - x0) % 5 === 0) rect(ctx, x, e - 6, 1, 7, C.walnutDk);
+  }
+  for (const [a, b] of [[x0, st.x - 13], [st.x + 14, x1]] as const) {
+    if (b <= a) continue;
+    rect(ctx, a, e - 8, b - a, 3, OUTLINE);
+    rect(ctx, a, e - 8, b - a, 2, C.walnutHi);
+    rect(ctx, a, e, b - a, 1, C.walnutDk);
+  }
+  // The back counter and the menus over it.
+  const K = plan.counter.r;
+  backCounter(ctx, K.x - 2, K.y - 10, K.w + 4, 22);
+  for (const [i, m] of plan.menus.entries()) {
+    rect(ctx, m.x + 6, e - 4, 1, m.y - e + 4, C.iron);
+    rect(ctx, m.x + m.w - 7, e - 4, 1, m.y - e + 4, C.iron);
+    menuBoard(ctx, m, i);
+  }
+  // The stairs: treads going down, a stringer either side.
+  const sx = st.x - 11;
+  const sw = 22;
+  const y0 = st.y0 - 4;
+  const y1 = st.y1;
+  for (let y = y0; y < y1; y++) {
+    const k = (y - y0) % 5;
+    rect(ctx, sx, y, sw, 1, k === 0 ? "#e2b884" : k === 4 ? "#8e6238" : "#c8965e");
+  }
+  rect(ctx, sx - 2, y0, 2, y1 - y0, OUTLINE);
+  rect(ctx, sx + sw, y0, 2, y1 - y0, OUTLINE);
+  rect(ctx, sx - 3, e - 8, 3, y1 - e + 8, C.walnut);
+  rect(ctx, sx + sw, e - 8, 3, y1 - e + 8, C.walnut);
+  rect(ctx, sx - 3, e - 9, 3, 2, C.brassHi);
+  rect(ctx, sx + sw, e - 9, 3, 2, C.brassHi);
+  void L;
+}
+
+/**
+ * The shop's face: the stone cap of the front wall, the green sign board,
+ * brick, big windows under a striped awning with flower boxes, open French
+ * doors (the main door with its bell is the door step), lamps by the door.
+ */
+function facade(ctx: CanvasRenderingContext2D, plan: CafePlan, L: Layout): void {
+  const f = plan.facade!;
+  const { x0, x1 } = plan.bldg;
+  const x = x0 - 6;
+  const w = x1 - x0 + 12;
+  const g = new Grid(w, f.h);
+  brickInto(g, 0, 0, w, f.h, x, 13);
+  g.rect(0, 0, w, 3, "#cfc6b6").hline(0, 0, w, "#e6dfd2").hline(0, 3, w, "#a89f90");
+  g.rect(0, 4, w, 8, C.green).hline(0, 4, w, C.greenHi).hline(0, 11, w, C.greenDk);
+  g.rect(0, f.h - 3, w, 3, "#a89f90").hline(0, f.h - 3, w, "#c1b8a8");
+  // Windows between the doors.
+  const gaps = [...f.doors].sort((a, b) => a - b);
+  const spans: [number, number][] = [];
+  let from = x0 + 4;
+  for (const dx of gaps) {
+    spans.push([from, dx - 14]);
+    from = dx + 14;
+  }
+  spans.push([from, x1 - 4]);
+  for (const [a, b] of spans) {
+    for (let wx = a; wx + 30 <= b; ) {
+      const ww = Math.min(60, b - wx);
+      if (ww < 30) break;
+      const lx = wx - x;
+      g.rect(lx, 14, ww, 18, C.green);
+      g.rect(lx + 2, 16, ww - 4, 14, "#3a3540");
+      g.rect(lx + 2, 16, ww - 4, 2, "#5a5462");
+      for (let i = 0; i < 3; i++) g.set(lx + 5 + i * 9, 26 - i * 3, "#6e6878").set(lx + 6 + i * 9, 25 - i * 3, "#6e6878");
+      g.vline(lx + Math.floor(ww / 2), 16, 14, C.green);
+      // The flower box.
+      g.rect(lx + 1, 32, ww - 2, 4, C.terra).hline(lx + 1, 32, ww - 2, "#de9068").hline(lx + 1, 35, ww - 2, C.terraLo);
+      for (let i = 2; i < ww - 2; i += 3) g.set(lx + i, 31, i % 2 ? C.leaf : C.leafHi).set(lx + i, 30, i % 6 === 2 ? "#e5484d" : i % 6 === 5 ? C.chalkPink : C.leaf);
+      wx += ww + 8;
+    }
+  }
+  // The French doors stand open: dark warm gaps with the leaves folded back.
+  for (const dx of gaps.slice(1)) {
+    const lx = dx - x - 9;
+    g.rect(lx, 12, 18, f.h - 15, C.greenDk);
+    g.rect(lx + 2, 14, 14, f.h - 17, "#4a3428");
+    g.rect(lx + 2, 14, 14, 2, "#6a4a34");
+    g.rect(lx - 3, 13, 3, f.h - 16, C.green).rect(lx + 18, 13, 3, f.h - 16, C.green);
+  }
+  g.outline(OUTLINE);
+  paint(ctx, g, x, f.y);
+  // The sign: the name left of the door, what's on offer right of it.
+  const dX = L.wall.door.x + L.wall.door.w / 2;
+  const name = "CAFE";
+  drawPixelText(ctx, name, Math.round(Math.max(x0 + 8, dX - 30 - pixelTextWidth(name))), f.y + 5, C.brassHi);
+  const tag = "COFFEE . CAKE";
+  if (dX + 30 + pixelTextWidth(tag) <= x1 - 4) drawPixelText(ctx, tag, Math.round(dX + 30), f.y + 5, C.cream);
+  // The awning over the windows: green and cream stripes, a scalloped edge.
+  for (const [a, b] of spans) {
+    if (b - a < 30) continue;
+    for (let ax = a - 2; ax < b + 2; ax++) {
+      const stripe = Math.floor((ax - a) / 4) % 2 ? C.awning : C.awningStripe;
+      const k = (ax - a) % 8;
+      const drop = k === 3 || k === 4 ? 2 : k === 2 || k === 5 ? 1 : 0;
+      rect(ctx, ax, f.y + 12, 1, 7 + drop, stripe);
+      rect(ctx, ax, f.y + 19 + drop, 1, 1, OUTLINE);
+    }
+    rect(ctx, a - 2, f.y + 12, b - a + 4, 1, OUTLINE);
+  }
+  // Lamps either side of the door.
+  const d = L.wall.door;
+  for (const lx of [d.x - 7, d.x + d.w + 4]) {
+    rect(ctx, lx, d.y + 4, 4, 6, OUTLINE);
+    rect(ctx, lx + 1, d.y + 5, 2, 4, "#ffe6a8");
   }
 }
 
@@ -358,79 +465,51 @@ function backCounter(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 
 // ------------------------------------------------------------------ rooms
 
-function room(ctx: CanvasRenderingContext2D, r: Room, L: Layout): void {
-  if (r.kind === "boss") snugFloor(ctx, r.rect);
-  else if (r.kind === "server") {
-    const q = r.rect;
-    pixels(ctx, q, (x, y) => ((x + y * 3) % 11 === 0 ? "#8f8a82" : (x * 7 + y) % 13 === 0 ? "#b4afa6" : "#a29d94"));
-  } else if (r.kind === "lounge" && !planOf(L)) rect(ctx, r.rect.x, r.rect.y, r.rect.w, r.rect.h, C.rust);
+function room(ctx: CanvasRenderingContext2D, r: Room): void {
+  if (r.kind === "server") pixels(ctx, r.rect, (x, y) => ((x + y * 3) % 11 === 0 ? "#8f8a82" : (x * 7 + y) % 13 === 0 ? "#b4afa6" : "#a29d94"));
 }
 
-/** Your snug: a raised platform of dark walnut boards (its edge shows at the front). */
-function snugFloor(ctx: CanvasRenderingContext2D, r: Rect): void {
-  pixels(ctx, r, (x, y) => {
-    const ly = (y - r.y) % 6;
-    if (ly === 5) return C.walnutDk;
-    const seam = (x + Math.floor((y - r.y) / 6) * 19) % 37 === 0;
-    if (seam) return C.walnutDk;
-    return ly === 0 ? C.walnutHi : (x + y) % 17 === 0 ? C.walnutLo : C.walnut;
-  });
-  // A rug under the desk.
-  const rw = Math.min(r.w - 30, 110);
-  rug(ctx, { x: r.x + Math.round((r.w - rw) / 2) + 8, y: r.y + 22, w: rw, h: Math.min(66, r.h - 34) }, C.velvet, C.velvetLo, C.rust);
-}
-
-function roomWalls(ctx: CanvasRenderingContext2D, r: Room, _L: Layout): void {
+/**
+ * The back room's walls: brick, a doorway at the bottom of the side facing
+ * the stairs (where whoever pokes at the cables walks in), a pass-through
+ * hatch on the other side looking out behind the counter.
+ */
+function roomWalls(ctx: CanvasRenderingContext2D, r: Room, L: Layout): void {
+  if (r.kind !== "server") return;
   const q = r.rect;
-  if (r.kind === "boss") {
-    // A low walnut railing round the back and the sides, open at the step up by the door.
-    const door = r.doorX ?? q.x + 16;
-    const rail = (x: number, y: number, w: number) => {
-      rect(ctx, x, y, w, 6, OUTLINE);
-      rect(ctx, x + 1, y + 1, w - 2, 4, C.walnut);
-      rect(ctx, x + 1, y + 1, w - 2, 1, C.walnutHi);
-      for (let xx = x + 3; xx < x + w - 2; xx += 5) rect(ctx, xx, y + 2, 1, 3, C.walnutDk);
-    };
-    rail(q.x - 2, q.y - 8, door - 9 - (q.x - 2));
-    rail(door + 9, q.y - 8, q.x + q.w + 2 - (door + 9));
-    // The step up into the snug.
-    rect(ctx, door - 9, q.y - 4, 18, 4, OUTLINE);
-    rect(ctx, door - 8, q.y - 3, 16, 2, C.oakHi);
-    for (const x of [q.x - 3, q.x + q.w - 1]) {
-      rect(ctx, x, q.y - 6, 4, q.h, OUTLINE);
-      rect(ctx, x + 1, q.y - 5, 2, q.h - 2, C.walnut);
+  const gap = planOf(L)?.server?.gap ?? "left";
+  const g = new Grid(q.w + 6, 9);
+  brickInto(g, 0, 0, q.w + 6, 9, q.x, 21);
+  g.hline(0, 0, q.w + 6, C.brickHi);
+  g.outline(OUTLINE);
+  paint(ctx, g, q.x - 3, q.y - 9);
+  const sy = q.y + q.h - 3;
+  for (const side of ["left", "right"] as const) {
+    const x = side === "left" ? q.x - 3 : q.x + q.w - 1;
+    const doorway = side === gap;
+    const to = doorway ? sy - 18 : q.y + q.h - 4;
+    rect(ctx, x, q.y - 8, 4, to - (q.y - 8), OUTLINE);
+    rect(ctx, x + 1, q.y - 7, 2, to - (q.y - 7), C.brickLo);
+    if (doorway) {
+      rect(ctx, x - 1, to, 6, 2, C.walnutDk);
+    } else {
+      // The hatch: a gap with a little ledge.
+      const hy = q.y + 10;
+      rect(ctx, x, hy, 4, 14, "#4a3428");
+      rect(ctx, x - 2, hy + 14, 8, 2, C.walnutHi);
     }
-    // A brass sign on the railing.
-    const sx = Math.min(q.x + q.w - 40, door + 20);
-    rect(ctx, sx, q.y - 10, 30, 7, OUTLINE);
-    rect(ctx, sx + 1, q.y - 9, 28, 5, C.brass);
-    drawPixelText(ctx, "SNUG", sx + 15 - pixelTextWidth("SNUG") / 2, q.y - 9, C.walnutDk);
-  } else if (r.kind === "server") {
-    // The storeroom: brick walls, the door at the top right.
-    const door = r.doorX ?? q.x + q.w - 12;
-    const top = (x: number, w: number) => {
-      if (w <= 0) return;
-      const g = new Grid(w, 9);
-      for (let y = 0; y < 9; y++) for (let xx = 0; xx < w; xx++) g.set(xx, y, y % 4 === 3 || (xx + (Math.floor(y / 4) % 2 ? 4 : 0)) % 8 === 7 ? C.mortar : C.brick);
-      g.hline(0, 0, w, C.brickHi);
-      g.outline(OUTLINE);
-      paint(ctx, g, x, q.y - 9);
-    };
-    top(q.x - 2, door - 7 - (q.x - 2));
-    top(door + 7, q.x + q.w + 2 - (door + 7));
-    for (const x of [q.x - 3, q.x + q.w - 1]) {
-      rect(ctx, x, q.y - 8, 4, q.h + 6, OUTLINE);
-      rect(ctx, x + 1, q.y - 7, 2, q.h + 4, C.brickLo);
-    }
-    // A sign over the door gap.
-    rect(ctx, door - 14, q.y - 16, 28, 7, OUTLINE);
-    rect(ctx, door - 13, q.y - 15, 26, 5, C.cream);
-    drawPixelText(ctx, "STAFF", door - pixelTextWidth("STAFF") / 2, q.y - 15, C.rustLo);
   }
+  // A sign by the doorway.
+  const tw = pixelTextWidth("STAFF") + 6;
+  const tx = gap === "left" ? q.x + 2 : q.x + q.w - tw - 2;
+  rect(ctx, tx, q.y - 17, tw, 9, OUTLINE);
+  rect(ctx, tx + 1, q.y - 16, tw - 2, 7, C.cream);
+  drawPixelText(ctx, "STAFF", tx + 3, q.y - 15, C.rustLo);
 }
 
 // ------------------------------------------------------------------ fixtures
 
+/** An arched window frame (the glass is cleared; the view is live). */
 function windowFrame(ctx: CanvasRenderingContext2D, win: Rect): void {
   const { x, y, w, h } = win;
   const g = new Grid(w + 2, h + 6);
@@ -438,19 +517,20 @@ function windowFrame(ctx: CanvasRenderingContext2D, win: Rect): void {
   g.rect(1, 1, w, 1, C.greenHi);
   g.rect(0, h + 1, w + 2, 3, C.walnutHi).rect(0, h + 1, w + 2, 1, "#c08a5a");
   g.outline(OUTLINE);
-  // The glass, with one thin mullion and a transom bar near the top.
-  const tr = Math.min(9, Math.floor(h / 4));
   const mx = Math.floor(w / 2);
+  const tr = Math.min(9, Math.floor(h / 4));
   for (let j = 4; j < h - 1; j++) {
     for (let i = 5; i < w - 3; i++) {
-      if (j === tr || (w > 56 && i === mx)) continue;
+      if (j === tr || i === mx) continue;
       g.set(i, j, null);
     }
   }
   paint(ctx, g, x - 1, y - 1);
-  // Gold-leaf lettering on the transom (from inside it reads backwards: just the arc and dots).
-  ctx.fillStyle = C.brassHi;
-  for (let i = 8; i < w - 8; i += 3) ctx.fillRect(x + i, y + 4 + Math.round(Math.abs(i - w / 2) / (w / 6)), 1, 1);
+  // The arch's corners in brick.
+  for (let i = 0; i < 4; i++) {
+    rect(ctx, x + 3, y + 2 + i, 4 - i, 1, C.brick);
+    rect(ctx, x + w - 7 + i, y + 2 + i, 4 - i, 1, C.brick);
+  }
 }
 
 function pinboard(ctx: CanvasRenderingContext2D, r: Rect): void {
@@ -494,30 +574,23 @@ function door(ctx: CanvasRenderingContext2D, d: Rect): void {
   g.rect(0, 2, d.w + 6, d.h + 2, C.greenDk);
   g.rect(3, 4, d.w, d.h, C.green);
   g.rect(3, 4, d.w, 1, C.greenHi);
-  g.rect(6, 7, d.w - 6, d.h - 16, "#9cc3d2");
-  g.rect(6, 7, d.w - 6, 2, "#c7e2ec");
-  g.set(8, 12, "#ffffff").set(9, 11, "#ffffff");
-  g.rect(5, d.h - 6, d.w - 4, 4, C.greenLo);
-  // The push bar and the hinge side.
-  g.rect(d.w - 2, 22, 2, 8, C.brass).set(d.w - 2, 22, C.brassHi);
+  g.rect(6, 7, d.w - 6, d.h - 14, "#5c4a3a");
+  g.rect(6, 7, d.w - 6, 2, "#8a6a4a");
+  g.set(8, 12, "#c8a878").set(9, 11, "#c8a878");
+  g.rect(5, d.h - 5, d.w - 4, 3, C.greenLo);
+  // The push bar.
+  g.rect(d.w - 2, Math.round(d.h * 0.55), 2, 6, C.brass).set(d.w - 2, Math.round(d.h * 0.55), C.brassHi);
   g.outline(OUTLINE);
   paint(ctx, g, d.x - 3, d.y - 3);
-  // OPEN sign on a string.
-  rect(ctx, d.x + 4, d.y + 14, 12, 6, OUTLINE);
-  rect(ctx, d.x + 5, d.y + 15, 10, 4, C.cream);
-  rect(ctx, d.x + 6, d.y + 16, 8, 1, C.rust);
-  rect(ctx, d.x + 7, d.y + 17, 6, 1, C.rust);
-  rect(ctx, d.x + 9, d.y + 10, 1, 4, C.walnutDk);
-  // The bell on its curly bracket, above the frame on the hinge side.
-  rect(ctx, d.x + d.w - 2, d.y - 4, 4, 1, C.iron);
-  rect(ctx, d.x + d.w, d.y - 3, 3, 3, OUTLINE);
-  rect(ctx, d.x + d.w, d.y - 3, 2, 2, C.brassHi);
-  // The "+" plate: a new thread.
+  // The "+" plate hanging inside the glass: a new thread. And the brass bell over the door.
   const sg = new Grid(14, 9);
   sg.rect(1, 1, 12, 7, C.green);
   sg.rect(6, 2, 2, 5, C.cream).rect(4, 4, 6, 1, C.cream);
   sg.outline(OUTLINE);
-  paint(ctx, sg, d.x + d.w / 2 - 7, Math.max(1, d.y - 12));
+  paint(ctx, sg, d.x + d.w / 2 - 7, d.y + 3);
+  rect(ctx, d.x + d.w - 3, d.y - 3, 5, 1, C.iron);
+  rect(ctx, d.x + d.w, d.y - 2, 3, 3, OUTLINE);
+  rect(ctx, d.x + d.w, d.y - 2, 2, 2, C.brassHi);
 }
 
 function legend(ctx: CanvasRenderingContext2D, n: Rect): void {

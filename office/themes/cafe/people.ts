@@ -9,6 +9,7 @@ import type { Facing } from "../../layout.ts";
 import type { VisitorKind } from "../../theme.ts";
 import { hash, mix, shade } from "../../themekit.ts";
 import { C, OUTLINE } from "./kit.ts";
+import { NOOK } from "./plan.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -181,10 +182,13 @@ function takeaway(px: Px, facing: Facing): void {
 }
 
 /** Vests, flannel, sweaters, scarves and totes; bobbles on beanies; a takeaway cup in hand. */
-export function cafeDress(ctx: Ctx, a: { x: number; y: number; facing: Facing; pose: CharPose; seed: number; seated: boolean; look: Look }, t: number): void {
-  void t;
+export function cafeDress(ctx: Ctx, a: { x: number; y: number; facing: Facing; pose: CharPose; seed: number; seated: boolean; look: Look; spot?: string | null }, t: number): void {
   const { facing, pose, seed, look } = a;
   if (pose === "nap" || pose === "slump") return;
+  if (a.spot?.startsWith(NOOK) && facing === "front" && (pose === "type0" || pose === "type1")) {
+    laptopOnLap(ctx, a.x, a.y, seed, look, t);
+    return;
+  }
   const px = painter(ctx, a.x, a.y + bobOf(pose), facing);
   const covered = COVERED.has(pose) && facing !== "back";
   const standing = !a.seated && STANDING.has(pose);
@@ -212,6 +216,30 @@ export function cafeDress(ctx: Ctx, a: { x: number; y: number; facing: Facing; p
     px(4, 18, 7, 2, "#c9ced6");
     px(6, 18, 2, 1, [C.chalkPink, C.chalkYellow, C.chalkBlue][seed % 3]!);
   }
+}
+
+/**
+ * Squeezed in with a laptop on the lap (an armchair, a bistro chair out
+ * front): crossed legs, the lid seen from behind with stickers, its screen
+ * lighting their face.
+ */
+function laptopOnLap(ctx: Ctx, x: number, y: number, seed: number, look: Look, t: number): void {
+  const fill = (c: string, xx: number, yy: number, w: number, h: number) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(x + xx, y + yy, w, h);
+  };
+  fill(look.pants, 3, 20, 12, 3);
+  fill(shade(look.pants, 0.15), 3, 20, 12, 1);
+  fill("#3b2b2b", 2, 22, 3, 1);
+  fill("#3b2b2b", 13, 22, 3, 1);
+  fill(OUTLINE, 4, 15, 10, 7);
+  fill("#c9ced6", 5, 16, 8, 5);
+  fill("#e3e7ec", 5, 16, 8, 1);
+  fill([C.chalkPink, C.chalkYellow, C.chalkBlue, C.chalkGreen][seed % 4]!, 6, 17, 2, 2);
+  fill(C.rust, 10, 18, 2, 1);
+  fill("#fff2d8", 5, 15, 8, 1);
+  ctx.fillStyle = `rgba(255,236,190,${(0.16 + (Math.floor(t * 3 + (seed % 5)) % 3) * 0.03).toFixed(2)})`;
+  ctx.fillRect(x + 5, y + 9, 8, 5);
 }
 
 // ------------------------------------------------------------------ you and the visitors

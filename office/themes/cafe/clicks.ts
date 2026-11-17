@@ -3,7 +3,7 @@
 // buns), the tip jar (coins, a bill, the bell), the chalkboard menu (a new
 // special of the day), the open-mic stage (a folk song, poetry with snaps, a
 // ukulele, or the mic squeals), the fireplace (a log on, sparks, cocoa round
-// the hearth), the roaster in the storeroom (first crack and the beans
+// the hearth), the roaster behind the counter (first crack and the beans
 // tumbling into the cooling tray) and the cups at the pickup (latte art,
 // close up, and an order called out).
 //
@@ -277,6 +277,9 @@ function stageSpots(L: Layout, plan: CafePlan, seated: boolean): GatherSpot[] {
   const audY = s.y + s.h + 18;
   const px = s.x + Math.round(s.w / 2);
   const py = s.y + s.h - 8;
+  // Upstairs on a wide panel the stage stands against the back wall, the hallway below it: everyone comes up from there.
+  const below = hy > s.y + s.h;
+  const front = s.y + s.h + 4;
   const out: GatherSpot[] = [
     {
       x: px,
@@ -285,7 +288,9 @@ function stageSpots(L: Layout, plan: CafePlan, seated: boolean): GatherSpot[] {
       pose: seated ? "sit-front" : "stand",
       activity: "playing the open mic",
       lift: seated ? 6 : 3,
-      path: [{ x: ax, y: hy, c: true }, { x: ax, y: laneY }, { x: side, y: laneY }, { x: side, y: s.y + s.h + 4 }, { x: px, y: s.y + s.h + 4 }, { x: px, y: py }],
+      path: below
+        ? [{ x: side, y: hy, c: true }, { x: side, y: front }, { x: px, y: front }, { x: px, y: py }]
+        : [{ x: ax, y: hy, c: true }, { x: ax, y: laneY }, { x: side, y: laneY }, { x: side, y: front }, { x: px, y: front }, { x: px, y: py }],
     },
   ];
   const seats: [number, number, GatherSpot["pose"]][] = [
@@ -298,7 +303,8 @@ function stageSpots(L: Layout, plan: CafePlan, seated: boolean): GatherSpot[] {
   for (const [dx, dy, pose] of seats) {
     const x = px + dx;
     const y = audY + dy;
-    out.push({ x, y, facing: "back", pose, activity: "listening to the open mic", path: [{ x: ax, y: hy, c: true }, { x: ax, y: laneY }, { x: side, y: laneY }, { x: side, y }, { x, y }] });
+    const path = below ? [{ x, y: hy, c: true }, { x, y }] : [{ x: ax, y: hy, c: true }, { x: ax, y: laneY }, { x: side, y: laneY }, { x: side, y }, { x, y }];
+    out.push({ x, y, facing: "back", pose, activity: "listening to the open mic", path });
   }
   return out;
 }
@@ -365,7 +371,8 @@ function clickFire(act: SceneryActions, plan: CafePlan): string | null {
       facing,
       pose: "cup",
       activity: "warming up by the fire",
-      path: [{ x: ax, y: hy, c: true }, { x: ax, y: lane }, { x, y: lane }, { x, y }],
+      // From the hallway below, up past the sofa's end (the way to the sofa).
+      path: hy > f.y + f.h ? [{ x: L.couch.x - 6, y: hy, c: true }, { x: L.couch.x - 6, y: lane }, { x, y: lane }, { x, y }] : [{ x: ax, y: hy, c: true }, { x: ax, y: lane }, { x, y: lane }, { x, y }],
     });
     // Clear of the coffee table in front of the hearth.
     const spots = [at(f.x + 4, f.y + f.h + 4, "back"), at(f.x + f.w - 4, f.y + f.h + 4, "back"), at(f.x - 7, f.y + f.h + 12, "right")];

@@ -151,7 +151,7 @@ function floorLamp(classic: () => HTMLCanvasElement): HTMLCanvasElement {
 }
 
 function bookshelf(classic: () => HTMLCanvasElement): HTMLCanvasElement {
-  // A walnut bookshelf in your snug: novels, a little plant, a framed photo; flat top (the globe sits there).
+  // A walnut bookshelf by your armchair: novels, a little plant, a framed photo; flat top (the globe sits there).
   return sized("bookshelf", classic, (g, w, h) => {
     const r = w - 2;
     g.rect(1, 1, r, h - 2, C.walnut);
@@ -388,14 +388,19 @@ function bentwood(classic: () => HTMLCanvasElement, back: boolean, key: string):
   });
 }
 
-function chalkEasel(classic: () => HTMLCanvasElement): HTMLCanvasElement {
-  // A chalkboard on an A-frame easel: wooden frame, chalk dust, a ledge with chalk (the strokes are live).
-  return sized("whiteboard", classic, (g, w) => {
+function chalkEasel(classic: () => HTMLCanvasElement, onWall: boolean): HTMLCanvasElement {
+  // A chalkboard on an A-frame easel (or hung on the wall): wooden frame, chalk dust, a ledge with chalk (the strokes are live).
+  return sized(onWall ? "whiteboard-wall" : "whiteboard", classic, (g, w) => {
     const r = w - 2;
-    // A-frame legs behind the board, splayed.
-    g.line(4, 30, 1, 44, C.oakLo).line(r - 3, 30, r, 44, C.oakLo);
-    g.line(5, 30, 2, 44, C.oak).line(r - 4, 30, r - 1, 44, C.oak);
-    g.rect(2, 41, r - 2, 1, C.oakDk);
+    if (!onWall) {
+      // A-frame legs behind the board, splayed.
+      g.line(4, 30, 1, 44, C.oakLo).line(r - 3, 30, r, 44, C.oakLo);
+      g.line(5, 30, 2, 44, C.oak).line(r - 4, 30, r - 1, 44, C.oak);
+      g.rect(2, 41, r - 2, 1, C.oakDk);
+    } else {
+      // Two brass hooks it hangs from.
+      g.rect(6, 0, 2, 2, C.brassHi).rect(r - 6, 0, 2, 2, C.brassHi);
+    }
     // The frame and the board.
     g.rect(1, 1, r, 34, C.oak);
     g.rect(1, 1, r, 1, C.oakHi);
@@ -606,7 +611,7 @@ function barStool(classic: () => HTMLCanvasElement): HTMLCanvasElement {
   });
 }
 
-// ------------------------------------------------------------------ the storeroom
+// ------------------------------------------------------------------ the back room
 
 function routerShelf(classic: () => HTMLCanvasElement): HTMLCanvasElement {
   // A metal shelving unit: the network switches stacked on the right (their LEDs blink
@@ -645,24 +650,8 @@ function aiBox(classic: () => HTMLCanvasElement): HTMLCanvasElement {
 }
 
 function front(p: PropPlacement, classic: () => HTMLCanvasElement): HTMLCanvasElement | null {
-  if (p.id === "boss-glass") {
-    // The front of your raised snug: a walnut balustrade with greenery trailing along the rail.
-    return sized("snug-rail", classic, (g, w) => {
-      for (let x = 0; x < w; x++) {
-        g.set(x, 2, C.walnutHi).set(x, 3, C.walnut).set(x, 4, C.walnutLo);
-        g.set(x, 9, C.walnut).set(x, 10, C.walnutDk);
-        if (x % 5 === 2) g.vline(x, 5, 4, C.walnut).set(x, 5, C.walnutHi);
-        // Ivy along the top rail.
-        const k = (x * 7) % 11;
-        if (k < 4) g.set(x, 1, k < 2 ? C.leaf : C.leafHi);
-        if (k === 5 || k === 8) g.set(x, 0, C.leafLo);
-        if (k === 2) g.set(x, 5, C.leafLo);
-      }
-      g.vline(0, 1, 10, C.walnutDk).vline(w - 1, 1, 10, C.walnutDk);
-    }, false);
-  }
   if (p.id === "server-glass") {
-    // The storeroom's front: a low brick half-wall with a wooden cap.
+    // The back room's front: a low brick half-wall with a wooden cap.
     return sized("store-front", classic, (g, w) => {
       g.rect(0, 0, w, 1, OUTLINE);
       g.rect(0, 1, w, 2, C.walnutHi);
@@ -680,9 +669,9 @@ function front(p: PropPlacement, classic: () => HTMLCanvasElement): HTMLCanvasEl
   return null;
 }
 
-// ------------------------------------------------------------------ your snug
+// ------------------------------------------------------------------ your corner
 
-function snugTable(classic: () => HTMLCanvasElement): HTMLCanvasElement {
+function cornerTable(classic: () => HTMLCanvasElement): HTMLCanvasElement {
   // Your table: a marble top on a sturdy walnut base, a little brass RESERVED plaque on the apron.
   return sized("boss-desk", classic, (g, w, h) => {
     const r = w - 2;
@@ -786,7 +775,8 @@ export function cafeProp(p: PropPlacement, L: Layout, classic: () => HTMLCanvasE
     case "guest-chair":
       return bentwood(classic, true, "bentwood-guest");
     case "whiteboard":
-      return chalkEasel(classic);
+      // Hung on the back wall upstairs (its depth is the wall's), else on its easel.
+      return chalkEasel(classic, p.z < p.y + 40);
     case "tv":
       return p.z > 0 ? null : specialsScreen(p, L, classic);
     case "piano":
@@ -810,7 +800,7 @@ export function cafeProp(p: PropPlacement, L: Layout, classic: () => HTMLCanvasE
     case "glass-front":
       return front(p, classic);
     case "boss-desk":
-      return snugTable(classic);
+      return cornerTable(classic);
     case "boss-chair":
       return wingback(classic);
     case "dog-bed":

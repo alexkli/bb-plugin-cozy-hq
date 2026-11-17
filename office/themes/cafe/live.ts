@@ -1,11 +1,11 @@
-// Coffee Shop: the live bits. The café tables under everyone's laptops (a
-// marble two-top, a walnut four-top, the long oak communal table, the window
-// bar's plank), what stands on the counter (the grinder, the tip jar, the old
-// brass till, the cake dome, cups waiting for pickup, the bell), the baristas
-// behind it pulling shots, steaming milk, calling out orders and wiping down,
-// the fire in the fireplace, the open-mic stage's gear, the roaster in the
-// storeroom, Edison bulbs along the walls, and every warm light that keeps
-// the place glowing after dark.
+// Coffee Shop: the live bits. The café tables under everyone's laptops (round
+// oak bistro tables, small marble squares, the wall counter's plank), what
+// stands on the counter (the grinder, the tip jar, the old brass till, the
+// cake dome, cups waiting for pickup, the bell), the baristas behind it
+// pulling shots, steaming milk, calling out orders and wiping down, the fire,
+// the open-mic stage's gear, the roaster, the armchairs upstairs, the terrace
+// (bistro sets, parasols, the A-board, olive trees, festoon lights) and the
+// street, Edison bulbs along the walls, and every warm light after dark.
 
 import type { Drawable, Light, PaintInfo, WallLightsInfo } from "../../theme.ts";
 import type { Layout, Point, Rect } from "../../layout.ts";
@@ -16,6 +16,7 @@ import { cafePlant } from "./props.ts";
 import { C, OUTLINE, rect, sprite } from "./kit.ts";
 import { planOf, type CafePlan, type Counter, type Table } from "./plan.ts";
 import { clickDecor, clickLights, clickOverlay } from "./clicks.ts";
+import { drawPerson } from "./view.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -26,48 +27,25 @@ function tableSprite(t: Table): HTMLCanvasElement {
   const w = t.w;
   return sprite(`table-${t.kind}-${w}`, w, 48, (g) => {
     switch (t.kind) {
-      case "two": {
-        // A round bistro table per desk pair: an oak top with a dark rim on an iron pedestal.
-        for (let x = 0; x < w; x += 48) {
-          g.ellipse(x + 24, 19, 21, 17, C.oakDk);
-          g.ellipse(x + 24, 18, 20, 16, C.oak);
-          for (let yy = 6; yy < 32; yy += 5) {
-            for (let xx = x + 6; xx < x + 43; xx++) if (g.get(xx, yy) === C.oak && (xx * 3 + yy) % 11 > 2) g.set(xx, yy, "#a87244");
-          }
-          g.hline(x + 14, 2, 20, "#d9a46e").hline(x + 9, 4, 6, "#c99560");
-          g.rect(x + 22, 36, 4, 7, C.iron).rect(x + 23, 36, 1, 7, C.ironHi);
-          g.rect(x + 16, 43, 16, 3, C.iron).hline(x + 16, 43, 16, C.ironHi);
+      case "round": {
+        // A round bistro table: an oak top with a dark rim on an iron pedestal.
+        g.ellipse(24, 19, 21, 17, C.oakDk);
+        g.ellipse(24, 18, 20, 16, C.oak);
+        for (let yy = 6; yy < 32; yy += 5) {
+          for (let xx = 6; xx < 43; xx++) if (g.get(xx, yy) === C.oak && (xx * 3 + yy) % 11 > 2) g.set(xx, yy, "#a87244");
         }
+        g.hline(14, 2, 20, "#d9a46e").hline(9, 4, 6, "#c99560");
+        g.rect(22, 36, 4, 7, C.iron).rect(23, 36, 1, 7, C.ironHi);
+        g.rect(16, 43, 16, 3, C.iron).hline(16, 43, 16, C.ironHi);
         break;
       }
-      case "four": {
-        // A walnut four-top: square-cornered top with a light edge, tapered legs.
-        for (let x = 0; x < w; x += 96) {
-          const tw = Math.min(96, w - x) - 8;
-          g.rect(x + 4, 2, tw, 30, C.walnutHi);
-          g.rect(x + 4, 3, tw, 28, C.walnut);
-          for (let y = 9; y < 31; y += 7) g.hline(x + 5, y, tw - 2, C.walnutLo);
-          g.rect(x + 4, 31, tw, 4, C.walnutLo).hline(x + 4, 31, tw, C.walnutDk);
-          for (const lx of [x + 6, x + 4 + tw - 5]) g.rect(lx, 35, 3, 11, C.walnutDk);
-        }
-        break;
-      }
-      case "long": {
-        // The communal table: long oak planks, a linen runner, bud vases and outlets down the middle.
-        g.rect(2, 2, w - 4, 30, C.oakHi);
-        g.rect(2, 3, w - 4, 28, C.oak);
-        for (let y = 8; y < 31; y += 6) g.hline(3, y, w - 6, C.oakLo);
-        for (let x = 30; x < w - 4; x += 41) g.vline(x, 3, 28, C.oakLo);
-        g.rect(2, 31, w - 4, 4, C.oakLo).hline(2, 31, w - 4, C.oakDk);
-        for (const lx of [5, w - 9]) g.rect(lx, 35, 4, 11, C.oakDk);
-        if (w >= 192) g.rect(Math.floor(w / 2) - 1, 35, 3, 11, C.oakDk);
-        // Little things at the desk pairs' seams: a bud vase, a power outlet, salt and pepper.
-        for (let x = 48; x < w; x += 48) {
-          const k = (x / 48) % 3;
-          if (k === 1) g.rect(x - 1, 14, 3, 5, C.glass).set(x, 12, C.chalkPink).set(x, 13, C.leaf);
-          else if (k === 2) g.rect(x - 2, 15, 5, 4, C.chromeLo).set(x - 1, 16, OUTLINE).set(x + 1, 16, OUTLINE);
-          else g.rect(x - 2, 16, 2, 3, C.cream).rect(x + 1, 16, 2, 3, C.iron);
-        }
+      case "square": {
+        // A small square marble-top table on an iron base.
+        g.rect(5, 2, 38, 30, C.marbleLo);
+        g.rect(5, 2, 38, 29, C.marble).hline(6, 3, 36, C.marbleHi);
+        for (let i = 0; i < 5; i++) g.set(10 + i * 6, 8 + ((i * 7) % 17), C.vein).set(11 + i * 6, 9 + ((i * 7) % 17), C.vein);
+        g.rect(5, 31, 38, 3, C.walnut).hline(5, 31, 38, C.walnutHi);
+        g.rect(9, 34, 2, 11, C.iron).rect(37, 34, 2, 11, C.iron).rect(10, 41, 28, 1, C.iron);
         break;
       }
       case "bar": {
@@ -284,6 +262,35 @@ function bubble(ctx: Ctx, text: string, cx: number, bottom: number): void {
   drawPixelText(ctx, text, x + 3, y + 2, C.walnutDk);
 }
 
+// ------------------------------------------------------------------ the street out front
+
+const WALKERS: [number, number, string][] = [
+  [9, 0, "#c4673f"],
+  [-7, 140, "#3e7cc4"],
+  [11, 300, C.mustard],
+  [-24, 60, C.green],
+  [8, 520, "#8a5fd6"],
+  [-10, 410, "#e5544b"],
+];
+
+/** People and the odd cyclist going by on the cobbles. */
+function streetLife(ctx: Ctx, L: Layout, st: Rect, info: PaintInfo): void {
+  const span = L.W + 60;
+  const y = st.y + st.h - 1;
+  for (const [i, [speed, phase, color]] of WALKERS.entries()) {
+    if (info.night > 0.6 && i % 2 === 1) continue;
+    const x = Math.round(((((phase + speed * info.t) % span) + span) % span) - 30);
+    if (Math.abs(speed) > 20) {
+      // A cyclist.
+      rect(ctx, x - 4, y - 3, 3, 3, OUTLINE);
+      rect(ctx, x + 4, y - 3, 3, 3, OUTLINE);
+      rect(ctx, x - 2, y - 4, 8, 1, color);
+      rect(ctx, x, y - 10, 3, 3, "#c98a5e");
+      rect(ctx, x - 1, y - 7, 4, 3, "#3a3d46");
+    } else drawPerson(ctx, x, y, color, info.t, Math.sign(speed), info, i);
+  }
+}
+
 // ------------------------------------------------------------------ the stage, the roaster, the fire
 
 const micSprite = () =>
@@ -307,13 +314,6 @@ const guitarSprite = () =>
     g.ellipse(5, 13, 3, 3, C.mustard).ellipse(5, 19, 4, 4, C.mustard).set(5, 15, OUTLINE).set(5, 16, C.walnutDk);
     g.rect(2, 22, 6, 2, C.iron);
   });
-const signSprite = () =>
-  sprite("openmic-sign", 16, 20, (g) => {
-    // A chalk A-frame: OPEN MIC.
-    g.rect(1, 0, 14, 14, C.walnut).rect(2, 1, 12, 12, C.board);
-    g.rect(1, 14, 1, 6, C.walnutDk).rect(14, 14, 1, 6, C.walnutDk);
-  });
-
 const roasterSprite = () =>
   sprite("roaster", 30, 40, (g) => {
     // A small drum roaster: the chimney up the wall, the hopper, the copper drum, the cooling tray.
@@ -411,6 +411,63 @@ const gamesSprite = () =>
     g.rect(4, 1, 5, 5, C.cream).rect(4, 0, 5, 1, C.creamLo).rect(16, 2, 6, 4, C.terra).rect(15, 0, 8, 2, C.leaf);
   });
 
+const bistroTableSprite = () =>
+  sprite("bistro-table", 14, 16, (g) => {
+    // A little round marble bistro top on a cast-iron stand, with two cups.
+    g.ellipse(7, 3, 6, 3, C.marble).hline(3, 1, 8, C.marbleHi);
+    g.rect(1, 5, 12, 1, C.marbleLo);
+    g.rect(6, 6, 2, 8, C.iron).rect(3, 14, 8, 2, C.iron);
+    g.rect(3, 1, 2, 2, C.cream).set(3, 1, C.crema).rect(9, 2, 2, 2, C.paper);
+  });
+
+const rattanSprite = () =>
+  sprite("rattan", 12, 16, (g) => {
+    // A woven bistro chair seen from the front: the curved back, the woven seat, bamboo legs.
+    g.rect(1, 0, 10, 8, C.kraft);
+    for (let y = 1; y < 8; y += 2) g.hline(2, y, 8, C.kraftLo);
+    for (let x = 3; x < 10; x += 3) g.vline(x, 1, 7, "#d9b98a");
+    g.rect(0, 0, 1, 10, C.walnut).rect(11, 0, 1, 10, C.walnut).hline(0, 0, 12, C.walnut);
+    g.rect(0, 8, 12, 3, C.kraft).hline(0, 8, 12, "#d9b98a").hline(0, 10, 12, C.kraftLo);
+    g.rect(1, 11, 1, 5, C.walnut).rect(10, 11, 1, 5, C.walnut).rect(3, 11, 1, 4, C.walnutLo).rect(8, 11, 1, 4, C.walnutLo);
+  });
+
+const menuSignSprite = () =>
+  sprite("aboard", 14, 22, (g) => {
+    // The A-frame board on the pavement: today's specials in chalk.
+    g.rect(0, 0, 14, 18, C.walnut).rect(1, 1, 12, 16, C.board);
+    g.hline(3, 3, 8, C.chalkYellow).hline(3, 6, 7, C.chalk).hline(3, 9, 8, C.chalk).hline(3, 12, 6, C.chalkPink).hline(3, 15, 7, C.chalk);
+    g.line(1, 18, 0, 21, C.walnutDk).line(12, 18, 13, 21, C.walnutDk);
+  });
+
+const bikeSprite = () =>
+  sprite("bike", 26, 16, (g) => {
+    // A city bike with a basket of flowers, on its stand.
+    g.ellipse(5, 11, 4, 4, OUTLINE).ellipse(5, 11, 3, 3, C.pavement).set(5, 11, OUTLINE);
+    g.ellipse(20, 11, 4, 4, OUTLINE).ellipse(20, 11, 3, 3, C.pavement).set(20, 11, OUTLINE);
+    g.line(5, 11, 11, 5, C.green).line(11, 5, 20, 11, C.green).line(11, 5, 12, 11, C.green).line(12, 11, 5, 11, C.green).line(12, 11, 18, 4, C.green);
+    g.rect(9, 3, 5, 1, C.leather).rect(17, 2, 4, 1, C.iron);
+    g.rect(19, 4, 6, 4, C.kraft).hline(19, 4, 6, C.kraftLo).set(20, 3, "#e5484d").set(22, 2, C.chalkPink).set(23, 3, C.leafHi);
+  });
+
+const parasolSprite = (v: number) =>
+  sprite(`parasol-${v}`, 30, 40, (g) => {
+    // A market parasol from above: striped canvas segments, a finial, the pole down to the table.
+    const a = v ? C.rust : C.green;
+    g.ellipse(15, 8, 14, 7, a);
+    for (let x = 1; x < 30; x++) for (let y = 1; y < 16; y++) if (g.get(x, y) === a && Math.floor(Math.atan2(y - 8, x - 15) * 2.5 + 8) % 2 === 0) g.set(x, y, C.cream);
+    g.hline(3, 15, 24, OUTLINE);
+    g.rect(14, 6, 2, 2, C.brassHi);
+    g.rect(14, 15, 2, 23, C.walnut);
+  });
+
+const olivePotSprite = () =>
+  sprite("olive", 18, 30, (g) => {
+    // A little olive tree in a square zinc planter.
+    g.rect(3, 20, 12, 10, C.chromeLo).hline(3, 20, 12, C.chrome).rect(4, 21, 10, 1, C.chromeDk);
+    g.rect(8, 11, 2, 9, C.walnutLo);
+    g.ellipse(9, 7, 8, 6, C.leafLo).ellipse(8, 6, 6, 4, "#7d9a68").set(5, 4, "#a4b98e").set(11, 5, "#a4b98e").set(8, 8, "#a4b98e");
+  });
+
 type Filler = () => HTMLCanvasElement;
 
 /** Odds and ends on free floor (clear of furniture, seats and everyone's ways): plants, chairs, racks. */
@@ -421,6 +478,8 @@ function fillers(L: Layout, plan: CafePlan): Placed[] {
     const taken: Rect[] = [L.eventArea, ...(plan.stage ? [{ x: plan.stage.x - 4, y: plan.stage.y - 4, w: plan.stage.w + 30, h: plan.stage.h + 12 }] : [])];
     if (plan.roaster) taken.push({ x: plan.roaster.x - 18, y: plan.roaster.y - 40, w: 36, h: 44 });
     for (const r of L.rooms) if (r.walls) taken.push({ x: r.rect.x - 4, y: r.rect.y - 12, w: r.rect.w + 8, h: r.rect.h + 16 });
+    // The mezzanine's edge, the menus and the back counter under it.
+    if (plan.upstairs) taken.push({ x: 0, y: plan.upstairs.edge - 12, w: L.W, h: 44 });
     const clash = (r: Rect) => taken.some((q) => r.x < q.x + q.w + 2 && q.x < r.x + r.w + 2 && r.y < q.y + q.h + 2 && q.y < r.y + r.h + 2);
     const put = (region: Rect, items: Filler[], spread = 3) => {
       for (const make of items) {
@@ -433,20 +492,14 @@ function fillers(L: Layout, plan: CafePlan): Placed[] {
       }
     };
     const plant = (name: "LARGE_PLANT" | "PLANT_2" | "PLANT") => () => cafePlant(name) ?? sprite("noplant", 1, 1, () => undefined, false);
-    put(L.lounge, [armchairSprite, sideLampSprite, gamesSprite, plant("LARGE_PLANT")], 2);
-    put(plan.reserved, [plant("LARGE_PLANT"), papersSprite, plant("PLANT_2")], 2);
-    if (!L.portrait) {
-      const mid: Rect = { x: L.lounge.x, y: L.net.halls[0]! + 10, w: L.lounge.w, h: L.H - L.net.halls[0]! - 10 };
-      put(mid, [plant("LARGE_PLANT"), armchairSprite, plant("PLANT_2")], 1.5);
-    }
-    // Under the window bar, and anywhere else that's still bare.
-    const bar = plan.bar;
-    if (bar) put({ x: 0, y: bar.y + 60, w: L.wall.door.x + 30, h: L.net.halls[0]! - bar.y - 66 }, [plant("PLANT_2"), armchairSprite], 2);
-    const low = L.net.halls[L.net.halls.length - 1]! + 10;
-    put({ x: 0, y: low, w: L.W, h: L.H - low - 4 }, [plant("LARGE_PLANT"), plant("PLANT_2"), papersSprite, plant("LARGE_PLANT"), armchairSprite, plant("PLANT")], 1.3);
+    put(L.lounge, [sideLampSprite, gamesSprite], 2);
+    put(plan.reserved, [plant("LARGE_PLANT"), papersSprite], 2);
+    // Inside the building, wherever's still bare.
+    const inside: Rect = { x: plan.bldg.x0, y: plan.wallD, w: plan.bldg.x1 - plan.bldg.x0, h: (plan.facade?.y ?? L.H) - plan.wallD - 2 };
+    put(inside, [plant("LARGE_PLANT"), plant("PLANT_2"), papersSprite, plant("PLANT")], 1.3);
     const d = L.wall.door;
-    const depth = L.segments.find((sg) => d.x >= sg.x0 && d.x < sg.x1)?.depth ?? 70;
-    put({ x: d.x - 46, y: depth - 30, w: 92, h: 70 }, [coatRackSprite, umbrellaSprite], 1);
+    const by = plan.facade ? plan.facade.y - 44 : plan.wallD - 30;
+    put({ x: d.x - 46, y: by, w: 92, h: 44 }, [coatRackSprite, umbrellaSprite], 1);
     return out;
   });
 }
@@ -477,9 +530,26 @@ function staticItems(L: Layout, plan: CafePlan): Placed[] {
       out.push({ x: s.x + Math.round(s.w / 2) - 5, y: s.y + 6, z: s.y + 20, s: stoolSprite() });
       out.push({ x: s.x + Math.round(s.w / 2) + 8, y: s.y + 2, z: s.y + 24, s: micSprite() });
       out.push({ x: s.x + s.w - 12, y: s.y, z: s.y + 24, s: guitarSprite() });
-      out.push({ x: s.x + s.w + 4, y: s.y + s.h - 14, z: s.y + s.h + 6, s: signSprite() });
     }
     if (plan.roaster) out.push({ x: plan.roaster.x - 15, y: plan.roaster.y - 38, z: plan.roaster.y, s: roasterSprite() });
+    for (const p of plan.armchairs) out.push({ x: p.x - 11, y: p.y - 20, z: p.y - 1, s: armchairSprite() });
+    for (const b of plan.bistro) {
+      out.push({ x: b.x - 7, y: b.y - 12, z: b.y + 1, s: bistroTableSprite() });
+      for (const x of b.chairs) out.push({ x: x - 6, y: b.y - 15, z: b.y - 1, s: rattanSprite() });
+    }
+    const t = plan.terrace;
+    if (t) {
+      const door = L.wall.door;
+      const ax = door.x + door.w + 26 <= L.W ? door.x + door.w + 6 : door.x - 20;
+      out.push({ x: ax, y: t.y + 8, z: t.y + 29, s: menuSignSprite() });
+      // A bike parked at the curb.
+      if (plan.street) out.push({ x: Math.min(L.W - 28, door.x + door.w + 96), y: plan.street.y - 8, z: plan.street.y + 8, s: bikeSprite() });
+      // Parasols over every third table.
+      plan.bistro.forEach((b, i) => {
+        if ((Math.floor(b.x / 62) * 5 + Math.floor(b.y / 36) * 3) % 7 === 1) out.push({ x: b.x - 15, y: b.y - 40, z: b.y + 3, s: parasolSprite(i % 2) });
+      });
+      for (const x of [plan.bldg.x0 - 18, plan.bldg.x1 + 2]) if (x >= 0 && x + 18 <= L.W) out.push({ x, y: t.y - 4, z: t.y + 26, s: olivePotSprite() });
+    }
     return out;
   });
 }
@@ -493,8 +563,8 @@ export function cafeDecor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
   const c = plan.counter;
   const n = c.w >= 140 ? 3 : 2;
   for (let i = 0; i < n; i++) out.push({ z: c.staffY + 0.1, draw: () => drawBarista(ctx, c, i, info.t) });
-  const s = plan.stage;
-  if (s) out.push({ z: s.y + s.h + 6.1, draw: () => drawPixelText(ctx, "MIC", s.x + s.w + 7, s.y + s.h - 11, C.chalk) });
+  const st = plan.street;
+  if (st) out.push({ z: st.y + st.h + 30, draw: () => streetLife(ctx, L, st, info) });
   // The PICKUP sign over the bell.
   const pk = c.pickup;
   out.push({
@@ -528,7 +598,29 @@ export function cafeOverlay(ctx: Ctx, L: Layout, info: PaintInfo): void {
     const b = baristaAt(c, i, info.t, scratch);
     if (b.call) bubble(ctx, b.call, b.x, c.staffY - 28);
   }
+  if (plan.terrace && plan.facade) terraceLights(ctx, plan, info);
   clickOverlay(ctx, L, info);
+}
+
+/** Festoon lights strung over the terrace from the awning, lit at dusk. */
+function terraceLights(ctx: Ctx, plan: CafePlan, info: PaintInfo): void {
+  const { x0, x1 } = plan.bldg;
+  const top = plan.facade!.y + plan.facade!.h + 1;
+  const on = info.night > 0.25;
+  for (let x = x0; x < x1; x++) {
+    const k = ((x - x0) % 60) / 60;
+    const y = top + Math.round(Math.sin(k * Math.PI) * 5);
+    ctx.fillStyle = "#3a2e2a";
+    ctx.fillRect(x, y, 1, 1);
+    if ((x - x0) % 12 === 6) {
+      if (on) {
+        ctx.fillStyle = `rgba(255,205,120,${(0.35 * info.night).toFixed(3)})`;
+        ctx.fillRect(x - 3, y - 1, 7, 7);
+      }
+      ctx.fillStyle = on ? "#fff4cf" : "#e8d6b0";
+      ctx.fillRect(x - 1, y + 1, 3, 2);
+    }
+  }
 }
 
 // ------------------------------------------------------------------ Edison bulbs along the walls
@@ -622,8 +714,17 @@ function staticLights(L: Layout): Light[] {
     else out.push([m.x + m.w / 2, m.y + 30, 40, 0.4, "#ffd28a", 0.2]);
     out.push([L.boss.lamp.x, L.boss.lamp.y + 8, 54, 0.75, "#ffcf7a", 0.5]);
     if (plan.roaster) out.push([plan.roaster.x - 3, plan.roaster.y - 22, 16, 0.4, "#ff7a3a", 0.5]);
-    if (L.server) out.push([L.server.x + L.server.w / 2, L.server.y + 8, 36, 0.35, "#ffe8c0", 0.2]);
+    if (L.server) out.push([L.server.x + L.server.w / 2, L.server.y + 8, 30, 0.35, "#ffe8c0", 0.2]);
     out.push([L.tv.x + L.tv.w / 2, L.tv.y + L.tv.h / 2, 46, 0.45, "#bfe0ff", 0.25]);
+    for (const p of plan.armchairs) out.push([p.x, p.y - 14, 20, 0.3, "#ffd9a0", 0.15]);
+    const f = plan.facade;
+    if (f) {
+      // The shop windows glowing out onto the terrace, the lamps by the door.
+      for (let x = plan.bldg.x0 + 30; x < plan.bldg.x1; x += 60) out.push([x, f.y + 30, 40, 0.5, "#ffc878", 0.3]);
+      const d = L.wall.door;
+      out.push([d.x - 5, d.y + 7, 14, 0.7, "#ffe6a8", 0.7], [d.x + d.w + 6, d.y + 7, 14, 0.7, "#ffe6a8", 0.7]);
+      for (const b of plan.bistro) out.push([b.x, b.y - 8, 22, 0.45, "#ffd28a", 0.3]);
+    }
     return out;
   });
 }

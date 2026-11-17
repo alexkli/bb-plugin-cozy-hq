@@ -1,46 +1,48 @@
-// Coffee Shop: the floor plan. A neighborhood café on a street corner, with
-// the office moved in: the shop windows onto the street with the window bar
-// and its stools under them, café tables everywhere (two-tops, four-tops and
-// a long communal table, laptops open), the espresso bar under the back wall
-// with the baristas behind it and the pickup stools in front, the fireside
-// corner with the sofa, the big table under the RESERVED sign (planning),
-// your usual corner (the snug: a raised nook with a railing), the open-mic
-// stage and the storeroom with the router and the roaster.
+// Coffee Shop: the floor plan. A small neighborhood café in a brick building
+// on its lot. Downstairs: the espresso bar under the mezzanine with the
+// baristas behind it and the back-of-house corner beside it (the router
+// shelves, the AI box and the roaster), a counter along the wall with stools
+// and sockets, small round and square tables spread about, and your usual
+// armchair on a round rug. Up the stairs, the cozier mezzanine: the fireside
+// sofa under the specials screen, the big table under the RESERVED sign,
+// armchairs by the window, the open-mic corner and the arcade cabinet. Out
+// front: the shop's brick face with its striped awning and the terrace of
+// bistro tables on the pavement, a sliver of cobbled street.
 // Pure geometry (no canvas): the layout tests run it in Node.
 //
-// Wide:                                              Phone:
-//  ┌ shop windows · door ┬ fireplace ┬ back bar ┐     ┌ back bar · window · door ┐
-//  │ window bar          │ fireside  │ baristas │     │ baristas, the counter    │
-//  │ tables              │ corner    │ counter  │     │ tables                   │
-//  ╞═════════════════════╪═══════════╪══════════╡     │ fireside corner          │
-//  │ tables / reserved   │ stage     │ snug     │     │ tables                   │
-//  │ table               │ arcade    │ storeroom│     │ reserved table · snug    │
-//  └─────────────────────┴───────────┴──────────┘     └ stage · storeroom ───────┘
+// Wide:                                           Phone:
+//  ┌ back wall upstairs: board · TV+fire · window ┐  ┌ back wall upstairs ──────┐
+//  │ reserved table │ fireside │ armchairs │ stage │  │ fireside │ arcade │ chairs │
+//  ╞═══ upstairs hall ══════════ ═══╗ stairs ══════╡  │ stage     │ armchairs   ║
+//  │ wall bar  ║ back room │ counter (baristas)  │  ╞═══ balustrade ════════════╣
+//  ╞═══════════╬══════════════════════════════════╡  │ counter │ back room      ║
+//  │ tables    ║ tables          │ your armchair │  │ tables                    ║
+//  ╞═══════════╬══════════════════════════════════╡  │ your armchair │ reserved  ║
+//  │ brick front · awning · door · terrace · street │  └ front · terrace ─────────┘
+//  Single aisle: the stairs (every way between floors and halls takes them).
 
 import type { Layout, Point, Rect, Spot } from "../../layout.ts";
 import {
-  arcadeFromAbove,
+  hash,
   Builder,
-  buildBoss,
-  buildLounge,
-  buildPods,
+  bossToys,
+  buildArcade,
   buildServerRoom,
   clamp,
   finish,
   POD_H,
-  utilities,
   via,
   type Access,
   type Network,
   type WallSegment,
 } from "../../themekit.ts";
 
-/** A café table the desks sit at: `y` is the north desk's y (the bar: its desks' y). */
+/** A café table the desks sit at (`y` is the north desk's y; a bar's desks' y). */
 export interface Table {
   x: number;
   y: number;
   w: number;
-  kind: "two" | "four" | "long" | "bar";
+  kind: "round" | "square" | "bar";
 }
 
 /** The espresso bar. */
@@ -59,37 +61,62 @@ export interface Counter {
   machine: Point;
   /** The pickup end of the counter (the bell). */
   pickup: Rect;
-  /** Things standing on the counter top (null where the counter's too short for them). */
+  /** Against a wall (the back bar is painted on it) or free-standing. */
+  walled: boolean;
+  /** Things standing on the counter top (the till only where the counter's long enough). */
   grinder: Rect;
   tips: Rect;
   register: Rect | null;
   pastry: Rect;
   /** Cups waiting at the pickup. */
   cups: Rect;
-  /** Against a wall (the back bar is painted on it) or free-standing (a back counter of its own). */
-  walled: boolean;
+}
+
+/** What someone squeezed in with a laptop sits on. */
+export type NookSeat = "armchair" | "bistro";
+
+/** A squeeze-in workplace (a desk-group spot after the real desks): feet position and seat. */
+export interface Nook {
+  id: string;
+  x: number;
+  y: number;
+  seat: NookSeat;
 }
 
 export interface CafePlan {
   cafe: true;
-  /** The shop windows' stretch of wall. */
-  storefront: { x0: number; x1: number };
-  /** The fireplace in the wall (wide plans). */
+  /** The building's inside, wall to wall (the lot's margins outside it). */
+  bldg: { x0: number; x1: number };
+  /** The back wall's depth. */
+  wallD: number;
+  /** The mezzanine (null on short panels): its floor, and the y of its edge (the balustrade; the riser under it is 16 deep). */
+  upstairs: { r: Rect; edge: number } | null;
+  /** The stairs down from the mezzanine: the column's x and the steps' top and bottom. */
+  stairs: { x: number; y0: number; y1: number } | null;
+  /** The shop's front wall seen from outside (null when the panel's too short): the doors' x. */
+  facade: { y: number; h: number; doors: number[] } | null;
+  terrace: Rect | null;
+  street: Rect | null;
+  /** The fireplace in the back wall. */
   fireplace: Rect | null;
-  /** Chalkboard menus on the back wall. */
+  /** Chalkboard menus (over the counter). */
   menus: Rect[];
-  /** The window bar's plank. */
-  bar: Rect | null;
   tables: Table[];
   counter: Counter;
   /** The big table under the RESERVED sign (planning). */
   reserved: Rect;
   /** The open-mic stage. */
   stage: Rect | null;
-  /** The storeroom (the server room and the roaster beside it). */
-  storeroom: Rect | null;
+  /** The back-of-house corner (the server room) and which side its doorway is on. */
+  server: { r: Rect; gap: "left" | "right" } | null;
   roaster: Point | null;
-  /** The wooden floor of the café proper vs. the tiles at the counter. */
+  /** Your round rug (center and radii). */
+  rug: { x: number; y: number; rx: number; ry: number };
+  /** Armchairs (reading corner) and bistro chairs out front: feet positions, some of them squeeze-ins. */
+  armchairs: Point[];
+  bistro: { x: number; y: number; chairs: number[] }[];
+  nooks: Nook[];
+  /** Cement tiles (the counter) and rugs. */
   tiles: Rect[];
   rugs: Rect[];
   /** Walks besides the spots' own paths (gags): kept clear when decor is placed. */
@@ -103,62 +130,73 @@ export function planOf(L: Layout): CafePlan | null {
 }
 
 const HALF = 10; // hallways are 20 px wide
+/** Squeeze-in spot ids start with this (never `desk-`: those are the real desks). */
+export const NOOK = "laptop-";
+const LIFT: Record<NookSeat, number> = { armchair: 3, bistro: 2 };
 
-// ------------------------------------------------------------------ the pieces
-
-/**
- * A row of café tables: `groups` desk pairs side by side per table (1 a
- * two-top, 2 a four-top, 3+ the long communal table), with a gap between
- * tables. Pods' geometry, so the subagent helpers fit as at any desk.
- */
-function tableRow(b: Builder, x: number, ry: number, groups: number[], gap: number, acc: Access, tables: Table[]): number {
-  let cx = x;
-  for (const n of groups) {
-    buildPods(b, { x: cx, y: ry, w: n * 48, h: POD_H }, acc);
-    tables.push({ x: cx, y: ry + 18, w: n * 48, kind: n === 1 ? "two" : n === 2 ? "four" : "long" });
-    cx += n * 48 + gap;
-  }
-  return cx - gap;
-}
-
-/** How a row of `cols` desk pairs breaks into tables: a long one in the middle when there's width, else two- and four-tops. */
-function grouping(cols: number, communal: boolean): number[] {
-  if (cols <= 0) return [];
-  if (communal && cols >= 4) {
-    const long = Math.min(cols - 2, 4);
-    const left = Math.floor((cols - long) / 2);
-    return [...(left ? [left] : []), long, ...(cols - long - left ? [cols - long - left] : [])];
-  }
-  const out: number[] = [];
-  let left = cols;
-  let i = 0;
-  while (left > 0) {
-    const n = left >= 3 || (left === 2 && i % 2 === 0) ? (i % 2 === 0 ? 2 : 1) : left;
-    out.push(Math.min(n, left));
-    left -= Math.min(n, left);
-    i++;
-  }
-  return out;
-}
-
-/** Width of a table row with gaps. */
-const rowWidth = (groups: number[], gap: number) => groups.reduce((s, n) => s + n * 48, 0) + gap * Math.max(0, groups.length - 1);
-
-/** The most desk pairs that fit in `w` (the tables touch; each is drawn a little inset). */
-function fitCols(w: number, communal: boolean): number[] {
-  for (let cols = Math.floor(w / 48); cols > 0; cols--) {
-    const g = grouping(cols, communal);
-    if (rowWidth(g, 0) <= w) return g;
-  }
-  return [];
-}
+// ------------------------------------------------------------------ tables
 
 /**
- * The window bar: a plank under the shop windows, laptops on it, stools in a
- * row with everyone's back to you (south seats, a desk's geometry).
+ * A café table for two (a desk pair's geometry, so the subagent helpers fit as
+ * at any desk): the north seat is reached straight down from the hallway
+ * above, the south seat straight up from the one below, or round the table's
+ * left side from above when there's none below.
  */
-function windowBar(b: Builder, x0: number, n: number, Y: number, acc: Access): Rect | null {
-  if (n <= 0) return null;
+function table(b: Builder, dx: number, py: number, kind: Table["kind"], above: number, below: number | null, tables: Table[]): void {
+  const n = b.desks.length;
+  const nx = dx + 30;
+  const north = b.spot({
+    id: `desk-${n}`,
+    kind: "desk",
+    group: "desk",
+    x: nx,
+    y: py + 18,
+    facing: "front",
+    pose: "sit-desk-front",
+    path: [{ x: nx, y: above, c: true }, { x: nx, y: py - 12 }, { x: nx, y: py + 18 }],
+    activity: "at a café table",
+  });
+  b.desks.push({ index: n, side: "north", x: dx, y: py, pcX: dx + 4, pcY: py + 2, chairX: dx + 22, chairY: py - 8, spot: north, screen: null });
+  const s = b.desks.length;
+  const sx = dx + 32;
+  const lane = py + 82;
+  const path: Point[] =
+    below !== null
+      ? [{ x: sx, y: below, c: true }, { x: sx, y: lane }, { x: sx, y: py + 73 }]
+      : [{ x: dx - 5, y: above, c: true }, { x: dx - 5, y: lane }, { x: sx, y: lane }, { x: sx, y: py + 73 }];
+  const south = b.spot({ id: `desk-${s}`, kind: "desk", group: "desk", x: sx, y: py + 73, facing: "back", pose: "sit-desk", path, activity: "at a café table" });
+  b.desks.push({ index: s, side: "south", x: dx, y: py + 30, pcX: dx + 24, pcY: py + 24, chairX: dx + 24, chairY: py + 59, spot: south, screen: { x: dx + 27, y: py + 29, w: 10, h: 5 } });
+  const pod: Rect = { x: dx, y: py - 18, w: 48, h: POD_H - 4 };
+  b.pods.push(pod);
+  b.rooms.push({ kind: "pod", rect: pod });
+  tables.push({ x: dx, y: py, w: 48, kind });
+}
+
+/** How much lower every other table sits (the rows of tables are this much deeper than a desk pair). */
+const STAGGER = 6;
+const BAND = 114 + STAGGER;
+
+/** Tables spread along [x0, x1] (at least 12 px apart), round ones mostly, a square one now and then. */
+function tablesIn(b: Builder, x0: number, x1: number, py: number, above: number, below: number | null, tables: Table[]): void {
+  const n = Math.floor((x1 - x0 + 12) / 60);
+  if (n <= 0) return;
+  const pitch = n > 1 ? Math.floor((x1 - x0 - 48) / (n - 1)) : 0;
+  const start = n > 1 ? x0 : x0 + Math.floor((x1 - x0 - 48) / 2);
+  for (let i = 0; i < n; i++) {
+    const dx = start + i * pitch;
+    // Not in rows: every other table sits a little lower, a square one here and there.
+    const kind = hash(`cafe-table-${dx}-${py}`) % 3 === 0 ? "square" : "round";
+    table(b, dx, py + (i % 2) * STAGGER, kind, above, below, tables);
+  }
+}
+
+/**
+ * A counter along a wall: a plank with sockets, stools in a row with
+ * everyone's back to you (south seats, a desk's geometry), reached straight up
+ * from the hallway below.
+ */
+function wallBar(b: Builder, x0: number, n: number, Y: number, below: number, tables: Table[]): void {
+  if (n <= 0) return;
   for (let i = 0; i < n; i++) {
     const dx = x0 + i * 48;
     const index = b.desks.length;
@@ -171,23 +209,26 @@ function windowBar(b: Builder, x0: number, n: number, Y: number, acc: Access): R
       y: Y + 43,
       facing: "back",
       pose: "sit-desk",
-      path: via(acc, Y + 52, sx, Y + 43),
-      activity: "at the window bar",
+      path: [{ x: sx, y: below, c: true }, { x: sx, y: Y + 52 }, { x: sx, y: Y + 43 }],
+      activity: "at the counter by the wall",
     });
     b.desks.push({ index, side: "south", x: dx, y: Y, pcX: dx + 24, pcY: Y - 6, chairX: dx + 24, chairY: Y + 29, spot, screen: { x: dx + 27, y: Y - 1, w: 10, h: 5 } });
   }
   const pod: Rect = { x: x0, y: Y - 4, w: n * 48, h: 52 };
   b.pods.push(pod);
   b.rooms.push({ kind: "pod", rect: pod });
-  return { x: x0 + 2, y: Y - 4, w: n * 48 - 4 + 14, h: 20 };
+  tables.push({ x: x0, y: Y, w: n * 48, kind: "bar" });
 }
+
+
+// ------------------------------------------------------------------ the counter, the back of house
 
 /**
  * The espresso bar in `r` (the hallway below it): the counter with the
  * machine at its left end, the order point and the tea station, a row of
  * pickup stools (where threads that need you wait for their order), the
  * drinks cooler at the left end and the cake fridge at the right. The
- * baristas work behind it. `o` pushes it down a little in a deep room.
+ * baristas work behind it.
  */
 function buildCounter(b: Builder, r: Rect, acc: Access, walled: boolean): { counter: Counter; waiting: Rect } {
   b.rooms.push({ kind: "kitchen", rect: r });
@@ -260,10 +301,24 @@ function buildCounter(b: Builder, r: Rect, acc: Access, walled: boolean): { coun
   return { counter, waiting: { x: x0 - 10, y: front - 30, w: x1 - x0 + 20, h: 34 } };
 }
 
+
 /**
- * The big table under the RESERVED sign: a chalkboard on an easel at its
- * head (planners draw on it, presenters stand beside it), the table with
- * chairs round it. Open floor, reached from the hallway above.
+ * The back of house beside the counter: a small brick room with the router
+ * shelves and the AI box (the server room; the shock gag happens here,
+ * through a doorway at the bottom of the side facing the stairs) and the
+ * roaster beside it, behind the baristas.
+ */
+function backOfHouse(b: Builder, r: Rect, stairX: number): { server: CafePlan["server"]; roaster: Point } {
+  buildServerRoom(b, r);
+  return { server: { r, gap: stairX < r.x ? "left" : "right" }, roaster: stairX < r.x ? { x: r.x + r.w + 18, y: r.y + r.h - 8 } : { x: r.x - 18, y: r.y + r.h - 8 } };
+}
+
+// ------------------------------------------------------------------ the reserved table
+
+/**
+ * The big table under the RESERVED sign on an open floor reached from the
+ * hallway above: a chalkboard on an easel at its head (planners draw on it,
+ * presenters stand beside it), the table with chairs round it.
  */
 function buildReserved(b: Builder, r: Rect, acc: Access): Rect {
   b.rooms.push({ kind: "meeting", rect: r });
@@ -309,202 +364,333 @@ function buildReserved(b: Builder, r: Rect, acc: Access): Rect {
   return board;
 }
 
-/** The storeroom: the router shelves (the server room) and, where there's width, the roaster beside them. */
-function buildStore(b: Builder, r: Rect): { store: Rect; roaster: Point | null } {
-  const roast = r.w >= 120;
-  const sw = roast ? Math.min(r.w - 44, 96) : r.w;
-  buildServerRoom(b, { x: r.x, y: r.y, w: sw, h: r.h });
-  return { store: r, roaster: roast ? { x: r.x + sw + 20, y: r.y + r.h - 6 } : null };
-}
-
-// ------------------------------------------------------------------ finishing
 
 /**
- * The wall fixtures moved where a café has them: the community corkboard,
- * calendar and status board on the brick pier at the storefront's left end,
- * the shop windows filling the rest of the storefront either side of the
- * door, the clock on the back wall; no hanging plants over the windows.
+ * The reserved table upstairs, reached from the hallway below: the
+ * chalkboard hangs on the back wall (planners draw on it, presenters stand
+ * beside it), the long table in front with its chairs on the near side.
  */
-function hangWall(L: Layout, front: { x0: number; x1: number }, pin: { x: number; w: number }, busyExtra: [number, number][]): void {
-  const w = L.wall;
-  const seg = L.segments.find((s) => front.x0 >= s.x0 && front.x0 < s.x1) ?? L.segments[0]!;
-  const depth = seg.depth;
-  const pinSeg = L.segments.find((s) => pin.x >= s.x0 && pin.x < s.x1) ?? seg;
-  w.pinboard = { x: pin.x, y: 4, w: pin.w, h: Math.min(50, pinSeg.depth - 14) };
-  w.calendar = { x: w.pinboard.x + w.pinboard.w + 6, y: 6, w: 20, h: 22 };
-  w.status = { x: w.calendar.x, y: 31, w: 20, h: 18 };
-  const noteLeft = w.door.x - 16 >= w.calendar.x + w.calendar.w + 4;
-  w.legendNote = { x: noteLeft ? w.door.x - 16 : w.door.x + w.door.w + 4, y: Math.max(8, w.door.y + 8), w: 12, h: 12 };
-  const busy: [number, number][] = [
-    [w.pinboard.x - 4, w.status.x + w.status.w + 4],
-    [Math.min(w.legendNote.x, w.door.x) - 4, Math.max(w.legendNote.x + w.legendNote.w, w.door.x + w.door.w) + 4],
-    ...busyExtra,
+function buildReservedWall(b: Builder, r: Rect, hall: number, wallD: number): Rect {
+  b.rooms.push({ kind: "meeting", rect: r });
+  const boardW = clamp(r.w - 134, 56, 72);
+  const board: Rect = { x: r.x + 6, y: wallD - 42, w: boardW, h: 34 };
+  b.prop("whiteboard", "whiteboard", board.x, board.y, wallD - 1, boardW);
+  b.poke("whiteboard", "whiteboard", board);
+  const up = (x: number, y: number): Point[] => [{ x, y: hall, c: true }, { x, y }];
+  for (const [i, k] of [0.3, 0.7].entries()) {
+    const x = Math.round(board.x + boardW * k);
+    b.spot({ id: `board-${i}`, kind: "whiteboard", group: "meeting", x, y: wallD + 12, facing: "back", pose: "draw", path: up(x, wallD + 12), activity: "planning at the whiteboard" });
+  }
+  for (const [i, dx] of [12, 32].entries()) {
+    const x = board.x + boardW + dx;
+    b.spot({ id: `present-${i}`, kind: "present", group: "present", x, y: wallD + 10, facing: "front", pose: "stand", path: up(x, wallD + 10), activity: "presenting a plan for your review" });
+  }
+  const tableX = board.x + boardW + 50;
+  const tableY = wallD + 18;
+  b.prop("meeting-table", "meeting-table", tableX, tableY, tableY + 30);
+  const seatY = tableY + 38;
+  for (const [i, dx] of [12, 34, 56].entries()) {
+    const x = tableX + dx;
+    b.spot({ id: `meet-${i}`, kind: "meeting-seat", group: "meeting", x, y: seatY, facing: "back", pose: "sit-back", path: up(x, seatY), activity: "planning in the meeting room" });
+    b.prop(`meet-chair-${i}`, "meeting-chair-back", x - 8, seatY - 14, seatY + 2);
+  }
+  return board;
+}
+
+// ------------------------------------------------------------------ the fireside, the armchairs, the stage
+
+/**
+ * The fireside corner under the back wall (the specials screen and the
+ * fireplace on it), reached from the hallway below: the chesterfield facing
+ * them with the coffee table, the piano on the left, the aquarium on the
+ * sideboard on the right.
+ */
+function buildFireside(b: Builder, r: Rect, hall: number, tv: Rect) {
+  b.rooms.push({ kind: "lounge", rect: r });
+  b.prop("tv", "tv", tv.x, tv.y, 0, tv.w);
+  const screen: Rect = { x: tv.x + 4, y: tv.y + 4, w: tv.w - 8, h: tv.h - 8 };
+  const speakers: Rect[] = [
+    { x: tv.x - 14, y: tv.y + tv.h - 26, w: 10, h: 26 },
+    { x: tv.x + tv.w + 4, y: tv.y + tv.h - 26, w: 10, h: 26 },
   ];
-  // Big shop windows: as wide as the free stretches allow (40–86 px), mullions between.
-  const windows: Rect[] = [];
-  const free: [number, number][] = [];
-  let x = front.x0 + 4;
-  const sorted = [...busy].sort((a, b) => a[0] - b[0]);
-  for (const [a, z] of sorted) {
-    if (a > x) free.push([x, Math.min(a, front.x1 - 4)]);
-    x = Math.max(x, z);
+  const couchW = 82;
+  const couchX = r.x + Math.round((r.w - couchW) / 2);
+  const couchY = r.y + 28;
+  const couch: Rect = { x: couchX, y: couchY, w: couchW, h: 26 };
+  b.prop("couch", "couch", couchX - 1, couchY - 1, couchY + 26);
+  b.poke("couch", "couch", { x: couchX, y: couchY - 2, w: couchW, h: 28 });
+  b.prop("coffee-table", "coffee-table", couchX + 22, couchY - 22, couchY - 10);
+  const side = couchX - 6;
+  for (const [i, dx] of [20, 41, 62].entries()) {
+    const x = couchX + dx;
+    b.spot({ id: `couch-${i + 1}`, kind: "couch", group: "lounge", x, y: couchY + 13, facing: "back", pose: "sit-back", path: [{ x: side, y: hall, c: true }, { x: side, y: couchY - 8 }, { x, y: couchY - 8 }, { x, y: couchY + 13 }], activity: "watching TV" });
   }
-  if (x < front.x1 - 4) free.push([x, front.x1 - 4]);
-  for (const [a, z] of free) {
-    const len = z - a;
-    if (len < 40) continue;
-    const n = Math.max(1, Math.round(len / 86));
-    const ww = Math.floor((len - (n - 1) * 6) / n);
-    for (let i = 0; i < n; i++) windows.push({ x: a + i * (ww + 6), y: 8, w: ww, h: depth - 20 });
+  const px = r.x + 4;
+  const py = couchY - 8;
+  b.prop("piano", "piano", px, py, py + 30);
+  b.poke("piano", "piano", { x: px, y: py, w: 30, h: 30 });
+  b.spot({ id: "piano", kind: "piano", group: "lounge", x: px + 15, y: py + 38, facing: "back", pose: "play", path: [{ x: px + 15, y: hall, c: true }, { x: px + 15, y: py + 38 }], activity: "playing the piano" });
+  const fishtank: Rect = { x: r.x + r.w - 44, y: couchY - 14, w: 40, h: 24 };
+  b.prop("fishtank-stand", "fishtank-stand", fishtank.x - 1, fishtank.y + 24, fishtank.y + 44);
+  b.poke("fishtank", "fishtank", { x: fishtank.x, y: fishtank.y, w: 40, h: 44 });
+  const fy = Math.min(fishtank.y + 52, hall - 4);
+  b.spot({ id: "fishtank", kind: "fishtank", group: "lounge", x: fishtank.x + 20, y: fy, facing: "back", pose: "stand", path: [{ x: fishtank.x + 20, y: hall, c: true }, { x: fishtank.x + 20, y: fy }], activity: "watching the fish" });
+  return { tv, screen, speakers, couch, fishtank, arcade: null as Rect | null };
+}
+
+/** Armchairs in a row facing you (feet at `y`), reached straight from the hallway: the first a reading seat, the rest squeeze-ins. */
+function armchairRow(b: Builder, x0: number, x1: number, y: number, hall: number, chairs: Point[], nooks: Pending[]): void {
+  for (let x = x0 + 12, i = 0; x <= x1 - 12; x += 30, i++) {
+    chairs.push({ x, y });
+    const path: Point[] = [{ x, y: hall, c: true }, { x, y }];
+    if (i === 0 && !b.spots.some((s) => s.id === "read-0")) {
+      b.spot({ id: "read-0", kind: "armchair", group: "lounge", x, y, facing: "front", pose: "read", path, activity: "reading by the window", lift: 3 });
+    } else nooks.push({ x, y, seat: "armchair", path, activity: "working from an armchair" });
   }
-  w.windows = windows;
+}
+
+/** A squeeze-in waiting to be added after all the real desks. */
+interface Pending {
+  x: number;
+  y: number;
+  seat: NookSeat;
+  path: Point[];
+  activity: string;
+}
+
+/** The squeeze-ins, after every real desk (the desk group fills in order). */
+function addNooks(b: Builder, pending: Pending[]): Nook[] {
+  return pending.map((p, i) => {
+    const id = `${NOOK}${i}`;
+    b.spot({ id, kind: "bench", group: "desk", x: p.x, y: p.y, facing: "front", pose: "sit-desk-front", path: p.path, activity: p.activity, lift: LIFT[p.seat] });
+    return { id, x: p.x, y: p.y, seat: p.seat };
+  });
+}
+
+// ------------------------------------------------------------------ your armchair
+
+/**
+ * Your usual spot: an open corner on a round rug (no walls), your armchair
+ * facing out over a low table (your papers, the cradle), two chairs for your
+ * guests across it, the lamp, a bookshelf, Mocha's basket; the hoop and the
+ * putting strip where they fit (bossToys). Reached from the hallway above.
+ */
+function buildArmchair(b: Builder, r: Rect, hall: number): Layout["boss"] {
+  const doorX = r.x + 16;
+  b.rooms.push({ kind: "boss", rect: r, doorX, doorSide: "top" });
+  const deskW = 60;
+  const desk: Rect = { x: r.x + Math.round((r.w - deskW) / 2) + 8, y: r.y + Math.min(30, Math.round(r.h * 0.26)), w: deskW, h: 26 };
+  const seat = { x: desk.x + deskW / 2, y: desk.y + 4 };
+  b.prop("boss-chair", "boss-chair", seat.x - 10, desk.y - 22, desk.y - 1);
+  b.prop("boss-desk", "boss-desk", desk.x, desk.y, desk.y + 22, deskW);
+  b.poke("boss", "boss", { x: seat.x - 9, y: desk.y - 24, w: 18, h: 24 });
+  const guestY = desk.y + 44;
+  const lane = r.y + r.h - 8;
+  for (const [i, dx] of [-12, 12].entries()) {
+    const x = Math.round(seat.x + dx);
+    b.spot({
+      id: `boss-guest-${i}`,
+      kind: "boss-guest",
+      group: "boss",
+      x,
+      y: guestY,
+      facing: "back",
+      pose: "sit-back",
+      path: [{ x: doorX, y: hall, c: true }, { x: doorX, y: r.y - 3 }, { x: doorX, y: lane }, { x, y: lane }, { x, y: guestY }],
+      activity: "going over a draft with you",
+    });
+    b.prop(`guest-chair-${i}`, "guest-chair", x - 8, guestY - 14, guestY + 2);
+  }
+  b.prop("boss-shelf", "library-shelf", r.x + r.w - 38, r.y - 4, r.y + 26);
+  b.poke("globe", "globe", { x: r.x + r.w - 38, y: r.y - 4, w: 32, h: 14 });
+  const dogBed = { x: r.x + r.w - 20, y: r.y + r.h - 10 };
+  b.prop("dog-bed", "dog-bed", dogBed.x - 12, dogBed.y - 8, dogBed.y - 6);
+  b.prop("lamp", "lamp", r.x + 6, r.y + 2, r.y + 52);
+  b.poke("lamp", "lamp", { x: r.x + 6, y: r.y + 2, w: 16, h: 52 });
+  return bossToys(b, { room: r, seat, desk, dogBed, lamp: { x: r.x + 14, y: r.y + 4 } });
+}
+
+// ------------------------------------------------------------------ out front
+
+/**
+ * The terrace: rows of bistro tables with a chair either side; whoever
+ * squeezes in works out here, reached through the nearest door and down the
+ * gap between the tables.
+ */
+function terrace(b: Builder, t: Rect, x0: number, x1: number, hall: number, doors: number[], bistro: CafePlan["bistro"], pending: Pending[]): void {
+  const lane = t.y + 6;
+  let n = 0;
+  for (let row = 0, y = t.y + Math.min(t.h - 4, 26); y <= t.y + t.h - 4 && row < 3; row++, y += 36) {
+    for (let cx = x0 + 22; cx + 18 <= x1; cx += 62) {
+      if (doors.some((d) => Math.abs(d - cx) < 26)) continue;
+      const chairs = [cx - 14, cx + 14];
+      bistro.push({ x: cx, y, chairs });
+      for (const x of chairs) {
+        const door = doors.reduce((a, d) => (Math.abs(d - x) < Math.abs(a - x) ? d : a));
+        const gx = x < cx ? cx - 31 : cx + 31;
+        const path: Point[] = [{ x: door, y: hall, c: true }, { x: door, y: lane }, { x: gx, y: lane }, { x: gx, y }, { x, y }];
+        if (n < 2) b.spot({ id: `terrace-${n}`, kind: "bench", group: "lounge", x, y, facing: "front", pose: "sit-front", path, activity: "having a coffee out front", lift: 2 });
+        else pending.push({ x, y, seat: "bistro", path, activity: "working out on the terrace" });
+        n++;
+      }
+    }
+  }
+}
+
+// ------------------------------------------------------------------ the wall
+
+/** Chalkboard menus hanging between x0 and x1 from `y`, 30–64 px wide. */
+function menuBoards(x0: number, x1: number, y: number, h: number): Rect[] {
+  const out: Rect[] = [];
+  let x = x0;
+  while (x1 - x >= 30 && out.length < 3) {
+    const w = Math.min(64, x1 - x);
+    out.push({ x, y, w, h });
+    x += w + 10;
+  }
+  return out;
+}
+
+/** Windows in [x0, x1] on the back wall (40–70 px each, arched in the drawing). */
+function windowsIn(x0: number, x1: number, depth: number): Rect[] {
+  const len = x1 - x0;
+  if (len < 40) return [];
+  const n = Math.max(1, Math.round(len / 70));
+  const w = Math.min(70, Math.floor((len - (n - 1) * 8) / n));
+  const off = Math.floor((len - (n * w + (n - 1) * 8)) / 2);
+  return Array.from({ length: n }, (_, i) => ({ x: x0 + off + i * (w + 8), y: 8, w, h: depth - 22 }));
+}
+
+interface Fixtures {
+  pin: Rect;
+  clock: Point;
+  windows: Rect[];
+  door: Rect;
+  entrance: Point;
+  hall: number;
+}
+
+function hang(L: Layout, f: Fixtures, bldg: { x0: number; x1: number }): void {
+  const w = L.wall;
+  w.pinboard = f.pin;
+  w.calendar = { x: f.pin.x + f.pin.w + 6, y: 6, w: 20, h: 22 };
+  w.status = { x: w.calendar.x, y: 31, w: 20, h: 18 };
+  w.door = f.door;
+  w.legendNote = { x: f.door.x + f.door.w + 5, y: f.door.y + 6, w: 12, h: 12 };
+  if (w.legendNote.x + 14 > L.W) w.legendNote.x = f.door.x - 17;
+  w.clock = { x: Math.round(f.clock.x), y: f.clock.y, r: 9 };
+  w.windows = f.windows;
   w.paintings = [];
-  w.pillars = L.segments.slice(1).map((s) => s.x0);
+  w.pillars = [];
+  L.entrance = f.entrance;
+  L.entrancePath = [{ x: f.entrance.x, y: f.hall, c: true }, f.entrance];
   L.plants = L.plants.filter((p) => p.sprite !== "HANGING_PLANT");
+  // Rounds stay indoors.
+  L.patrol = [];
+  for (const [i, hy] of L.net.halls.entries()) {
+    const row = i % 2 ? [bldg.x1 - 10, bldg.x0 + 10] : [bldg.x0 + 10, bldg.x1 - 10];
+    for (const x of row) L.patrol.push({ x, y: hy, c: true });
+  }
 }
 
 function extras(L: Layout): Point[][] {
-  const out: Point[][] = [L.entrancePath];
-  const cooler = L.byId.get("cooler");
-  if (cooler) out.push([{ x: cooler.x + 29, y: cooler.path[0]!.y }, { x: cooler.x + 29, y: cooler.y }]);
-  return out;
+  return [L.entrancePath];
 }
 
-/** Chalkboard menus between x0 and x1 on a back wall `depth` deep: one or two boards, 30–70 px wide. */
-function menuBoards(x0: number, x1: number, depth: number): Rect[] {
-  const out: Rect[] = [];
-  const h = Math.min(40, depth - 40);
-  let x = x0;
-  while (x1 - x >= 30 && out.length < 3) {
-    const w = Math.min(70, x1 - x);
-    out.push({ x, y: 8, w, h });
-    x += w + 8;
-  }
-  return out;
-}
-
-function done(L: Layout, plan: Omit<CafePlan, "cafe" | "extra">, pin: { x: number; w: number }, clock: { x: number; y: number }, busy: [number, number][]): Layout {
-  hangWall(L, plan.storefront, pin, busy);
-  L.wall.clock = { x: Math.round(clock.x), y: clock.y, r: 9 };
+function done(L: Layout, plan: Omit<CafePlan, "cafe" | "extra">, f: Fixtures): Layout {
+  hang(L, f, plan.bldg);
   const full: CafePlan = { cafe: true, ...plan, extra: [] };
   L.themeData = full;
   full.extra = extras(L);
   return L;
 }
 
-/** Desk pairs wanted for a head count: everyone working has a table, with a few spare. */
+/** The rug under your armchair and your guests. */
+const rugOf = (boss: Layout["boss"]) => ({ x: boss.desk.x + boss.desk.w / 2, y: boss.desk.y + 22, rx: 54, ry: 34 });
+
+/** Desks wanted for a head count: everyone working has a table, with a couple spare. */
 const wanted = (threads: number) => Math.max(8, threads + 2);
 
 // ------------------------------------------------------------------ wide panels
 
 function wide(W: number, H: number, threads: number): Layout {
+  if (H < 424) return short(W, H);
   const b = new Builder();
-  const tall = H >= 400;
-  const dS = tall ? 74 : 66;
-  const dF = tall ? 88 : 78;
-  const dB = tall ? 84 : 74;
-  // Columns: the tables on the left, the fireside corner, the counter.
-  const tw = clamp(W - 378, 192, 432);
-  const c1x = 8;
-  const a1 = c1x + tw + HALF;
-  const rx = a1 + HALF;
-  const rest = W - 6 - rx;
-  const lw = clamp(Math.round(rest * 0.45), 160, 250);
-  const a2 = rx + lw + HALF;
-  const kx = a2 + HALF;
-  const kw = W - 6 - kx;
-  const segments: WallSegment[] = [
-    { x0: 0, x1: a1 + 14, depth: dS },
-    { x0: a1 + 14, x1: a2 - 2, depth: dF },
-    { x0: a2 - 2, x1: W, depth: dB },
-  ];
+  const M = clamp(Math.round(W * 0.03), 10, 36);
+  const x0 = M + 6;
+  const x1 = W - M - 6;
+  const roomy = H >= 470;
+  const wallD = roomy ? 64 : 56;
+  const hU = wallD + (roomy ? 80 : 76);
+  const edge = hU + HALF;
+  const kY = edge + 16;
+  const hG1 = kY + 94;
   const tables: Table[] = [];
-  const tiles: Rect[] = [];
-  const rugs: Rect[] = [];
+  const pending: Pending[] = [];
+  const armchairs: Point[] = [];
 
-  // ---- the window bar under the shop windows, a row of tables under it when the panel's tall
-  const Y = dS - 2;
-  const barSeats = Math.floor((a1 - 14 - c1x) / 48);
-  let hall1: number;
-  let rowA: number[] = [];
-  if (tall) {
-    rowA = fitCols(tw, false);
-    hall1 = Y + 46 + 108;
-  } else hall1 = clamp(Math.round(H * 0.56), dB + 100, H - 108);
-  const net: Network = { halls: [hall1], aisles: [a1, a2] };
-  const left: Access = { hallY: hall1, aisleX: a1 };
-  const right: Access = { hallY: hall1, aisleX: a2 };
-  const bar = windowBar(b, c1x, barSeats, Y, left);
-  if (bar) tables.push({ x: c1x, y: Y, w: barSeats * 48, kind: "bar" });
-  if (rowA.length) tableRow(b, c1x + Math.floor((tw - rowWidth(rowA, 0)) / 2), Y + 46, rowA, 0, left, tables);
+  // ---- upstairs: the reserved table, the fireside, armchairs by the window, the stage, the arcade
+  const inner = x1 - x0;
+  const rw = clamp(Math.round(inner * 0.28), 188, 210);
+  const reserved: Rect = { x: x0, y: wallD, w: rw, h: hU - HALF - wallD };
+  const whiteboard = buildReservedWall(b, reserved, hU, wallD);
+  const fw = clamp(Math.round(inner * 0.32), 186, 240);
+  const fx = x0 + rw + 8;
+  const lounge: Rect = { x: fx, y: wallD, w: fw, h: hU - HALF - wallD };
+  const wallTv: Rect = { x: fx + 16, y: 8, w: 80, h: Math.min(42, wallD - 20) };
+  const fireplace: Rect = { x: fx + fw - 76, y: wallD - 44, w: 64, h: 44 };
+  const tvParts = buildFireside(b, lounge, hU, wallTv);
+  const ax = x1 - 28;
+  buildArcade(b, ax, wallD - 10, [{ x: ax + 12, y: hU, c: true }, { x: ax + 12, y: wallD + 48 }]);
+  const rest0 = fx + fw + 8;
+  const sw = clamp(Math.round((ax - 8 - rest0) * 0.55), 100, 150);
+  const readX1 = ax - 8 - sw - 8;
+  armchairRow(b, rest0, readX1, wallD + 36, hU, armchairs, pending);
+  const sx0 = readX1 + 8;
+  const stage: Rect = { x: sx0 + 2, y: wallD + 2, w: sw - 4, h: 26 };
+  const eventArea: Rect = { x: sx0, y: wallD + 32, w: sw, h: hU - HALF - (wallD + 32) };
 
-  // ---- the fireside corner under the chimney, the TV (the specials screen) on the back wall over the counter
-  const lounge: Rect = { x: rx, y: dF, w: lw, h: hall1 - HALF - dF };
-  const tvW = clamp(kw - 100, 60, 104);
-  const tvH = Math.min(Math.round(tvW * 0.52), dB - 34);
-  const wallTv: Rect = { x: a2 + 16, y: 8, w: tvW, h: tvH };
-  const menus = menuBoards(wallTv.x + wallTv.w + 18, W - 6, dB);
-  const tvParts = buildLounge(b, lounge, left, wallTv, true, false);
-  const fireplace: Rect = { x: rx + Math.round(lw / 2) - 32, y: dF - 46, w: 64, h: 46 };
-  rugs.push({ x: tvParts.couch.x - 14, y: lounge.y + 4, w: tvParts.couch.w + 28, h: tvParts.couch.y + tvParts.couch.h - lounge.y });
+  // ---- downstairs: the counter along the wall, the stairs, the back of house, the espresso bar
+  const barSeats = clamp(Math.floor((W * 0.36 - x0) / 48), 3, 8);
+  const stairX = x0 + barSeats * 48 + 18;
+  wallBar(b, x0, barSeats, kY + 4, hG1, tables);
+  const { server, roaster } = backOfHouse(b, { x: stairX + 14, y: kY + 4, w: 72, h: 62 }, stairX);
+  const kx = stairX + 122;
+  const kw = Math.min(310, x1 - kx);
+  const K: Rect = { x: kx, y: kY, w: kw, h: 84 };
+  const { counter, waiting } = buildCounter(b, K, { hallY: hG1, aisleX: kx + 14 }, true);
+  const more = Math.floor((x1 - (kx + kw) - 10) / 48);
+  if (more > 0) wallBar(b, kx + kw + 10, more, kY + 4, hG1, tables);
+  const tiles: Rect[] = [{ x: stairX + 12, y: kY, w: kx + kw - (stairX + 12), h: hG1 - HALF - kY }];
 
-  // ---- the counter under the back wall
-  const K: Rect = { x: kx, y: dB, w: kw, h: hall1 - HALF - dB };
-  const { counter, waiting } = buildCounter(b, K, right, true);
-  tiles.push({ x: a2 - 2, y: dB, w: W - (a2 - 2), h: hall1 - HALF + 2 - dB });
-
-  // ---- under the hallway
-  const by = hall1 + HALF + 2;
-  const below = H - 6 - by;
-  let reserved: Rect;
-  let whiteboard: Rect;
-  let stage: Rect | null = null;
-  let storeroom: Rect | null = null;
-  let roaster: Point | null = null;
-  let boss: Layout["boss"];
-  let eventArea: Rect;
-  if (tall) {
-    // Left: more tables while the head count needs them, then the reserved table.
-    let y = hall1 + 4;
-    let desks = b.desks.length;
-    // (In a tall panel, more tables anyway while the reserved table still fits under them.)
-    while ((desks < wanted(threads) && H - 6 - (y + POD_H + 4) >= 110) || H - 6 - (y + POD_H + 4) >= 196) {
-      const g = fitCols(tw, tables.every((t) => t.kind !== "long"));
-      tableRow(b, c1x + Math.floor((tw - rowWidth(g, 0)) / 2), y, g, 0, left, tables);
-      desks = b.desks.length;
-      y += POD_H + 4;
-    }
-    const top = y === hall1 + 4 ? by : y + 4;
-    const rh = Math.min(H - 6 - top, 186);
-    reserved = { x: c1x, y: top, w: Math.min(tw, 250), h: rh };
-    whiteboard = buildReserved(b, reserved, left);
-    // Middle: the open-mic stage in the corner, the arcade cabinet, the water station along the bottom.
-    arcadeFromAbove(b, rx + lw - 28, by - 2, hall1);
-    stage = { x: rx + 4, y: by + 2, w: Math.min(76, lw - 64), h: 30 };
-    const utilY = H - 46;
-    const hasUtil = utilY - (by + 70) >= 40;
-    if (hasUtil) utilities(b, H, rx + lw - 76, hall1);
-    eventArea = { x: rx + 6, y: stage.y + stage.h + 8, w: lw - 46, h: Math.max(30, (hasUtil ? utilY - 6 : H - 8) - (stage.y + stage.h + 8)) };
-    rugs.push({ x: eventArea.x + 4, y: eventArea.y + 2, w: eventArea.w - 8, h: Math.min(eventArea.h - 4, 84) });
-    // Right: your snug, the storeroom under it.
-    const bw = Math.min(kw, 230);
-    const bossRoom: Rect = { x: W - 6 - bw, y: by, w: bw, h: clamp(below - 90, 96, 170) };
-    boss = buildBoss(b, bossRoom, hall1);
-    const sy = bossRoom.y + bossRoom.h + 12;
-    if (H - 6 - sy >= 40) ({ store: storeroom, roaster } = buildStore(b, { x: kx, y: sy, w: Math.min(kw, 200), h: Math.min(60, H - 6 - sy) }));
-  } else {
-    // Short: one row of tables with the arcade cabinet beside it, the reserved table, your snug.
-    const g = fitCols(tw - 40, true);
-    tableRow(b, c1x, hall1 + 4, g, 0, left, tables);
-    arcadeFromAbove(b, c1x + tw - 26, by - 2, hall1);
-    reserved = { x: rx, y: by, w: lw, h: below };
-    whiteboard = buildReserved(b, reserved, left);
-    const bossRoom: Rect = { x: kx, y: by, w: kw, h: below - 2 };
-    boss = buildBoss(b, bossRoom, hall1);
-    const couch = tvParts.couch;
-    const free = lounge.y + lounge.h - (couch.y + couch.h + 4);
-    eventArea = { x: lounge.x + 16, y: couch.y + couch.h + 4, w: lounge.w - 32, h: Math.max(26, free) };
+  // ---- tables, your armchair in the corner of the first row
+  const halls = [hU, hG1];
+  let hall = hG1;
+  // Your corner, with room for the putting strip beside your guests.
+  const bossW = 230;
+  const bossR: Rect = { x: x1 - bossW, y: hG1 + 12, w: bossW, h: 92 };
+  const boss = buildArmchair(b, bossR, hG1);
+  for (let row = 0; row === 0 || (b.desks.length < wanted(threads) && hall + BAND + 12 + 40 + 60 <= H); row++) {
+    const py = hall + 22;
+    const below = hall + BAND;
+    tablesIn(b, x0, stairX - 14, py, hall, below, tables);
+    tablesIn(b, stairX + 14, row === 0 ? bossR.x - 8 : x1, py, hall, below, tables);
+    hall = below;
+    halls.push(hall);
   }
+
+  // ---- the shop's front, the terrace, the street
+  const fy = hall + 12;
+  const doors = [stairX, stairX + Math.round((x1 - stairX) / 2)];
+  const facade = { y: fy, h: 40, doors };
+  const tY = fy + 40;
+  const bistro: CafePlan["bistro"] = [];
+  const terraceR: Rect | null = H - 8 - tY >= 24 ? { x: 0, y: tY, w: W, h: H - 8 - tY } : null;
+  if (terraceR) terrace(b, terraceR, x0, x1, hall, doors, bistro, pending);
+  const nooks = addNooks(b, pending);
+
+  const net: Network = { halls, aisles: [stairX] };
+  const segments: WallSegment[] = [{ x0: 0, x1: W, depth: wallD }];
   const L = finish(b, W, H, false, segments, net, {
     meeting: reserved,
     whiteboard,
@@ -516,151 +702,254 @@ function wide(W: number, H: number, threads: number): Layout {
     eventArea,
     tvParts,
     gamesParts: null,
-    doorX: a1,
+    doorX: stairX,
+    lamp: boss.lamp,
+    wallTv,
+  });
+  const pw = clamp(sw - 30, 64, 100);
+  return done(
+    L,
+    {
+      bldg: { x0, x1 },
+      wallD,
+      upstairs: { r: { x: x0, y: wallD, w: inner, h: edge - wallD }, edge },
+      stairs: { x: stairX, y0: hU, y1: kY + 6 },
+      facade,
+      terrace: terraceR,
+      street: terraceR ? { x: 0, y: H - 8, w: W, h: 8 } : null,
+      fireplace,
+      menus: menuBoards(kx + 40, kx + kw - 12, edge - 2, 26),
+      tables,
+      counter,
+      reserved,
+      stage,
+      server,
+      roaster,
+      rug: rugOf(boss),
+      armchairs,
+      bistro,
+      nooks,
+      tiles,
+      rugs: [
+        { x: tvParts.couch.x - 14, y: wallD + 2, w: tvParts.couch.w + 28, h: tvParts.couch.y + tvParts.couch.h - wallD + 2 },
+        { x: eventArea.x + 4, y: eventArea.y, w: eventArea.w - 8, h: eventArea.h - 2 },
+      ],
+    },
+    {
+      pin: { x: sx0 + 2, y: 4, w: pw, h: Math.min(50, wallD - 14) },
+      clock: { x: ax + 12, y: 16 },
+      windows: [...windowsIn(x0 + 6 + clamp(rw - 134, 56, 72) + 12, x0 + rw - 4, wallD), ...windowsIn(rest0 + 2, readX1 - 2, wallD)],
+      door: { x: stairX - 10, y: fy + 6, w: 20, h: 34 },
+      entrance: { x: stairX, y: Math.min(H - 2, fy + 46) },
+      hall,
+    },
+  );
+}
+
+// ------------------------------------------------------------------ short wide panels: one floor
+
+function short(W: number, H: number): Layout {
+  const b = new Builder();
+  const M = clamp(Math.round(W * 0.02), 8, 20);
+  const x0 = M + 6;
+  const x1 = W - M - 6;
+  const wallD = 56;
+  const hy = wallD + 94;
+  const tables: Table[] = [];
+  // The fireside on the left, the back of house and the counter under the back wall.
+  const fw = clamp(Math.round((x1 - x0) * 0.32), 186, 230);
+  const lounge: Rect = { x: x0, y: wallD, w: fw, h: hy - HALF - wallD };
+  const wallTv: Rect = { x: x0 + 16, y: 6, w: 80, h: 36 };
+  const fireplace: Rect = { x: x0 + fw - 76, y: wallD - 44, w: 64, h: 44 };
+  const tvParts = buildFireside(b, lounge, hy, wallTv);
+  const aisle = x0 + fw + 14;
+  const { server, roaster } = backOfHouse(b, { x: aisle + 14, y: wallD + 4, w: 72, h: 62 }, aisle);
+  const kx = aisle + 122;
+  const K: Rect = { x: kx, y: wallD, w: x1 - kx, h: 84 };
+  const { counter, waiting } = buildCounter(b, K, { hallY: hy, aisleX: kx + 14 }, true);
+  // Under the hallway: tables, the arcade, the reserved table, your armchair.
+  const by = hy + 12;
+  const bossR: Rect = { x: x1 - 150, y: by, w: 150, h: Math.min(110, H - 4 - by) };
+  const boss = buildArmchair(b, bossR, hy);
+  const reserved: Rect = { x: bossR.x - 8 - 120, y: hy + 10, w: 120, h: H - 6 - (hy + 10) };
+  const whiteboard = buildReserved(b, reserved, { hallY: hy, aisleX: reserved.x + reserved.w - 4 });
+  const ax = reserved.x - 32;
+  arcadeFromAboveAt(b, ax, hy + 6, hy);
+  tablesIn(b, x0 + 6, ax - 16, hy + 22, hy, null, tables);
+  const couch = tvParts.couch;
+  const eventArea: Rect = { x: lounge.x + 16, y: couch.y + couch.h + 4, w: lounge.w - 32, h: Math.max(26, hy - HALF - (couch.y + couch.h + 4)) };
+  const net: Network = { halls: [hy], aisles: [aisle] };
+  const L = finish(b, W, H, false, [{ x0: 0, x1: W, depth: wallD }], net, {
+    meeting: reserved,
+    whiteboard,
+    boss,
+    waiting,
+    kitchen: K,
+    lounge,
+    games: null,
+    eventArea,
+    tvParts,
+    gamesParts: null,
+    doorX: aisle,
     lamp: boss.lamp,
     wallTv,
   });
   return done(
     L,
-    { storefront: { x0: 0, x1: a1 + 14 }, fireplace, menus, bar, tables, counter, reserved, stage, storeroom, roaster, tiles, rugs },
-    { x: 6, w: clamp(a1 - 180, 72, 112) },
-    { x: fireplace.x + fireplace.w / 2, y: 18 },
-    [],
+    {
+      bldg: { x0, x1 },
+      wallD,
+      upstairs: null,
+      stairs: null,
+      facade: null,
+      terrace: null,
+      street: null,
+      fireplace,
+      menus: menuBoards(kx + 36, x1 - 34, 6, 24),
+      tables,
+      counter,
+      reserved,
+      stage: null,
+      server,
+      roaster,
+      rug: rugOf(boss),
+      armchairs: [],
+      bistro: [],
+      nooks: [],
+      tiles: [{ x: aisle + 10, y: wallD, w: x1 - aisle - 10, h: hy - HALF - wallD }],
+      rugs: [{ x: couch.x - 14, y: wallD + 2, w: couch.w + 28, h: couch.y + couch.h - wallD + 2 }],
+    },
+    {
+      pin: { x: aisle + 14, y: 4, w: 72, h: 44 },
+      clock: { x: x1 - 16, y: 16 },
+      windows: [],
+      door: { x: aisle - 10, y: wallD - 42, w: 20, h: 42 },
+      entrance: { x: aisle, y: wallD + 2 },
+      hall: hy,
+    },
   );
+}
+
+/** An arcade cabinet at x against the top of an open floor, reached down its left side from the hallway above. */
+function arcadeFromAboveAt(b: Builder, x: number, top: number, hall: number): void {
+  const y = top + 2;
+  buildArcade(b, x, y, [{ x: x - 8, y: hall, c: true }, { x: x - 8, y: y + 58 }, { x: x + 12, y: y + 58 }]);
 }
 
 // ------------------------------------------------------------------ the phone held upright
 
 function portrait(W: number, H: number, threads: number): Layout {
   const b = new Builder();
-  const aisleX = W - 9;
-  const x0 = 6;
-  const innerW = aisleX - HALF - x0;
-  const dB = 80;
-  const front = Math.round(W * 0.64);
-  const segments: WallSegment[] = [
-    { x0: 0, x1: front, depth: dB },
-    { x0: front, x1: W, depth: 72 },
-  ];
+  const x0 = 10;
+  const x1 = W - 10;
+  const stairX = x1 - 12;
+  const cr = stairX - 14;
+  const wallD = H >= 700 ? 64 : 56;
   const tables: Table[] = [];
-  const tiles: Rect[] = [];
-  const rugs: Rect[] = [];
-  const gap = HALF * 2;
-  const small = H < 700;
-  const counterH = small ? 96 : 108;
-  const loungeH = small ? 122 : 132;
-  const lastH = 134;
-  // Rows: the counter, tables, the fireside corner, more tables while needed, the reserved table and the snug, the stage.
-  type Kind = "counter" | "tables" | "lounge" | "tables2" | "last" | "stage";
-  const rows: { kind: Kind; h: number }[] = [
-    { kind: "counter", h: counterH },
-    { kind: "tables", h: POD_H },
-    { kind: "lounge", h: loungeH },
-    { kind: "last", h: lastH },
-  ];
-  const used = () => dB + rows.reduce((s, r) => s + r.h + gap, 0);
-  const g = fitCols(innerW, false);
-  const per = g.reduce((s, n) => s + n, 0) * 2;
-  let desks = per;
-  while (desks < wanted(threads) && used() + POD_H + gap <= H - 6) {
-    rows.splice(rows.length - 1, 0, { kind: "tables2", h: POD_H });
-    desks += per;
+  const pending: Pending[] = [];
+  const armchairs: Point[] = [];
+
+  // ---- upstairs: the fireside, the arcade, armchairs; under them the stage and more armchairs
+  const hU = wallD + 76;
+  const fw = clamp(cr - x0 - 110, 186, 210);
+  const lounge: Rect = { x: x0, y: wallD, w: fw, h: hU - HALF - wallD };
+  const wallTv: Rect = { x: x0 + 16, y: 8, w: 80, h: Math.min(42, wallD - 20) };
+  const fireplace: Rect = { x: x0 + fw - 76, y: wallD - 44, w: 64, h: 44 };
+  const tvParts = buildFireside(b, lounge, hU, wallTv);
+  const ax = x0 + fw + 8;
+  buildArcade(b, ax, wallD - 10, [{ x: ax + 12, y: hU, c: true }, { x: ax + 12, y: wallD + 48 }]);
+  armchairRow(b, ax + 30, cr, wallD + 36, hU, armchairs, pending);
+  const edge = hU + 80;
+  const stage: Rect = { x: x0 + 2, y: hU + 12, w: 120, h: 26 };
+  const eventArea: Rect = { x: x0, y: hU + 42, w: 160, h: edge - 2 - (hU + 42) };
+  armchairRow(b, x0 + 170, cr, hU + 44, hU, armchairs, pending);
+
+  // ---- downstairs: the counter and the back of house by the stairs
+  const kY = edge + 16;
+  const hG1 = kY + 94;
+  const srv: Rect = { x: cr - 72, y: kY + 4, w: 72, h: 62 };
+  const { server, roaster } = backOfHouse(b, srv, stairX);
+  const K: Rect = { x: x0, y: kY, w: srv.x - 36 - x0, h: 84 };
+  const { counter, waiting } = buildCounter(b, K, { hallY: hG1, aisleX: x0 + 14 }, true);
+
+  // ---- tables while the head count needs them (and the front still fits), your armchair and the reserved table
+  const halls = [hU, hG1];
+  let hall = hG1;
+  const lastH = 122;
+  for (let row = 0; row === 0 || (b.desks.length < wanted(threads) && hall + BAND + lastH + 40 + 40 <= H - 4); row++) {
+    const below = hall + BAND;
+    tablesIn(b, x0, cr, hall + 22, hall, below, tables);
+    hall = below;
+    halls.push(hall);
   }
-  if (used() + 90 + gap <= H - 6) rows.push({ kind: "stage", h: 90 });
-  const extra = Math.max(0, H - 6 - used());
-  const grow: Partial<Record<Kind, number>> = { lounge: 0.25, last: 0.6, stage: 0.5 };
-  const growSum = rows.reduce((s, r) => s + (grow[r.kind] ?? 0), 0) || 1;
-  let y = dB;
-  const placed: { kind: Kind; r: Rect; hallY: number }[] = [];
-  const halls: number[] = [];
-  for (const row of rows) {
-    const h = row.h + Math.floor((extra * (grow[row.kind] ?? 0)) / growSum);
-    // Rows open onto the hallway below them, except the last ones (onto the one above).
-    const above = row.kind === "last" || row.kind === "stage";
-    const hallY = above ? y - HALF : y + h + HALF;
-    if (!above) halls.push(hallY);
-    placed.push({ kind: row.kind, r: { x: x0, y, w: innerW, h }, hallY });
-    y += h + gap;
-  }
-  const net: Network = { halls: [...new Set(halls)].sort((p, q) => p - q), aisles: [aisleX] };
-  let counter: Counter | null = null;
-  let waiting: Rect | null = null;
-  let K: Rect | null = null;
-  let lounge: Rect | null = null;
-  let tvParts: ReturnType<typeof buildLounge> | null = null;
-  let reserved: Rect | null = null;
-  let whiteboard: Rect | null = null;
-  let boss: Layout["boss"] | null = null;
-  let stage: Rect | null = null;
-  let storeroom: Rect | null = null;
-  let roaster: Point | null = null;
-  let eventArea: Rect | null = null;
-  const wallTv: Rect = { x: 114, y: 8, w: 72, h: 38 };
-  for (const { kind, r, hallY } of placed) {
-    const acc: Access = { hallY, aisleX };
-    switch (kind) {
-      case "counter": {
-        K = r;
-        ({ counter, waiting } = buildCounter(b, r, acc, true));
-        tiles.push({ x: 0, y: dB, w: W, h: r.h + 2 });
-        break;
-      }
-      case "tables":
-      case "tables2":
-        tableRow(b, x0 + Math.floor((innerW - rowWidth(g, 0)) / 2), r.y + 4, kind === "tables2" ? fitCols(innerW, true) : g, 0, acc, tables);
-        break;
-      case "lounge": {
-        lounge = { ...r, y: r.y + 10, h: r.h - 10 };
-        tvParts = buildLounge(b, lounge, acc, wallTv, true, false);
-        rugs.push({ x: tvParts.couch.x - 14, y: lounge.y, w: tvParts.couch.w + 28, h: tvParts.couch.y + tvParts.couch.h - lounge.y + 4 });
-        break;
-      }
-      case "last": {
-        // Your snug on the left, the arcade cabinet, the reserved table by the aisle.
-        const sw = Math.max(150, Math.round(r.w * 0.46));
-        const bossRoom: Rect = { x: r.x, y: r.y + 2, w: sw, h: Math.min(r.h - 4, 170) };
-        boss = buildBoss(b, bossRoom, hallY);
-        arcadeFromAbove(b, r.x + sw + 10, r.y, hallY);
-        reserved = { x: r.x + sw + 40, y: r.y + 2, w: r.w - sw - 40, h: r.h - 4 };
-        whiteboard = buildReserved(b, reserved, acc);
-        break;
-      }
-      case "stage": {
-        // Under the snug: the stage, the floor in front of it, the storeroom by the aisle.
-        const sw = Math.min(170, r.w - 120);
-        const sh = Math.min(56, r.h - 8);
-        stage = { x: r.x + 4, y: r.y + 4, w: 64, h: 28 };
-        ({ store: storeroom, roaster } = buildStore(b, { x: r.x + r.w - sw, y: r.y + r.h - sh - 2, w: sw, h: sh }));
-        eventArea = { x: r.x + 4, y: stage.y + stage.h + 4, w: Math.max(60, r.w - sw - 14), h: Math.max(26, r.h - stage.h - 10) };
-        break;
-      }
-    }
-  }
-  const couch = tvParts!.couch;
-  eventArea ??= { x: lounge!.x + 10, y: couch.y + couch.h + 4, w: lounge!.w - 20, h: Math.max(26, lounge!.y + lounge!.h - (couch.y + couch.h + 4)) };
-  const ev = eventArea as Rect;
-  rugs.push({ x: ev.x + Math.round(ev.w * 0.2), y: ev.y + 4, w: Math.round(ev.w * 0.6), h: Math.max(20, Math.min(ev.h - 8, 70)) });
-  const L = finish(b, W, H, true, segments, net, {
-    meeting: reserved!,
-    whiteboard: whiteboard!,
-    boss: boss!,
-    waiting: waiting!,
-    kitchen: K!,
-    lounge: lounge!,
+  const bossR: Rect = { x: x0, y: hall + 12, w: 160, h: 98 };
+  const boss = buildArmchair(b, bossR, hall);
+  const reserved: Rect = { x: x0 + 168, y: hall + 10, w: cr - x0 - 168, h: 108 };
+  const whiteboard = buildReserved(b, reserved, { hallY: hall, aisleX: reserved.x + reserved.w - 4 });
+
+  // ---- the shop's front and the terrace, when there's room
+  const fy = hall + lastH;
+  const front = H - fy >= 40;
+  const facade = front ? { y: fy, h: 40, doors: [stairX] } : null;
+  const tY = fy + 40;
+  const bistro: CafePlan["bistro"] = [];
+  const terraceR: Rect | null = front && H - 8 - tY >= 24 ? { x: 0, y: tY, w: W, h: H - 8 - tY } : null;
+  if (terraceR) terrace(b, terraceR, x0, x1, hall, [stairX], bistro, pending);
+  const nooks = addNooks(b, pending);
+
+  const net: Network = { halls, aisles: [stairX] };
+  const L = finish(b, W, H, true, [{ x0: 0, x1: W, depth: wallD }], net, {
+    meeting: reserved,
+    whiteboard,
+    boss,
+    waiting,
+    kitchen: K,
+    lounge,
     games: null,
     eventArea,
-    tvParts: tvParts!,
+    tvParts,
     gamesParts: null,
-    doorX: aisleX,
-    lamp: boss!.lamp,
+    doorX: stairX,
+    lamp: boss.lamp,
     wallTv,
   });
+  const pinX = ax + 34;
   return done(
     L,
-    { storefront: { x0: front, x1: W }, fireplace: null, menus: menuBoards(wallTv.x + wallTv.w + 18, front - 6, dB), bar: null, tables, counter: counter!, reserved: reserved!, stage, storeroom, roaster, tiles, rugs },
-    { x: 6, w: 64 },
-    { x: front + 14, y: 18 },
-    [[front, front + 26]],
+    {
+      bldg: { x0, x1 },
+      wallD,
+      upstairs: { r: { x: x0, y: wallD, w: x1 - x0, h: edge - wallD }, edge },
+      stairs: { x: stairX, y0: hU, y1: kY + 6 },
+      facade,
+      terrace: terraceR,
+      street: terraceR ? { x: 0, y: H - 8, w: W, h: 8 } : null,
+      fireplace,
+      menus: menuBoards(K.x + 40, K.x + K.w - 10, edge - 2, 26),
+      tables,
+      counter,
+      reserved,
+      stage,
+      server,
+      roaster,
+      rug: rugOf(boss),
+      armchairs,
+      bistro,
+      nooks,
+      tiles: [{ x: x0, y: kY, w: cr - x0 + 6, h: hG1 - HALF - kY }],
+      rugs: [
+        { x: tvParts.couch.x - 14, y: wallD + 2, w: tvParts.couch.w + 28, h: tvParts.couch.y + tvParts.couch.h - wallD + 2 },
+        { x: eventArea.x + 4, y: eventArea.y, w: eventArea.w - 8, h: eventArea.h - 2 },
+      ],
+    },
+    {
+      pin: { x: pinX, y: 4, w: Math.max(40, Math.min(64, cr - pinX - 26)), h: Math.min(50, wallD - 14) },
+      clock: { x: ax + 12, y: 16 },
+      windows: [],
+      door: front ? { x: stairX - 10, y: fy + 6, w: 20, h: 34 } : { x: stairX - 10, y: wallD - 42, w: 20, h: 42 },
+      entrance: front ? { x: stairX, y: Math.min(H - 2, fy + 46) } : { x: stairX, y: wallD + 2 },
+      hall: front ? hall : hU,
+    },
   );
 }
 
