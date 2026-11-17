@@ -6,11 +6,18 @@ their desks, planners at the whiteboard, threads that need you in the waiting
 room, idle ones on a coffee break. It fills a whole panel and doubles as a
 home screen.
 
-![The office at midday](docs/office.png)
+![The office at a holiday party](docs/office.png)
 
-![A lantern walk in the evening](docs/evening.png)
-
-<img src="docs/phone.png" width="300" alt="The office stacked for a phone held upright">
+<table>
+  <tr>
+    <td width="50%"><img src="docs/redwoods.png" width="100%" alt="Redwood Camp by day"><br><sub>Redwood Camp</sub></td>
+    <td width="50%"><img src="docs/neon-night.png" width="100%" alt="Neon City at night"><br><sub>Neon City at night</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/lair.png" width="100%" alt="The Villain's Lair by day"><br><sub>Villain's Lair</sub></td>
+    <td width="50%"><img src="docs/beach.png" width="100%" alt="Surf Villa by day"><br><sub>Surf Villa</sub></td>
+  </tr>
+</table>
 
 ## Install
 

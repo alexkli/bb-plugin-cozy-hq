@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1 (2026-11-17)
+
+- README: the office at a holiday party up top, and four sceneries below it (Redwood Camp, Neon City at night, Villain's Lair, Surf Villa) instead of the evening and phone screenshots.
+
 ## 0.6.0 (2026-11-17)
 
 A home office for the agents, and a tour of the place.
