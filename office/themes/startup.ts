@@ -13,8 +13,10 @@
 //   clicks.ts  things to click;  people.ts  outfits and visitors
 //   pets.ts    the bulldog, the hen, the robot vacuum, the aquarium
 //   words.ts   names, lines and sounds
+//   eggs.ts    hidden Easter eggs: the mailbox, the raccoon in the trash, the ship-it gong
 import type { Theme } from "../theme.ts";
 import { startupClickables, click } from "./startup/clicks.ts";
+import { EGG_SOUNDS, eggClick, eggClickables, eggDecor, eggLights, eggTick } from "./startup/eggs.ts";
 import { startupChair, startupDesk, startupScreen, startupSpeaker } from "./startup/desks.ts";
 import { BACKGROUND } from "./startup/house.ts";
 import { startupDecor, startupLights, startupOverlay, startupUnderlay, startupWallLights } from "./startup/live.ts";
@@ -41,13 +43,13 @@ export const STARTUP: Theme = {
   outside: startupOutside,
   wallLights: startupWallLights,
   underlay: startupUnderlay,
-  decor: startupDecor,
+  decor: (ctx, L, info) => [...startupDecor(ctx, L, info), ...eggDecor(ctx, L, info)],
   overlay: startupOverlay,
   lighting: {
     tint: "18,16,50",
     // A touch darker than the classic office, so the lamps, the pool and the screens glow.
     darkness: (night, _weather, classic) => classic + night * 0.1,
-    lights: startupLights,
+    lights: (L, info) => [...startupLights(L, info), ...eggLights(L, info)],
   },
   doorOpen: startupDoorOpen,
   openWindow: startupOpenWindow,
@@ -61,7 +63,9 @@ export const STARTUP: Theme = {
   pet: (kind, pose, facing, blink) => startupPet(kind, pose, facing, blink),
   roomba: () => stickerBot(),
   fishTank: serverAquarium,
-  clickables: startupClickables,
-  click,
+  clickables: (L) => [...startupClickables(L), ...eggClickables(L)],
+  click: (id, act) => eggClick(id, act) ?? click(id, act),
+  tick: eggTick,
   ...WORDS,
+  sounds: { ...WORDS.sounds, ...EGG_SOUNDS },
 };
