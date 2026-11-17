@@ -12,6 +12,7 @@ import { NEON_SOUNDS, neonOutdoor } from "./neon/sound.ts";
 import { neonLayout } from "./neon/plan.ts";
 import { neonDressVisitor, neonFishTank, neonPet, neonRoomba } from "./neon/critters.ts";
 import { click, clickables } from "./neon/clicks.ts";
+import { EGG_SOUNDS, eggClick, eggClickables, eggDecor, eggOutside, eggOverlay, eggTick } from "./neon/eggs.ts";
 
 export const NEON: Theme = {
   id: "neon",
@@ -29,12 +30,18 @@ export const NEON: Theme = {
   screen: (style, side, _variant, _vision, classic) => neonScreen(style, side, classic),
 
   sky: (hour) => neonSky(hour),
-  outside: neonOutside,
+  outside: (ctx, win, index, info) => {
+    neonOutside(ctx, win, index, info);
+    eggOutside(ctx, win, info);
+  },
   wallLights: neonWallLights,
   doorOpen: neonDoorOpen,
   underlay: neonUnderlay,
-  decor: neonDecor,
-  overlay: neonOverlay,
+  decor: (ctx, L, info) => neonDecor(ctx, L, info).concat(eggDecor(ctx, L, info)),
+  overlay: (ctx, L, info) => {
+    neonOverlay(ctx, L, info);
+    eggOverlay(ctx, L, info);
+  },
   lighting: {
     tint: "18,6,40",
     darkness: neonDarkness,
@@ -52,8 +59,10 @@ export const NEON: Theme = {
   roomba: () => neonRoomba(),
   fishTank: neonFishTank,
 
-  clickables,
-  click,
+  // The Easter eggs come first: they hide among the street's own things.
+  clickables: (L) => [...eggClickables(L), ...clickables(L)],
+  click: (id, act) => eggClick(id, act) ?? click(id, act),
+  tick: eggTick,
 
   labels: {
     pets: { dog: "Byte", cat: "Pixel" },
@@ -131,6 +140,6 @@ export const NEON: Theme = {
     },
   },
 
-  sounds: NEON_SOUNDS,
+  sounds: { ...NEON_SOUNDS, ...EGG_SOUNDS },
   outdoor: neonOutdoor,
 };
