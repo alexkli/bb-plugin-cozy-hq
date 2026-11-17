@@ -35,15 +35,17 @@ export const ease = (x: number): number => {
 /**
  * A bare stretch of the back wall for something small hung on it (w×h, its
  * top `fromTop` px down the wall): clear of the wall's fixtures, windows, the
- * TV and its speakers. The one nearest `towardX`, or null when it's all taken.
+ * TV and its speakers (and `avoid`: the scenery's own things on the wall).
+ * The one nearest `towardX`, or null when it's all taken.
  */
-export function bareWall(L: Layout, w: number, h: number, fromTop: number, towardX = L.W / 2): Rect | null {
+export function bareWall(L: Layout, w: number, h: number, fromTop: number, towardX = L.W / 2, avoid: readonly Rect[] = []): Rect | null {
   const wl = L.wall;
   const cr = wl.clock.r + 3;
   const taken: Rect[] = [
     wl.pinboard, wl.calendar, wl.status, wl.legendNote, L.tv, ...L.speakers, ...wl.windows,
     { x: wl.door.x - 4, y: 0, w: wl.door.w + 8, h: 999 },
     { x: wl.clock.x - cr, y: wl.clock.y - cr, w: cr * 2, h: cr * 2 },
+    ...avoid,
   ];
   let best: Rect | null = null;
   for (const sg of L.segments) {

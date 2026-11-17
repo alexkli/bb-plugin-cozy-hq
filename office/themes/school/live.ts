@@ -10,6 +10,7 @@ import { clickItems, clickLights, clickOverlay, storyArea } from "./clicks.ts";
 import { planOf } from "./plan.ts";
 import { busStop, climberSprite, lampPost, shadeTree, slideSprite, swingBack, swingFront } from "./yard.ts";
 import { cubbyStand, teacherDesk } from "./props.ts";
+import { hamsterOut } from "./hamster.ts";
 
 // ------------------------------------------------------------------ bunting
 
@@ -167,6 +168,12 @@ const SIZES: Record<Extra["kind"], [number, number]> = {
   cones: [18, 8],
   cabinet: [14, 24],
 };
+
+/** Where the class hamster's cage stands (18×14), if there's one. */
+export function hamsterAt(L: Layout): Rect | null {
+  const e = extras(L).find((x) => x.kind === "hamster");
+  return e ? { x: e.x, y: e.y, w: e.w, h: e.h } : null;
+}
 
 function extras(L: Layout): Extra[] {
   return cached(`school|extras|${L.W}x${L.H}|${L.props.length}|${L.spots.length}`, () => {
@@ -371,13 +378,15 @@ export function decor(ctx: CanvasRenderingContext2D, L: Layout, info: PaintInfo)
             ctx.fillRect(cx - 2, cy + 2, 5, 1);
             ctx.fillRect(cx - 3, cy - 1, 1, 3);
             ctx.fillRect(cx + 3, cy - 1, 1, 3);
-            const awake = info.night < 0.5;
+            // (Out of the cage, the wheel stands still and empty: see eggs.ts.)
+            const out = hamsterOut(info.t);
+            const awake = info.night < 0.5 && !out;
             const a = awake ? info.t * 7 : 0;
             ctx.fillStyle = "#c9ced6";
             ctx.fillRect(Math.round(cx + Math.cos(a) * 2), Math.round(cy + Math.sin(a) * 2), 1, 1);
             ctx.fillStyle = "#e8a050";
             if (awake) ctx.fillRect(cx, cy + 1 - (Math.floor(info.t * 8) % 2), 2, 1);
-            else ctx.fillRect(e.x + 9, e.y + 7, 3, 1);
+            else if (!out) ctx.fillRect(e.x + 9, e.y + 7, 3, 1);
           },
         });
         break;

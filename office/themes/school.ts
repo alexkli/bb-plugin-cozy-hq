@@ -9,9 +9,11 @@
 //   people.ts      teachers' lanyards and backpacks, the principal and visitors
 //   clicks.ts      things to click: the bell, the field, the playground, the bus, lockers
 //   words.ts       names, lines and sounds
+//   eggs.ts        hidden Easter eggs: Peanut the hamster, a paper airplane, a fire drill (hamster.ts: is he out)
 import type { Theme } from "../theme.ts";
 import { BACKGROUND } from "./school/background.ts";
 import { click, clickables } from "./school/clicks.ts";
+import { EGG_SOUNDS, eggClick, eggClickables, eggDecor, eggLights, eggOverlay, eggTick } from "./school/eggs.ts";
 import { schoolChair, schoolDesk, schoolScreen } from "./school/desks.ts";
 import { decor, lights, overlay, wallLights } from "./school/live.ts";
 import { paintOutside } from "./school/outside.ts";
@@ -36,12 +38,15 @@ export const SCHOOL: Theme = {
   screen: schoolScreen,
   outside: paintOutside,
   wallLights,
-  decor,
-  overlay,
+  decor: (ctx, L, info) => [...decor(ctx, L, info), ...eggDecor(ctx, L, info)],
+  overlay: (ctx, L, info) => {
+    overlay(ctx, L, info);
+    eggOverlay(ctx, L, info);
+  },
   lighting: {
     tint: "20,22,54",
     darkness: (night, _weather, classic) => classic + night * 0.12,
-    lights,
+    lights: (L, info) => [...lights(L, info), ...eggLights(L, info)],
   },
   // Colored chalk on the chalkboard.
   boardInk: ["#eef3ea", "#f7e08a", "#f5b5c8", "#a8d4f5"],
@@ -54,9 +59,10 @@ export const SCHOOL: Theme = {
   roomba: () => ladybugBot(),
   fishTank: aquarium,
   labels: LABELS,
-  sounds: SOUNDS,
+  sounds: { ...SOUNDS, ...EGG_SOUNDS },
   outdoor,
   // The bell, the yard's games, the apple trees, the bus and the lockers do things when you click them.
-  clickables,
-  click,
+  clickables: (L) => [...clickables(L), ...eggClickables(L)],
+  click: (id, act) => eggClick(id, act) ?? click(id, act),
+  tick: eggTick,
 };
