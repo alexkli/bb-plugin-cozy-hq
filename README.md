@@ -104,7 +104,7 @@ meetings, lunch, events, gags) stay the same:
 | 🏔️ Mountain Cabin | A timber lodge above the treeline: a fieldstone fireplace, a mudroom, a sun deck with a sauna, snowy peaks, a chairlift and skiers through the windows; a mountain dog and a marmot |
 | 🌋 Villain's Lair | A secret base inside a volcano: a control room under a blinking world map, a countdown to the next coffee, a shark tank, a big red button and a monorail over the lava; a robot hound and a white cat |
 | 🚀 Spaceship | A deck on a long-haul starship: a grand bridge with your captain's chair under a huge viewscreen, crew stations, a galley with a food synthesizer, hydroponics, an engine core and an airlock; the crew in space suits; a robot dog and a fluffy critter |
-| ☕ Coffee Shop | A neighborhood café on a street corner: laptops at bistro tables, a communal table and a window bar, baristas at the espresso bar, your raised snug with a wingback chair, a fireplace and an open-mic stage; a café dog and a shop cat |
+| ☕ Coffee Shop | A little brick café with a striped awning and a terrace of bistro tables: laptops at small round tables and a wall counter, baristas at the espresso bar with the server corner behind it, your wingback on a round rug, and an upstairs with the fireside sofa, the reserved table and an open-mic stage; a café dog and a shop cat |
 
 Your pick is kept per browser; the buddy dresses to match.
 
