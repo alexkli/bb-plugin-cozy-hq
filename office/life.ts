@@ -1,6 +1,7 @@
 // Office life beyond the threads: how anyone walks the hallways, and the
 // little office events (parties, cake, cornhole…) idle agents drop in on.
 
+import { shortestWay, wallsOf } from "./walkways.ts";
 import { connect, type Facing, type Network, type Point, type Rect, type Spot } from "./layout.ts";
 import { cornholeSprite } from "./furniture.ts";
 import { gift, roundTable, seasonalEventDecor, seasonalEventFloor, type Season } from "./seasons.ts";
@@ -50,7 +51,120 @@ export function route(w: Walker, net: Network, target: readonly Point[]): Point[
   const hall = back[back.length - 1]!;
   const start = target[0];
   if (!start) return back;
-  return [...back, ...connect(net, hall, start), ...target.slice(1)];
+  const plain = [...back, ...connect(net, hall, start), ...target.slice(1)];
+  return shortcut(w, shortestWay(net, w, plain) ?? plain, wallsOf(net));
+}
+
+/**
+ * Leave out the doubling back. Every route goes out to a hallway and in along
+ * the target's path, so a walk next door (down the lane to the hallway and back
+ * up the same lane, or out of the desk row past the next desk) runs along the
+ * same line twice. Where two legs lie on one line and overlap, the walker goes
+ * straight from the first leg to the end of the second: that stretch is all on
+ * ground the route covered anyway, so it can't cut through a wall or furniture.
+ */
+export function shortcut(from: Point, path: Point[], walls: readonly Rect[] | null = null): Point[] {
+  let pts = [{ x: from.x, y: from.y }, ...path];
+  for (let round = 0; round < 8; round++) {
+    // Stepping across to a parallel walkway only where the walls are known.
+    const next = walls ? uturn(sameLine(pts), walls) : sameLine(pts);
+    if (next.length === pts.length && next.every((p, k) => p === pts[k])) break;
+    pts = next;
+  }
+  return pts.slice(1);
+}
+
+/** Out along a line and back along the same line: go straight instead. */
+function sameLine(pts: Point[]): Point[] {
+  pts = [...pts];
+  // Legs (pts[i], pts[i + 1]) and (pts[j], pts[j + 1]) for i < j.
+  for (let i = 0; i < pts.length - 2; i++) {
+    for (let j = pts.length - 2; j > i; j--) {
+      // Straight on is fine as it is (and keeps its hallway points for cutting corners).
+      if (j === i + 1 && (pts[i + 1]!.x - pts[i]!.x) * (pts[j + 1]!.x - pts[j]!.x) + (pts[i + 1]!.y - pts[i]!.y) * (pts[j + 1]!.y - pts[j]!.y) > 0) continue;
+      if (overlapping(pts[i]!, pts[i + 1]!, pts[j]!, pts[j + 1]!)) {
+        // Straight on from the first leg's start to where the second leg ends.
+        pts.splice(i + 1, j - i);
+        break;
+      }
+    }
+  }
+  return pts;
+}
+
+/** Walkways closer than this have no room for furniture between them. */
+const UTURN_GAP = 24;
+
+/**
+ * Out along one walkway and back along a parallel one right next to it (along
+ * the sofa to the aisle, a step over, and back along the hearth): step across
+ * where the two run side by side instead of at the far end.
+ */
+function uturn(pts: Point[], walls: readonly Rect[]): Point[] {
+  for (let i = 0; i < pts.length - 3; i++) {
+    const a = pts[i]!;
+    const b = pts[i + 1]!;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.5) continue;
+    const ux = dx / len;
+    const uy = dy / len;
+    const along = (p: Point) => (p.x - a.x) * ux + (p.y - a.y) * uy;
+    const side = (p: Point) => (p.x - a.x) * uy - (p.y - a.y) * ux;
+    for (let j = pts.length - 2; j > i + 1; j--) {
+      const c = pts[j]!;
+      const d = pts[j + 1]!;
+      const cl = Math.hypot(d.x - c.x, d.y - c.y);
+      if (cl < 0.5) continue;
+      // Parallel, the other way, a short step to one side.
+      if (Math.abs(((d.x - c.x) * uy - (d.y - c.y) * ux) / cl) > 0.01 || (d.x - c.x) * ux + (d.y - c.y) * uy >= 0) continue;
+      const gap = side(c);
+      if (Math.abs(gap) < 0.5 || Math.abs(gap) > UTURN_GAP || Math.abs(side(d) - gap) > 0.5) continue;
+      // Everything in between stays in the strip between the two.
+      let inside = true;
+      for (let k = i + 2; k < j; k++) {
+        const s = side(pts[k]!) / gap;
+        if (s < -0.02 || s > 1.02) inside = false;
+      }
+      if (!inside) continue;
+      // Where they run side by side, closest to where the second one ends.
+      const lo = Math.max(0, Math.min(along(c), along(d)));
+      const hi = Math.min(len, Math.max(along(c), along(d)));
+      if (lo > hi) continue;
+      const t = Math.max(lo, Math.min(hi, along(d)));
+      const x: Point = { x: a.x + ux * t, y: a.y + uy * t };
+      const y: Point = { x: x.x + uy * gap, y: x.y - ux * gap };
+      // Only straight on from a walk already heading that way (getting up from
+      // the sofa and on to the hearth, or the hearth and down into the seat):
+      // the floor plan doesn't say where the furniture is, so not just anywhere.
+      const ahead = (p: Point | undefined, q: Point | undefined) =>
+        !!p && !!q && Math.abs((q.x - p.x) * (y.y - x.y) - (q.y - p.y) * (y.x - x.x)) < 0.01 * Math.hypot(q.x - p.x, q.y - p.y) * Math.abs(gap) && (q.x - p.x) * (y.x - x.x) + (q.y - p.y) * (y.y - x.y) > 0;
+      const fromLeg = t <= 0.5 && ahead(pts[i - 1], a);
+      const intoLeg = Math.hypot(y.x - d.x, y.y - d.y) < 0.5 && ahead(d, pts[j + 2]);
+      if (!fromLeg && !intoLeg) continue;
+      // Never across a wall: both sides in the same rooms.
+      const into = (p: Point, r: Rect) => p.x >= r.x - 2 && p.x <= r.x + r.w + 2 && p.y >= r.y - 2 && p.y <= r.y + r.h + 2;
+      if (walls.some((r) => into(x, r) || into(y, r))) continue;
+      const out = [...pts.slice(0, i + 1), x, y, ...pts.slice(j + 1)];
+      return out.filter((p, k) => k === 0 || Math.hypot(p.x - out[k - 1]!.x, p.y - out[k - 1]!.y) > 0.5 || k === out.length - 1);
+    }
+  }
+  return pts;
+}
+
+/** Two legs on the same straight line whose stretches overlap (or touch). */
+function overlapping(a: Point, b: Point, c: Point, d: Point): boolean {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 0.5 || Math.hypot(d.x - c.x, d.y - c.y) < 0.5) return false;
+  const off = (p: Point) => Math.abs((p.x - a.x) * dy - (p.y - a.y) * dx) / len;
+  if (off(c) > 0.5 || off(d) > 0.5) return false;
+  const along = (p: Point) => ((p.x - a.x) * dx + (p.y - a.y) * dy) / len;
+  const lo = Math.min(along(c), along(d));
+  const hi = Math.max(along(c), along(d));
+  return hi >= -0.5 && lo <= len + 0.5;
 }
 
 /**

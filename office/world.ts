@@ -23,6 +23,7 @@ import {
   type Look,
 } from "./characters.ts";
 import { Crew, drawLanyard, type DeskWork } from "./crew.ts";
+import { learnWalkways } from "./walkways.ts";
 import { buildProps, paintBackground, roombaSprite, speakerSprite, type Prop } from "./furniture.ts";
 import type { Facing, Green, Layout, Point, PokeKind, Rect, Spot } from "./layout.ts";
 import { waitsForYou, type DeskStyle, type Mood, type WaitKind } from "./model.ts";
@@ -670,6 +671,7 @@ export class World {
     this.layoutKey = key;
     const first = this.L === null;
     this.L = L;
+    learnWalkways(L);
     this.crew.setLayout(L);
     this.bg = paintBackground(L, this.theme);
     this.props = buildProps(L, this.theme);

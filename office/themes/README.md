@@ -126,6 +126,14 @@ draw them as what they are in your scenery (boardwalks, a street, a school
 corridor, a pool deck). Paths must not cut through walled rooms (except into
 their own room).
 
+Spot paths are walkways for everyone, not just the way to their spot: a walk
+takes the shortest way over the hallways, the aisles and every spot's lanes,
+changing over where two of them cross (`walkways.ts`), and steps across to a
+parallel lane up to 24 px away when it is walking that way anyway (up from the
+sofa onto the hearth). So keep every lane on open floor. Only the last step
+into a spot, lanes inside walled rooms and lanes that run through something
+clickable are never used as a way through.
+
 **Room builders** (in themekit) lay out a room and its spots, props and
 clickables inside a rect; compose them anywhere, or write your own rooms
 with the same spot kinds and ids:

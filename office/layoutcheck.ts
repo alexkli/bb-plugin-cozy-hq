@@ -4,6 +4,7 @@
 
 import type { Layout, Rect } from "./layout.ts";
 import { route, step, type Walker } from "./life.ts";
+import { learnWalkways } from "./walkways.ts";
 
 const inside = (r: Rect, L: Layout, slack = 0) => r.x >= -slack && r.y >= -slack && r.x + r.w <= L.W + slack && r.y + r.h <= L.H + slack && r.w > 0 && r.h > 0;
 
@@ -11,6 +12,7 @@ const inside = (r: Rect, L: Layout, slack = 0) => r.x >= -slack && r.y >= -slack
 export function checkLayout(L: Layout, opts: { threads: number }): string[] {
   const out: string[] = [];
   const bad = (msg: string) => out.length < 40 && out.push(msg);
+  learnWalkways(L);
 
   // Fixtures the office draws or overlays at fixed rects.
   const rects: [string, Rect | undefined][] = [
