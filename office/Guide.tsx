@@ -45,7 +45,7 @@ export function guideSteps(L: Layout, theme: Theme, named: Theme, agent: Rect | 
     {
       id: "agent",
       title: "An agent",
-      text: "This is an agent: one for each thread. Click one to open its thread; hover over it to see what it's up to. The Names button at the top puts a name tag over everyone.",
+      text: "This is an agent: one for each thread. Click one to open its thread; hover over it to see what it's up to. The Names button at the top (or the N key) puts a name tag over everyone.",
       rects: agent ? [agent] : [],
     },
     {

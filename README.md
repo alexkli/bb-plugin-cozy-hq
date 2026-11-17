@@ -61,7 +61,7 @@ every home's desk, whiteboard and armchair).
 | Idle up to 8 hours | Lounge: TV, piano, fish tank, darts, ping-pong, arcade |
 | Idle longer | Napping on a beanbag |
 
-The **Names** button (top right) puts a name tag over everyone; the tags stack
+The **Names** button (top right, or press `N`) puts a name tag over everyone; the tags stack
 so they never overlap, and clicking one opens the thread. So does clicking a
 character. A solid chip with a red dot means unread, an outlined one read. Desks are furnished by the thread's model (Opus walnut with dual
 flat screens, Sonnet oak, Haiku white with a laptop, GPT/Codex black with an

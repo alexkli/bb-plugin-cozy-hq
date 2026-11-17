@@ -946,6 +946,19 @@ export function OfficeView(input: OfficeProps) {
   // Name tags over everyone's head, when you want them.
   const [labelsOn, setLabelsOn] = useState(() => readJson(`${storageKey}:labels`, { on: false }).on);
   useEffect(() => writeJson(`${storageKey}:labels`, { on: labelsOn }), [labelsOn, storageKey]);
+  // N toggles them too: a bare key while the office has focus, which none of bb's shortcuts use.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "n" || e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+      const el = e.target;
+      if (el instanceof HTMLElement && (el.isContentEditable || el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT")) return;
+      sound.unlock();
+      play("click");
+      setLabelsOn((on) => !on);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [anchors, setAnchors] = useState<LabelAnchor[]>([]);
   const [speech, setSpeech] = useState<SpeechBubble[]>([]);
   useEffect(() => {
@@ -1230,7 +1243,7 @@ export function OfficeView(input: OfficeProps) {
               type="button"
               className={`chq-labels-btn${labelsOn ? " is-on" : ""}`}
               aria-pressed={labelsOn}
-              title={labelsOn ? "Hide the name tags" : "Show a name tag over everyone"}
+              title={labelsOn ? "Hide the name tags (N)" : "Show a name tag over everyone (N)"}
               onClick={() => {
                 sound.unlock();
                 play("click");

@@ -49,8 +49,8 @@ When an area is full, waiting threads fall back to a desk and drafts to the
 waiting room; threads that still do not fit are counted on a sign next to the
 door.
 
-The **Names** button (top right of the office) puts a name tag over every
-character; tags tier upward so they never overlap, and clicking one opens the
+The **Names** button (top right of the office, or the `N` key while the office
+has focus) puts a name tag over every character; tags tier upward so they never overlap, and clicking one opens the
 thread. A tag's chip shows the state (`?` question, `!` approval, `▤` plan,
 `✓` done, `✕` error, `✎` draft or planning, `▸` working, `~` idle): a solid
 chip with a red dot means unread, an outlined chip means read. Without tags,
