@@ -15,6 +15,7 @@ import { darkness, decor, doorOpen, lights, outside, overlay, sky, underlay, wal
 import { dress, look, npc } from "./redwoods/people.ts";
 import { dressVisitor, mower, pet, pond } from "./redwoods/critters.ts";
 import { click, clickables } from "./redwoods/clicks.ts";
+import { EGG_SOUNDS, eggClick, eggClickables, eggDecor, eggOverlay, eggTick } from "./redwoods/eggs.ts";
 import { campLayout } from "./redwoods/plan.ts";
 import { plant, prop, speaker } from "./redwoods/props.ts";
 import { LABELS, outdoor, SOUNDS } from "./redwoods/words.ts";
@@ -52,8 +53,11 @@ export const REDWOODS: Theme = {
     return true;
   },
   underlay,
-  decor,
-  overlay,
+  decor: (ctx, L, info) => decor(ctx, L, info).concat(eggDecor(ctx, L, info)),
+  overlay: (ctx, L, info) => {
+    overlay(ctx, L, info);
+    eggOverlay(ctx, L, info);
+  },
   lighting: {
     tint: "10,18,34",
     darkness,
@@ -71,9 +75,11 @@ export const REDWOODS: Theme = {
   roomba: () => mower(),
   fishTank: (ctx, tank, info) => pond(ctx, tank, info),
   labels: LABELS,
-  sounds: SOUNDS,
+  sounds: { ...SOUNDS, ...EGG_SOUNDS },
   outdoor,
-  // The campfire, the giants and the creek do things when you click them.
-  clickables,
-  click,
+  // The campfire, the giants and the creek do things when you click them;
+  // the Easter eggs come first, as they hide among them.
+  clickables: (L) => [...eggClickables(L), ...clickables(L)],
+  click: (id, act) => eggClick(id, act) ?? click(id, act),
+  tick: eggTick,
 };
