@@ -11,7 +11,7 @@ import type { Facing, Layout, LayoutOptions, PlantPlacement, Point, PokeKind, Po
 import type { Drawable, Season } from "./life.ts";
 import type { DeskStyle } from "./model.ts";
 
-export type SceneryId = "classic" | "neon" | "redwoods" | "beach" | "skyline" | "annex" | "school" | "startup" | "cabin" | "lair" | "spaceship" | "cafe";
+export type SceneryId = "classic" | "neon" | "redwoods" | "beach" | "skyline" | "annex" | "school" | "startup" | "cabin" | "lair" | "spaceship" | "cafe" | "home";
 
 /** Sky gradient for the hour; `night` is 0 by day, 1 at night (it drives lamps and darkness). */
 export interface SkyColors {
@@ -32,6 +32,24 @@ export interface PaintInfo {
   date: Date;
   /** The festival decorating the office, if any. */
   season: Season | null;
+  /** Video calls going on right now, in a plan of separate homes (`Layout.homes`); empty otherwise. */
+  calls?: readonly Call[];
+}
+
+/**
+ * A video call between homes (a plan with `Layout.homes`, where nobody walks
+ * over to anyone): idle people catching up ("chat"), planners on a group call
+ * ("meeting"), a plan or a draft gone over with you ("you"), and those waiting
+ * for you to let them in ("lobby", each on their own).
+ */
+export interface Call {
+  kind: "chat" | "meeting" | "you" | "lobby";
+  /** Stable while the call lasts (for picking the app, the colors). */
+  key: string;
+  /** Who's on it: thread ids, settled where they are, and their feet positions. */
+  members: { id: string; x: number; y: number }[];
+  /** Who's talking now (a thread id), if anyone. */
+  talking: string | null;
 }
 
 export interface OutsideInfo extends PaintInfo {
@@ -322,7 +340,7 @@ export interface Theme {
    * dress someone by where they are: say, a laptop on the lap at a spot of
    * the plan's own in the desk group.
    */
-  dress?(ctx: CanvasRenderingContext2D, a: { x: number; y: number; facing: Facing; pose: CharPose; seed: number; seated: boolean; look: Look; spot?: string | null }, t: number): void;
+  dress?(ctx: CanvasRenderingContext2D, a: { x: number; y: number; facing: Facing; pose: CharPose; seed: number; seated: boolean; look: Look; spot?: string | null; id?: string }, t: number): void;
 
   /**
    * The office pets, any animal you like: the dog (20×15 sprite, drawn at
@@ -385,12 +403,32 @@ export interface Theme {
    */
   tick?(act: SceneryActions): void;
 
+  // ------------------------------------------------------------ the tour
+  /**
+   * The guided tour in the scenery's own words and places: per step, another
+   * title or text, other places to point at (native px), or `skip` to leave
+   * it out. Steps it leaves alone use the office's (words relabeled).
+   */
+  guide?(L: Layout): Partial<Record<GuideStepId, GuideStop>>;
+
   // ------------------------------------------------------------ words and sounds
   labels?: ThemeLabels;
   /** Synth recipes by name; play them from `outdoor` (or anywhere a sound name goes). */
   sounds?: Record<string, SoundRecipe>;
   /** What you hear when you open a window: a name from `sounds`, or a built-in like "birds". */
   outdoor?(weather: WeatherKind, night: boolean): string;
+}
+
+/** The steps of the guided tour, in order. */
+export type GuideStepId = "welcome" | "agent" | "you" | "desks" | "meeting" | "waiting" | "breaks" | "door" | "pinboard" | "tv" | "click" | "legend";
+
+/** One step of the guided tour as a scenery tells it. */
+export interface GuideStop {
+  title?: string;
+  text?: string;
+  /** What to point at (native px). */
+  rects?: Rect[];
+  skip?: boolean;
 }
 
 /** Fill in the scenery's pet names for `{dog}` and `{cat}`. */

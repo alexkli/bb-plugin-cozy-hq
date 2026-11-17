@@ -25,6 +25,20 @@ bb plugin install cozy-hq@alexkli
 Cozy HQ appears as **Cozy HQ** in bb's sidebar rail (route
 `/plugins/cozy-hq/office`).
 
+## The tour
+
+The first time you open Cozy HQ, a short tour walks you round: it dims the
+office and points at one thing at a time with a sticky note: an agent (one
+for each thread), you (the boss), the work desks, the meeting room, the
+waiting area, the breaks, the door for a new thread, the usage pinboard, the
+TV, things to click for fun and the legend. **Next** and **Back** (or the
+arrow keys) step through it; **Skip** or Esc closes it. Take it again any
+time from the `?` sticky note on the wall: **Take the tour** is the first
+note. Every scenery tells it its own way (in the Home Office it points at
+every home's desk, whiteboard and armchair).
+
+![The tour pointing at the waiting area](docs/tour.png)
+
 ## Who sits where
 
 | Thread state | In the office |
@@ -104,9 +118,36 @@ meetings, lunch, events, gags) stay the same:
 | 🏔️ Mountain Cabin | A timber lodge above the treeline: a fieldstone fireplace, a mudroom, a sun deck with a sauna, and outside on the rugged mountainside a chairlift you can ride and a piste for the odd skier or snowboarder; a mountain dog and a marmot |
 | 🌋 Villain's Lair | A secret base inside a volcano: a control room under a blinking world map, a countdown to the next coffee, a shark tank, a big red button and a monorail over the lava; a robot hound and a white cat |
 | 🚀 Spaceship | A deck on a long-haul starship: a grand bridge with your captain's chair under a huge viewscreen, crew stations, a galley with a food synthesizer, hydroponics, an engine core and an airlock; the crew in space suits; a robot dog and a fluffy critter |
+| 🏡 Home Office | Everyone works from home: little homes down the street, each its own building with its own floor plan and furniture (a studio, a loft with a sofa, a cottage with a hammock in its garden, a tiny flat with a loft bed, a flat with a balcony, a corner flat), with streets, cars, yards, trees and shops between them, a park with a lawn, the co-working café on the corner, and your house with a small garden and a pond; your dog and a street cat |
 | ☕ Coffee Shop | A little brick café with a striped awning, a terrace of bistro tables and a piazza with a fountain and lawns beside it: laptops at small round tables (checkerboarded with groups of plants on a big panel) and a wall counter, baristas at the espresso bar with the server corner behind it, your wingback on a round rug, and an upstairs with the fireside sofa, the reserved table and an open-mic stage; a café dog and a shop cat |
 
 Your pick is kept per browser; the buddy dresses to match.
+
+The **Home Office** works a little differently, since nobody shares an
+office there:
+
+![The Home Office: homes down the street, a call from the park bench, a plan gone over with you](docs/home-office.png)
+
+- **One thread per home.** Each thread has a home of its own and does
+  everything there: works at its desk under the window, plans at its
+  whiteboard, waits for you in its armchair, makes a coffee in its
+  kitchenette, sinks into the sofa or the hammock, and naps in bed (lying
+  down under its blanket).
+- **They meet on video calls.** Nobody walks over to anyone: a get-together
+  is a call, everyone at home with a headset on (or a phone up for a
+  FaceTime), and a dotted line with the signal running along it links them
+  across the streets: blue for a quick chat, purple between planners on a
+  group call, gold to your house when a plan or a draft is gone over with
+  you. Threads that need you sit in the call's lobby, hand up.
+- **More threads than homes.** There are a few homes (as many as the panel
+  has room for, with city between them). Homes go to the most urgent
+  threads first (those that need you, then planners, then workers) and stay
+  theirs; when one frees up, the most urgent thread without a home moves in.
+  The rest work from the co-working café on the corner, idle ones hang out
+  in the park, and those that need you come round and wait on the bench in
+  your garden.
+- **Block parties.** The office events still bring everyone out: lunch,
+  parties and festivals happen on the park lawn.
 
 Every scenery also hides a few easter eggs of its own: small things that
 aren't outlined when you hold Alt. Click around to find them, or just wait:
@@ -292,7 +333,9 @@ localStorage["bb-plugin:cozy-hq:debug"] = '{"hour":20,"sample":true,"event":"lan
   `spring`, `summer`, `oktoberfest`, `halloween`, `diwali`, `laternenfest`,
   `thanksgiving`, `holidays`), or `none`.
 - `scenery` shows a scenery whatever you picked (`classic`, `neon`,
-  `redwoods`, `beach`, `skyline`, `annex`, `school`).
+  `redwoods`, `beach`, `skyline`, `annex`, `school`, `startup`, `cabin`,
+  `lair`, `spaceship`, `cafe`, `home`).
+- `guide` opens the tour at a step (`0` is the welcome note).
 - `expose` puts the world on `window.__cozyHq`.
 
 Only the view changes. Remove the key to go back to normal.
@@ -315,6 +358,7 @@ Only the view changes. Remove the key to go back to normal.
 | `office/OfficeView.tsx`, `app.css` | Panel UI, TV, pinboard, tags, sound controls |
 | `office/Buddy.tsx` | The office buddy overlay |
 | `office/sample.ts` | Made-up data for screenshots |
+| `office/Guide.tsx` | The tour: its steps, the spotlight and the sticky note |
 | `office/theme.ts`, `office/themekit.ts`, `office/themes/` | Sceneries: the hooks, the drawing kit and one file per scenery ([how to write one](office/themes/README.md)) |
 | `preview/` | A standalone preview with made-up data (`npm run preview`, then open `preview/index.html?scenery=neon`) |
 

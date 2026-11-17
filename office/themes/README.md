@@ -198,6 +198,37 @@ Mark one `secret: true` to leave it for people to find, like the office's
 Easter eggs: it still clicks and shows its hover text, but holding Alt
 doesn't outline it (the Spaceship's boarding-party switch, `spaceship/duel.ts`).
 
+## Separate homes
+
+A plan can give everyone a home of their own instead of a shared office (the
+Home Office does, `home/plan.ts`): list them in `L.homes` (each `{ rect,
+door, desk }`, `desk` an index into `L.desks`) and give every spot inside a
+home its `home` index. Each home needs spots for every group (a desk, a
+whiteboard spot in the meeting group, a present spot, a review seat, a boss
+spot for drafts, break, lounge and nap spots); spots without a `home` are
+shared (events, the park, a café for threads without a home).
+
+The office then:
+
+- gives each thread a home of its own (the one it's in, else the one with the
+  desk it last worked at, else the first free one, most urgent threads first)
+  and only ever sends it to its own home's spots or shared ones; threads
+  without a home only get shared spots;
+- keeps everyone where they are for get-togethers: they become video calls,
+  and neighbors chat on a quick call whoever lives where;
+- tells your hooks about the calls in `PaintInfo.calls`: each `{ kind, key,
+  members, talking }`, `kind` "chat", "meeting" (planners), "you" (a plan or
+  a draft gone over with you) or "lobby" (waiting for you). `dress` gets the
+  thread `id`, to put a headset on whoever's on one.
+
+## The tour
+
+`guide(L)` retells the tour for the scenery: per step (`welcome`, `agent`,
+`you`, `desks`, `meeting`, `waiting`, `breaks`, `door`, `pinboard`, `tv`,
+`click`, `legend`) another `title`, `text`, the `rects` to point at (native
+px), or `skip`. Steps you leave alone point at the plan's places with the
+office's text, through your `words`.
+
 ## Habits
 
 Two hooks let people do odd things on their own, without a click:

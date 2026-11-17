@@ -80,6 +80,22 @@ export interface Spot {
   activity: string;
   /** Draw the character this many pixels higher (sitting up on a sofa). */
   lift?: number;
+  /**
+   * The home it's in, in a plan of separate homes (`Layout.homes`): each
+   * home has one resident, who only ever goes to the spots of their own home
+   * (and to shared spots, which have no home: events, gatherings).
+   */
+  home?: number;
+}
+
+/** One of the separate homes in a plan where everyone works from home. */
+export interface Home {
+  /** The whole home, walls included. */
+  rect: Rect;
+  /** Its front door, where the resident steps out onto the street. */
+  door: Point;
+  /** The resident's desk (an index into `Layout.desks`). */
+  desk: number;
 }
 
 export interface Rect {
@@ -304,6 +320,12 @@ export interface Layout {
   };
   /** Anything a scenery's own floor plan wants to remember for drawing it (tents, trees, …). */
   themeData?: unknown;
+  /**
+   * Separate homes with one resident each (the Home Office): residents stay
+   * at the spots of their own home (`Spot.home`), and get-togethers become
+   * video calls, everyone where they are.
+   */
+  homes?: Home[];
   /**
    * Word swaps that hold for this floor plan only, over the scenery's
    * `labels.words` (say "in the lounge" → "out in the schoolyard" when the

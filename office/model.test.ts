@@ -349,3 +349,47 @@ test("mood changes become office news", () => {
   const kinds = diffEvents(before, after, new Map([["gone", "G"]]), NOW).map((e) => `${e.threadId}:${e.kind}`);
   assert.deepEqual(kinds.sort(), ["a:done", "b:needs-you", "c:planning", "gone:left", "new:arrived"]);
 });
+
+// ------------------------------------------------------------------ separate homes
+
+/** Three homes with a spot for every group, and a shared event spot. */
+function homesSpots(n = 3): Layout["spots"] {
+  const groups = ["desk", "meeting", "present", "review", "boss", "break", "lounge", "nap"] as const;
+  const out: Layout["spots"] = [];
+  for (let h = 0; h < n; h++) {
+    for (const [i, g] of groups.entries()) {
+      out.push({ id: g === "desk" ? `desk-${h}` : `home-${h}-${g}`, kind: g === "desk" ? "desk" : "huddle", group: g, x: h * 100 + i, y: 50, facing: "front", pose: "stand", path: [{ x: 0, y: 0, c: true }], activity: g, home: h });
+    }
+  }
+  out.push({ id: "event-0", kind: "event", group: "event", x: 0, y: 200, facing: "front", pose: "stand", path: [{ x: 0, y: 0, c: true }], activity: "party" });
+  return out;
+}
+
+test("homes: one resident each, who only goes to spots of their own home", () => {
+  const spots = homesSpots();
+  const home = (id: string | undefined) => spots.find((s) => s.id === id)?.home;
+  const ts = [thread("work", { status: "active" }), thread("ask", { indicator: "waiting-for-input" }), thread("idle")];
+  const a = assignSpots(ts, spots, new Map(), new Map(), NOW);
+  const homes = ts.map((t) => home(a.spots.get(t.id)));
+  assert.equal(new Set(homes).size, 3, "everyone has a home of their own");
+  // Each state picks its spot within the home.
+  const prev = new Map(a.spots);
+  const b = assignSpots([thread("work", { status: "active", indicator: "plan-mode" }), ts[1]!, thread("idle", { status: "active" })], spots, prev, new Map(), NOW);
+  assert.equal(home(b.spots.get("work")), homes[0]);
+  assert.equal(spots.find((s) => s.id === b.spots.get("work"))?.group, "meeting");
+  assert.equal(home(b.spots.get("idle")), homes[2]);
+  assert.equal(b.spots.get("idle"), `desk-${homes[2]}`, "working at the desk of their own home");
+});
+
+test("homes: returning threads get the home with their desk; extras overflow", () => {
+  const spots = homesSpots(2);
+  const desks = new Map([["late", 1]]);
+  const a = assignSpots([thread("early"), thread("late"), thread("third")], spots, new Map(), desks, NOW);
+  assert.equal(spots.find((s) => s.id === a.spots.get("late"))?.home, 1);
+  assert.equal(spots.find((s) => s.id === a.spots.get("early"))?.home, 0);
+  assert.deepEqual(a.overflow, ["third"], "no home left, and nothing shared outside an event");
+  // During an event the idle ones meet at the shared spot.
+  const e = assignSpots([thread("early"), thread("late", { status: "active" })], spots, a.spots, desks, NOW, { event: true });
+  assert.equal(e.spots.get("early"), "event-0");
+  assert.equal(e.spots.get("late"), "desk-1");
+});

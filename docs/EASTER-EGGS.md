@@ -150,9 +150,17 @@ for someone skiing or snowboarding down. Hidden:
   beret strolls up and plays a waltz while coins fly into the case. Only where
   the café has its piazza.
 
+## 🏡 Home Office
+
+- **Garden gnome:** click the little gnome in the corner of your garden. It
+  hops round to face you for a moment, and you wonder if it just moved.
+- **Manhole duck:** click the manhole cover in the first street. A rubber
+  duck pops up out of it and sinks back down.
+
 ## For developers
 
 Each scenery's eggs live in `office/themes/<scenery>/eggs.ts` (the classic
-office's in `office/themes/classic/eggs.ts`). They're scenery clickables with
+office's in `office/themes/classic/eggs.ts`, the Home Office's in
+`office/themes/home/clicks.ts`). They're scenery clickables with
 `secret: true`. In the preview, `__cozyHq.clickScenery("<id>")` with an id
 from that file sets one off without hunting for it.

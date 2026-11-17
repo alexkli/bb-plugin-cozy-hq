@@ -203,6 +203,7 @@ export function assignSpots(
 ): Assignment {
   const event = opts.event === true;
   const sorted = visibleThreads(threads).sort(byPriority);
+  if (layoutSpots.some((s) => s.home !== undefined)) return assignHomes(sorted, layoutSpots, previous, homeDesks, now, event);
   const groupOf = new Map(layoutSpots.map((s) => [s.id, s.group] as const));
   const taken = new Set<string>();
   const spots = new Map<string, string>();
@@ -261,6 +262,73 @@ export function assignSpots(
         pick = ORDERED.has(group) ? free[0] : free[seeded(t.id) % free.length];
         break;
       }
+    }
+    if (pick === undefined) {
+      overflow.push(t.id);
+      continue;
+    }
+    taken.add(pick.id);
+    spots.set(t.id, pick.id);
+  }
+  return { spots, overflow };
+}
+
+/**
+ * A plan of separate homes (the Home Office): everyone has a home of their
+ * own (the one they're in, else the one with the desk they last worked at,
+ * else the first one free) and only goes to its spots, falling back within
+ * it as the office does; shared spots (no home: events) are open to all.
+ * Threads without a home, when there are more threads than homes, only get
+ * shared spots.
+ */
+function assignHomes(
+  sorted: readonly ThreadLike[],
+  layoutSpots: readonly Spot[],
+  previous: ReadonlyMap<string, string>,
+  homeDesks: ReadonlyMap<string, number>,
+  now: number,
+  event: boolean,
+): Assignment {
+  const byId = new Map(layoutSpots.map((s) => [s.id, s] as const));
+  const homes = [...new Set(layoutSpots.flatMap((s) => (s.home === undefined ? [] : [s.home])))].sort((a, b) => a - b);
+  const claimed = new Map<number, string>();
+  const homeOf = new Map<string, number>();
+  const claim = (id: string, h: number | undefined): boolean => {
+    if (h === undefined || claimed.has(h)) return false;
+    claimed.set(h, id);
+    homeOf.set(id, h);
+    return true;
+  };
+  // Who's at home stays there; then returning workers to the home with their desk; then the rest.
+  for (const t of sorted) claim(t.id, byId.get(previous.get(t.id) ?? "")?.home);
+  for (const t of sorted) {
+    if (homeOf.has(t.id)) continue;
+    const desk = homeDesks.get(t.id);
+    if (desk !== undefined) claim(t.id, byId.get(`desk-${desk}`)?.home);
+  }
+  for (const t of sorted) {
+    if (homeOf.has(t.id)) continue;
+    const free = homes.find((h) => !claimed.has(h));
+    if (free === undefined) break;
+    claim(t.id, free);
+  }
+  const taken = new Set<string>();
+  const spots = new Map<string, string>();
+  const overflow: string[] = [];
+  for (const t of sorted) {
+    const home = homeOf.get(t.id);
+    const want = wantedGroup(t, now, event);
+    const prev = previous.get(t.id);
+    const keep = prev !== undefined ? byId.get(prev) : undefined;
+    let pick: Spot | undefined;
+    if (keep && keep.group === want && keep.home === home && !taken.has(keep.id)) pick = keep;
+    for (const group of FALLBACK[want]) {
+      if (pick) break;
+      const free = layoutSpots.filter((s) => s.group === group && !taken.has(s.id) && (s.home === home || s.home === undefined));
+      // Their own home first; shared spots in order (desks, the counter), else by id.
+      const own = free.filter((s) => s.home !== undefined);
+      const shared = free.filter((s) => s.home === undefined);
+      pick = own[0] ?? (ORDERED.has(group) ? shared[0] : shared[seeded(t.id) % Math.max(1, shared.length)]);
     }
     if (pick === undefined) {
       overflow.push(t.id);

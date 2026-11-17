@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0 (2026-11-17)
+
+A home office for the agents, and a tour of the place.
+
+- **Home Office**, a new scenery where everyone works from home: little homes down the street, each its own building with its own floor plan and furniture (a studio, a loft, a cottage with a garden and a hammock, a tiny flat with a loft bed, a flat with a balcony, a corner flat), with streets, cars, alleys, yards, trees, shops and a park between them, shopfronts with a big screen along the top, and your house with a small garden and a pond.
+  - One thread per home, and it does everything there: works at its desk, plans at its whiteboard, waits for you in its armchair, makes a coffee, lounges, and naps in bed under its blanket.
+  - Get-togethers are video calls: everyone stays home with a headset on (or a phone up), and a dotted line links them across the streets: blue for a chat, purple for planners on a group call, gold to your house for a plan or a draft gone over with you.
+  - More threads than homes: homes go to the most urgent threads first and stay theirs; the rest work from the co-working café on the corner, hang out in the park, or wait on the bench in your garden when they need you. Office events become block parties on the park lawn.
+  - Ring a doorbell, honk at the traffic, feed the fish in your pond; two secrets to find.
+- **The tour**: the first time you open Cozy HQ, a short tour dims the office and points at one thing at a time (an agent, you, the desks, the meeting room, the waiting area, the breaks, the door, the pinboard, the TV, things to click, the legend). Take it again from the new **Take the tour** note on the `?` sticky note. Every scenery can tell it its own way.
+- For scenery authors: a plan of separate homes (`Layout.homes`, `Spot.home`) keeps each thread at its own home's spots and turns get-togethers into calls (`PaintInfo.calls`); `Theme.guide` retells the tour; `dress` gets the thread id.
+
 ## 0.5.0 (2026-11-16)
 
 Five new places, half the CPU, and secrets in every scenery.

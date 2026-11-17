@@ -33,7 +33,7 @@ if (q.has("hour")) {
 }
 const debug: Record<string, unknown> = { sample: true, expose: true };
 if (q.has("hour")) debug.hour = Number(q.get("hour"));
-for (const k of ["weather", "event", "gag", "season", "scenery", "news"]) if (q.has(k)) debug[k] = q.get(k);
+for (const k of ["weather", "event", "gag", "season", "scenery", "news", "guide"]) if (q.has(k)) debug[k] = q.get(k);
 localStorage.setItem(`${key}:debug`, JSON.stringify(debug));
 localStorage.setItem(`${key}:labels`, JSON.stringify({ on: q.get("labels") === "1" }));
 localStorage.setItem(`${key}:sound`, JSON.stringify({ on: false, volume: 0, ambient: false }));

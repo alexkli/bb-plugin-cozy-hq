@@ -32,7 +32,7 @@ import { ctx2d, hash, mix, rng } from "./pixel.ts";
 import { drawPixelText, pixelTextWidth } from "./pixelfont.ts";
 import type { SoundName } from "./sound.ts";
 import { CLASSIC } from "./themes/classic.ts";
-import { withPets, type GatherCue, type GatherSpot, type Gathering, type Light, type PaintInfo, type SceneryActions, type SceneryClickable, type Theme, type VisitorKind } from "./theme.ts";
+import { withPets, type Call, type GatherCue, type GatherSpot, type Gathering, type Light, type PaintInfo, type SceneryActions, type SceneryClickable, type Theme, type VisitorKind } from "./theme.ts";
 import { DEFAULT_YOU, dressYou, withPronouns, youEmblem, youLook, type You } from "./you.ts";
 import {
   drawAccessory,
@@ -179,7 +179,8 @@ type HuddleKind = "coffee" | "cooler" | "chat" | "couch" | "pingpong" | "darts";
 /** A few idle agents together: a coffee, a chat, a game, or a scenery's show. */
 interface Huddle {
   id: number;
-  kind: HuddleKind | "scenery";
+  /** "call": a video call between separate homes, everyone where they are. */
+  kind: HuddleKind | "scenery" | "call";
   members: string[];
   spots: Spot[];
   until: number;
@@ -488,6 +489,8 @@ export class World {
   /** Neighbors chatting where they are, and replies on their way. */
   private nextChatAt = -1;
   private replies: { id: string; topic: Topic; at: number }[] = [];
+  /** Neighbors on a quick call (a plan of separate homes), until the reply's said. */
+  private chats: { key: string; ids: string[]; until: number }[] = [];
   private speech = new Map<string, { text: string; until: number }>();
   /** Bubbles a scenery asked for a moment from now (a pinecone still on its way down). */
   private sayLater: { at: number; id: string; text: string; seconds: number }[] = [];
@@ -615,7 +618,39 @@ export class World {
   }
 
   private paintInfo(env: Env): PaintInfo {
-    return { t: this.time, hour: env.hour, night: this.skyColors(env.hour).night, weather: env.weather, date: env.date, season: this.season };
+    return { t: this.time, hour: env.hour, night: this.skyColors(env.hour).night, weather: env.weather, date: env.date, season: this.season, calls: this.calls() };
+  }
+
+  /** A plan of separate homes: everyone stays home, and get-togethers are video calls. */
+  private get remote(): boolean {
+    return (this.L?.homes?.length ?? 0) > 0;
+  }
+
+  /** The video calls going on (a plan of separate homes), for the scenery to draw. */
+  private calls(): Call[] {
+    if (!this.remote) return [];
+    const out: Call[] = [];
+    const at = (a: Agent) => ({ id: a.id, x: a.x, y: a.y });
+    const talking = (ids: string[]) => ids.find((id) => this.speech.has(id)) ?? null;
+    for (const h of this.huddles) {
+      if (h.kind !== "call") continue;
+      const members = h.members.map((id) => this.agents.get(id)).filter((a): a is Agent => a !== undefined && this.settled(a));
+      if (members.length >= 2) out.push({ kind: "chat", key: `call-${h.id}`, members: members.map(at), talking: talking(h.members) });
+    }
+    for (const c of this.chats) {
+      const members = c.ids.map((id) => this.agents.get(id)).filter((a): a is Agent => a !== undefined && this.settled(a));
+      if (members.length === 2 && this.time < c.until) out.push({ kind: "chat", key: c.key, members: members.map(at), talking: talking(c.ids) });
+    }
+    const planners: Agent[] = [];
+    for (const a of this.agents.values()) {
+      if (a.leaving || !this.settled(a) || a.huddle !== null) continue;
+      const g = a.spot!.group;
+      if (g === "meeting" && a.thread.mood === "planning") planners.push(a);
+      else if (g === "present" || g === "boss") out.push({ kind: "you", key: `you-${a.id}`, members: [at(a)], talking: talking([a.id]) });
+      else if (g === "review") out.push({ kind: "lobby", key: `lobby-${a.id}`, members: [at(a)], talking: null });
+    }
+    if (planners.length > 0) out.push({ kind: "meeting", key: "meeting", members: planners.map(at), talking: talking(planners.map((a) => a.id)) });
+    return out;
   }
 
   /** Who supplies the small talk. */
@@ -990,7 +1025,7 @@ export class World {
     if (idle.length === 0) return;
     const a = idle[Math.floor(this.rand() * idle.length)]!;
     const taken = new Set(this.currentSpots().values());
-    const options = L.spots.filter((s) => s.group === a.spot!.group && !taken.has(s.id));
+    const options = L.spots.filter((s) => s.group === a.spot!.group && s.home === a.spot!.home && !taken.has(s.id));
     if (options.length === 0) return;
     const spot = options[Math.floor(this.rand() * options.length)]!;
     a.thread = { ...a.thread, spotId: spot.id };
@@ -1709,9 +1744,15 @@ export class World {
 
   // ------------------------------------------------------------------ the dog
 
+  /** The way into your office: your guests' path, or yours when there are no guest chairs (separate homes). */
+  private bossEntry(): Point[] {
+    const L = this.L!;
+    return L.byId.get("boss-guest-0")?.path ?? L.boss.way ?? [{ x: L.boss.seat.x, y: L.net.halls[0]!, c: true }, L.boss.seat, L.boss.seat];
+  }
+
   private dogBedPath(): Point[] {
     const L = this.L!;
-    const g = L.byId.get("boss-guest-0")!.path;
+    const g = this.bossEntry();
     const bed = L.boss.dogBed;
     const lane = g[2]!.y;
     return [g[0]!, g[1]!, g[2]!, { x: bed.x, y: lane }, { x: bed.x, y: bed.y }];
@@ -1742,7 +1783,7 @@ export class World {
     if (goal === "greet") {
       target = [L.entrancePath[0]!, { x: L.entrance.x + 14, y: L.entrance.y + 10 }];
     } else if (goal === "boss") {
-      const g = L.byId.get("boss-guest-0")!.path;
+      const g = this.bossEntry();
       const desk = L.boss.desk;
       target = [g[0]!, g[1]!, g[2]!, { x: desk.x - 4, y: g[2]!.y }, { x: desk.x - 4, y: desk.y + 34 }];
     } else if (goal === "event" && this.event) {
@@ -2888,6 +2929,7 @@ export class World {
     if (!L || this.event) return false;
     const pool = this.shuffled(this.freeIdle());
     if (pool.length < 2) return false;
+    if (this.remote) return this.startCall(pool, kind !== undefined);
     const taken = new Set(this.currentSpots().values());
     for (const h of this.huddles) for (const sp of h.spots) taken.add(sp.id.replace(/^huddle-\d+-/, ""));
     const free = (id: string) => L.byId.has(id) && !taken.has(id);
@@ -2938,6 +2980,31 @@ export class World {
       a.huddle = id;
       this.walkTo(a, spots[i]!);
     });
+    if (h.maxLines > 0) this.talk?.gather(h.members);
+    return true;
+  }
+
+  /** Separate homes: a get-together is a video call, two or three people each where they are. */
+  private startCall(pool: Agent[], asked: boolean): boolean {
+    const size = pool.length >= 3 && this.rand() < 0.35 ? 3 : 2;
+    const members = pool.slice(0, size);
+    const id = ++this.huddleSeq;
+    const h: Huddle = {
+      id,
+      kind: "call",
+      members: members.map((a) => a.id),
+      // They stay at their own spots.
+      spots: members.map((a) => a.spot!),
+      until: this.time + 35 + this.rand() * 30,
+      nextLine: Infinity,
+      lines: 0,
+      maxLines: asked || this.rand() < 0.9 ? 4 + Math.floor(this.rand() * 4) : 0,
+      topic: null,
+      lastSpeaker: null,
+    };
+    this.huddles.push(h);
+    for (const a of members) a.huddle = id;
+    this.emit("ring", false);
     if (h.maxLines > 0) this.talk?.gather(h.members);
     return true;
   }
@@ -3098,7 +3165,7 @@ export class World {
         continue;
       }
       const prefix = `huddle-${h.id}-`;
-      if (!members.every((a) => this.settled(a) && a.spot!.id.startsWith(prefix))) continue;
+      if (!members.every((a) => this.settled(a) && (h.kind === "call" || a.spot!.id.startsWith(prefix)))) continue;
       if (h.nextLine === Infinity) h.nextLine = t + 2 + this.rand() * 2;
       if (t < h.nextLine) continue;
       if (h.kind === "pingpong" || h.kind === "darts") {
@@ -3150,9 +3217,12 @@ export class World {
     if (this.nextChatAt < 0) this.nextChatAt = t + 5 + this.rand() * 8;
     if (t < this.nextChatAt || !this.talk || this.event) return;
     this.nextChatAt = t + 14 + this.rand() * 16;
+    this.chats = this.chats.filter((c) => t < c.until);
+    // Separate homes: neighbors are a quick call away, wherever they live.
+    const remote = this.remote;
     const pool = this.shuffled(this.freeIdle().filter((a) => !this.speech.has(a.id)));
     for (const a of pool) {
-      const b = pool.find((o) => o !== a && Math.hypot(o.x - a.x, o.y - a.y) < 80);
+      const b = pool.find((o) => o !== a && (remote || Math.hypot(o.x - a.x, o.y - a.y) < 80));
       if (!b) continue;
       this.talk.gather([a.id, b.id]);
       const line = this.talk.open(a.id);
@@ -3160,6 +3230,7 @@ export class World {
       const dur = 4 + Math.min(3, line.text.length / 30);
       this.say(a.id, line.text, dur);
       this.replies.push({ id: b.id, topic: line.topic, at: t + dur + 0.6 });
+      if (remote) this.chats.push({ key: `chat-${a.id}-${Math.floor(t)}`, ids: [a.id, b.id], until: t + dur + 4.4 });
       return;
     }
   }
@@ -3175,7 +3246,8 @@ export class World {
       const a = this.agents.get(id);
       if (!a || a.huddle !== h.id) continue;
       a.huddle = null;
-      const home = walk ? this.L?.byId.get(a.thread.spotId) : undefined;
+      // On a call they never left.
+      const home = walk && h.kind !== "call" ? this.L?.byId.get(a.thread.spotId) : undefined;
       if (home) this.walkTo(a, home);
     }
   }
@@ -3183,7 +3255,7 @@ export class World {
   private leaveHuddle(a: Agent, walk = false): void {
     const h = this.huddles.find((x) => x.id === a.huddle);
     a.huddle = null;
-    if (walk) {
+    if (walk && h?.kind !== "call") {
       const home = this.L?.byId.get(a.thread.spotId);
       if (home) this.walkTo(a, home);
     }
@@ -4160,7 +4232,7 @@ export class World {
     ctx.drawImage(sprite, Math.round(a.x - ANCHOR_X), Math.round(y - ANCHOR_Y));
     if (this.theme.dress && m?.phase !== "zap") {
       const seatedNow = onChair === true || (settled && s !== null && SEATED_KINDS.has(s.kind));
-      this.theme.dress(ctx, { x: Math.round(a.x - ANCHOR_X), y: Math.round(y - ANCHOR_Y), facing, pose, seed: a.seed, seated: seatedNow, look: this.lookOf(a.thread.look, a.id), spot: settled && s ? s.id : null }, this.time);
+      this.theme.dress(ctx, { x: Math.round(a.x - ANCHOR_X), y: Math.round(y - ANCHOR_Y), facing, pose, seed: a.seed, seated: seatedNow, look: this.lookOf(a.thread.look, a.id), spot: settled && s ? s.id : null, id: a.id }, this.time);
     }
     if (a.thread.family) drawLanyard(ctx, Math.round(a.x - ANCHOR_X), Math.round(y - ANCHOR_Y), facing, pose, a.thread.family);
     if (a.thread.isPinned) {

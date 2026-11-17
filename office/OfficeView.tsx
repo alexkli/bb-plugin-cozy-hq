@@ -39,6 +39,7 @@ import { THEMES, themeById } from "./themes/index.ts";
 import { readYou, withPronouns, type You } from "./you.ts";
 import { LookEditor, YouRow } from "./YouSettings.tsx";
 import { Cabinet } from "./arcade/Cabinet.tsx";
+import { agentRect, Guide, guideSteps } from "./Guide.tsx";
 
 export const TOPIC_EMOJI: Record<Topic, string> = {
   game: "🎮",
@@ -141,6 +142,8 @@ interface DebugPrefs {
   news?: string;
   /** Change sample threads by id to try out state changes, e.g. {"sample-1": {"indicator": "unread-success"}}. */
   patch?: Record<string, Partial<OfficeThread>>;
+  /** Open the tour at this step (0 is the welcome), for screenshots. */
+  guide?: string | number;
 }
 
 function readJson<T>(key: string, fallback: T): T {
@@ -290,6 +293,15 @@ export function OfficeView(input: OfficeProps) {
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
+  // The tour: the step it's at, or null. It opens by itself the first time anyone opens the office.
+  const [guideAt, setGuideAt] = useState<number | null>(null);
+  const [firstVisit] = useState(() => {
+    try {
+      return window.localStorage.getItem(`${storageKey}:guide`) === null && window.localStorage.getItem(lookKey(storageKey)) === null;
+    } catch {
+      return false;
+    }
+  });
   const [arcadeOpen, setArcadeOpen] = useState(false);
   const [fit, setFit] = useState<Fit | null>(null);
   const [layout, setLayout] = useState<Layout | null>(null);
@@ -417,6 +429,31 @@ export function OfficeView(input: OfficeProps) {
     ro.observe(el);
     return () => ro.disconnect();
   }, [minW, minH]);
+  // The tour, the first time (not over made-up sample threads, unless asked for a screenshot).
+  const guideDebug = debug.guide;
+  useEffect(() => {
+    if (!layout || props.loading) return;
+    if (guideDebug !== undefined) {
+      setGuideAt(Number(guideDebug) || 0);
+      return;
+    }
+    if (!firstVisit || debug.sample || debug.demo) return;
+    const id = window.setTimeout(() => setGuideAt((g) => g ?? 0), 1400);
+    return () => window.clearTimeout(id);
+  }, [layout !== null, props.loading, firstVisit, guideDebug, debug.sample, debug.demo]); // eslint-disable-line react-hooks/exhaustive-deps
+  const closeGuide = useCallback(() => {
+    setGuideAt(null);
+    writeJson(`${storageKey}:guide`, { seen: true, at: Date.now() });
+  }, [storageKey]);
+  const openGuide = useCallback(
+    (at = 1) => {
+      setLegendOpen(false);
+      setSettingsOpen(false);
+      setGuideAt(at);
+    },
+    [],
+  );
+
   // ------------------------------------------------------------ threads → world
   const visible = useMemo(() => {
     const list = visibleThreads(threads) as OfficeThread[];
@@ -459,8 +496,10 @@ export function OfficeView(input: OfficeProps) {
       });
       let desksChanged = false;
       for (const [id, spot] of spots) {
-        if (!spot.startsWith("desk-")) continue;
-        const index = Number(spot.slice(5));
+        // In a plan of separate homes, the desk of the home they're in: they come back to it.
+        const home = L.homes ? L.byId.get(spot)?.home : undefined;
+        if (!spot.startsWith("desk-") && home === undefined) continue;
+        const index = home !== undefined ? L.homes![home]!.desk : Number(spot.slice(5));
         if (homeDesks.current.get(id) !== index) {
           homeDesks.current.set(id, index);
           desksChanged = true;
@@ -1173,6 +1212,11 @@ export function OfficeView(input: OfficeProps) {
               {legendOpen ? (
                 <LegendNotes
                   theme={named}
+                  onTour={() => {
+                    sound.unlock();
+                    play("click");
+                    openGuide(1);
+                  }}
                   style={{ left: layout.wall.legendNote.x * scale, top: (layout.wall.legendNote.y + layout.wall.legendNote.h + 4) * scale }}
                   onClose={() => setLegendOpen(false)}
                 />
@@ -1232,6 +1276,23 @@ export function OfficeView(input: OfficeProps) {
             >
               {tooltip}
             </div>
+          ) : null}
+          {layout && guideAt !== null ? (
+            <Guide
+              steps={guideSteps(layout, theme, named, guideAgent(world, visible))}
+              index={guideAt}
+              scale={scale}
+              width={W}
+              height={H}
+              onStep={(i) => {
+                play("click");
+                setGuideAt(i);
+              }}
+              onClose={() => {
+                play("click");
+                closeGuide();
+              }}
+            />
           ) : null}
           {props.loading ? <div className="chq-loading">Opening the office…</div> : null}
           {!props.loading && visible.length === 0 ? (
@@ -1435,7 +1496,17 @@ const LEGEND: { title: string; text: string; color: string; icon: string }[] = [
   { title: "Beanbag", text: "Idle 8 hours+", color: "#cdeefd", icon: "z" },
 ];
 
-function LegendNotes(props: { style: CSSProperties; theme: Theme; onClose: () => void }) {
+/** An agent for the tour to point at: someone at work, else anyone settled in. */
+function guideAgent(world: World, visible: OfficeThread[]): Rect | null {
+  const order = [...visible].sort((a, b) => Number(moodOf(b) === "working") - Number(moodOf(a) === "working"));
+  for (const t of order) {
+    const p = world.anchorOf(t.id);
+    if (p) return agentRect(p);
+  }
+  return null;
+}
+
+function LegendNotes(props: { style: CSSProperties; theme: Theme; onClose: () => void; onTour: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -1448,6 +1519,22 @@ function LegendNotes(props: { style: CSSProperties; theme: Theme; onClose: () =>
   }, [props]);
   return (
     <div className="chq-legend-pop" style={props.style} role="dialog" aria-label="What everyone is doing" onClick={props.onClose}>
+      <button
+        type="button"
+        className="chq-legend-note chq-legend-tour"
+        style={{ transform: "rotate(-1.2deg)" }}
+        onClick={(e) => {
+          e.stopPropagation();
+          props.onTour();
+        }}
+      >
+        <i className="chq-pushpin" style={{ background: "#e5484d" }} />
+        <span className="chq-legend-icon" aria-hidden>
+          ▸
+        </span>
+        <b>Take the tour</b>
+        <span>A quick walk round: who's who and what's where</span>
+      </button>
       {LEGEND.map((n, i) => (
         <div
           key={n.title}

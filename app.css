@@ -1227,3 +1227,103 @@
   font: 800 20px/1 var(--chq-mono);
   box-shadow: inset 0 -5px 0 rgba(42, 30, 46, 0.3);
 }
+
+/* ---------------------------------------------------------------- the tour */
+
+.chq-guide {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+}
+.chq-guide-dim {
+  position: absolute;
+  inset: 0;
+}
+.chq-guide-ring {
+  position: absolute;
+  border: 2px solid #ffd84a;
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px var(--chq-ink), 0 0 14px 2px rgba(255, 216, 74, 0.55);
+  pointer-events: none;
+  animation: chq-guide-pulse 1.4s ease-in-out infinite;
+}
+@keyframes chq-guide-pulse {
+  50% { box-shadow: 0 0 0 2px var(--chq-ink), 0 0 22px 6px rgba(255, 216, 74, 0.75); }
+}
+.chq-guide-card {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 16px 14px 11px;
+  background: #fff3a3;
+  color: #3a2a20;
+  font: 12px/1.4 var(--chq-mono);
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px var(--chq-ink), 5px 6px 0 rgba(20, 10, 20, 0.45);
+  transform: rotate(-0.6deg);
+  animation: chq-guide-in 200ms ease-out both;
+}
+.chq-guide-card.is-welcome { background: #d9f7c9; }
+.chq-guide-card .chq-pushpin {
+  width: 9px;
+  height: 9px;
+  top: 4px;
+  background: #e5484d;
+}
+.chq-guide-card b { font-size: 13.5px; }
+.chq-guide-card p { margin: 0; color: #5a4030; }
+.chq-guide-count {
+  position: absolute;
+  right: 10px;
+  top: 7px;
+  font-size: 10.5px;
+  opacity: 0.6;
+}
+.chq-guide-buttons {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.chq-guide-buttons button {
+  font: 700 12px/1 var(--chq-mono);
+  cursor: pointer;
+  border-radius: 14px;
+  padding: 6px 11px;
+}
+.chq-guide-next {
+  background: var(--chq-ink);
+  color: #fff7ea;
+  border: 2px solid var(--chq-ink);
+}
+.chq-guide-back {
+  background: #fffaf0;
+  color: var(--chq-ink);
+  border: 2px solid var(--chq-ink);
+}
+.chq-guide-skip {
+  margin-right: auto;
+  background: none;
+  border: 0;
+  color: #6b4a38;
+  text-decoration: underline;
+  padding-left: 0 !important;
+}
+.chq-guide-next:focus-visible, .chq-guide-back:focus-visible { outline: 2px solid #3e8ed0; outline-offset: 2px; }
+@keyframes chq-guide-in {
+  from { opacity: 0; transform: translateY(6px) rotate(-0.6deg) scale(0.96); }
+}
+.chq-legend-tour {
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  background: #d9f7c9;
+  font: inherit;
+}
+.chq-legend-tour:hover { background: #c6f0b2; }
+@media (prefers-reduced-motion: reduce) {
+  .chq-guide-ring, .chq-guide-card { animation: none; }
+}
