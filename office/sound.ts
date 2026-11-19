@@ -109,6 +109,8 @@ export class Sound {
   private ambient = true;
   private lastPlayed = new Map<SoundName, number>();
   lastAt = -Infinity;
+  /** Whether this office may be heard right now (on screen, the one you look at). */
+  gate: () => boolean = () => true;
 
   configure(enabled: boolean, volume: number, ambient = true): void {
     this.enabled = enabled;
@@ -153,6 +155,7 @@ export class Sound {
     if (!this.enabled || this.volume <= 0) return;
     const background = ambient ?? AMBIENT.has(name as SoundName);
     if (!this.ambient && background) return;
+    if (!this.gate()) return;
     const ctx = this.ctx;
     const out = this.master;
     if (!ctx || !out || ctx.state !== "running") return;

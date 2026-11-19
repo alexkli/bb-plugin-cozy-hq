@@ -10,6 +10,11 @@ destination, route `/plugins/cozy-hq/office`). Every active, visible thread is
 one character; archived and hidden threads are not shown. **Mod+Shift+H**
 opens the office from anywhere and, pressed again, goes back to where you were
 (command `plugin:cozy-hq/toggle-office`, rebindable in Settings → Keyboard).
+For the office in its own window in the bb desktop app: **Mod+Shift+N**
+(File → New Window), then Mod+Shift+H in it; plugins can't open bb windows,
+so there is no one-click button. Sound plays only from an office on screen:
+not while a thread is showing (bb may keep the panel mounted), and of
+offices in several windows, only the one clicked or focused last.
 
 ## Where a thread sits
 

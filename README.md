@@ -35,6 +35,13 @@ Linux) opens it from anywhere and, pressed again, takes you back to where you
 were; rebind it under Settings → Keyboard ("Cozy HQ: show the office, or go
 back").
 
+To keep the office in its own window (say, on a second screen) in the bb
+desktop app, open a new bb window with **Cmd+Shift+N** (File → New Window),
+then press **Cmd+Shift+H** there. A plugin can't open a bb window itself, so
+this takes the two shortcuts. Only an office you can see makes sound: none
+while you're in a thread, and with the office open in several windows, the
+one you clicked or focused last.
+
 ## The tour
 
 The first time you open Cozy HQ, a short tour walks you round: it dims the

@@ -1327,3 +1327,5 @@
 @media (prefers-reduced-motion: reduce) {
   .chq-guide-ring, .chq-guide-card { animation: none; }
 }
+.chq-settings-hint { margin: 10px 0 0; font-size: 11px; line-height: 1.4; color: #8a7a8e; }
+.chq-settings-hint b { color: inherit; font-weight: 700; }

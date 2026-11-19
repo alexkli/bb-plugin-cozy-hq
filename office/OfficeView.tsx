@@ -41,6 +41,9 @@ import { readYou, withPronouns, type You } from "./you.ts";
 import { LookEditor, YouRow } from "./YouSettings.tsx";
 import { Cabinet } from "./arcade/Cabinet.tsx";
 import { agentRect, Guide, guideSteps } from "./Guide.tsx";
+import { AudioLead } from "./audioLead.ts";
+
+const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 export const TOPIC_EMOJI: Record<Topic, string> = {
   game: "🎮",
@@ -368,6 +371,40 @@ export function OfficeView(input: OfficeProps) {
       sound.dispose();
     };
   }, [sound]);
+  // Heard only while you can see it: not from a thread with the panel kept
+  // mounted, and of offices open in several bb windows, the last one you looked at.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    let onScreen = false;
+    const visible = () => onScreen && !document.hidden && stage.isConnected;
+    const lead = new AudioLead(`${storageKey}:audio-lead`, visible);
+    sound.gate = () => lead.allowed();
+    const seen = new IntersectionObserver((entries) => {
+      for (const e of entries) onScreen = e.isIntersecting;
+      if (onScreen) lead.claim();
+      else lead.tick();
+    });
+    seen.observe(stage);
+    const claim = () => lead.claim();
+    const tick = () => lead.tick();
+    const id = window.setInterval(tick, 2_000);
+    window.addEventListener("focus", claim);
+    window.addEventListener("pointerdown", claim, true);
+    document.addEventListener("visibilitychange", tick);
+    const release = () => lead.release();
+    window.addEventListener("pagehide", release);
+    return () => {
+      seen.disconnect();
+      window.clearInterval(id);
+      window.removeEventListener("focus", claim);
+      window.removeEventListener("pointerdown", claim, true);
+      document.removeEventListener("visibilitychange", tick);
+      window.removeEventListener("pagehide", release);
+      sound.gate = () => false;
+      lead.release();
+    };
+  }, [sound, storageKey]);
   const play = useCallback((name: SoundName) => sound.play(name), [sound]);
 
   const worldRef = useRef<World | null>(null);
@@ -2042,6 +2079,10 @@ function SettingsPanel(props: {
         <span>Office buddy</span>
         <small>an agent strolls in a corner of bb wherever you are; click it to come back here</small>
       </label>
+      <p className="chq-settings-hint">
+        <b>In its own window:</b> {MAC ? "⌘⇧N" : "Ctrl+Shift+N"} opens a new bb window (File → New Window), then{" "}
+        {MAC ? "⌘⇧H" : "Ctrl+Shift+H"} brings the office there. Only the office you're looking at makes sound.
+      </p>
       <div className="chq-settings-label">You</div>
       <YouRow you={props.you} theme={props.scenery} onChange={props.onYou} onCustomize={props.onCustomize} />
       <div className="chq-settings-label">Scenery</div>
