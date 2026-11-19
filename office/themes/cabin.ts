@@ -18,7 +18,7 @@ import { pet, plow, troutTank } from "./cabin/critters.ts";
 import { chair, desk } from "./cabin/desks.ts";
 import { darkness, decor, doorOpen, lights, overlay, underlay, wallLights } from "./cabin/live.ts";
 import { eggTick } from "./cabin/eggs.ts";
-import { liftPose, liftTick } from "./cabin/lift.ts";
+import { liftDrift, liftPose, liftTick } from "./cabin/lift.ts";
 import { dress, dressVisitor, look, npc } from "./cabin/people.ts";
 import { cabinPlan } from "./cabin/plan.ts";
 import { plant, prop, speaker } from "./cabin/props.ts";
@@ -59,6 +59,8 @@ export const CABIN: Theme = {
   look: (l, id) => look(l, id),
   npc,
   pose: (p, info) => liftPose(p, info),
+  // Off the kicker.
+  drift: (who) => liftDrift(who),
   dress: (ctx, a, t) => dress(ctx, a, t),
   dressVisitor: (ctx, v) => dressVisitor(ctx, v),
   pet: (kind, pose, facing, blink) => pet(kind, pose, facing, blink),
@@ -70,7 +72,7 @@ export const CABIN: Theme = {
   // The fireplace, the woodpile, the fondue pot, the sauna, the telescope, the chairlift and the skis.
   clickables,
   click,
-  // Now and then, on a bright day, someone skis down the piste on their own; the rest is a secret.
+  // Now and then, on a bright day, a few of the idle ones go up the lift and ski down together; the rest is a secret.
   tick: (act) => {
     liftTick(act);
     eggTick(act);

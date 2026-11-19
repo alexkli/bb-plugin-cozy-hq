@@ -10,7 +10,7 @@
 // a cloud of powder (thumbs up), then they walk back into the lodge.
 import { charSprite, type CharPose, type Expression, type Look } from "../../characters.ts";
 import type { Facing, Layout, Point, Rect } from "../../layout.ts";
-import type { Drawable, Gathering, GatherSpot, Light, PaintInfo, PoseOf, SceneryActions, SceneryClickable } from "../../theme.ts";
+import type { Drawable, Gathering, GatherCue, GatherSpot, Light, PaintInfo, PoseOf, SceneryActions, SceneryClickable } from "../../theme.ts";
 import { drawPixelText, Grid, OUTLINE, pixelTextWidth, rect } from "../../themekit.ts";
 import { pet } from "./critters.ts";
 import { C, h2, sprite } from "./kit.ts";
@@ -151,6 +151,9 @@ function bind(L: Layout): SkiLift | null {
     tracks = [];
     spray = [];
     clouds = [];
+    party = null;
+    skiing.clear();
+    gliders.clear();
   }
   cur = planOf(L)?.lift ?? null;
   return cur;
@@ -183,6 +186,8 @@ export function liftPose(p: PoseOf, info: PaintInfo): { pose: CharPose; expr: Ex
     if (l.axis === "y" && p.facing === "back") return { pose: "sit-back", expr: p.expr, facing: "back" };
     return { pose: "slump", expr: Math.floor(info.t * 0.7 + p.seed) % 5 === 0 ? "blink" : "happy", facing: "front" };
   }
+  const skier = partyPose(l, p, info);
+  if (skier) return skier;
   if (p.spot === "huddle" && Math.abs(p.x - l.wave.x) < 0.5 && Math.abs(p.y - l.wave.y) < 0.5) {
     return { pose: Math.floor(info.t * 4) % 2 ? "raise" : "stand", expr: "happy", facing: "front" };
   }
@@ -644,6 +649,15 @@ function skierAt(l: SkiLift, r: Run, t: number): At {
   return { mode: "done", x: 0, y: 0, h: 0, facing: "front", pose: "stand", turn: 0, k: 0 };
 }
 
+/** A spray of snow off the edges (dir: which way across the piste), on landing, at a stop. */
+function puff(l: SkiLift, x: number, y: number, n: number, dir: number, power: number, t: number): void {
+  for (let i = 0; i < n; i++) {
+    const a = (l.axis === "y" ? (dir >= 0 ? 0 : Math.PI) : Math.PI / 2) + (Math.random() - 0.5) * 1.6;
+    const v = power * (0.5 + Math.random() * 0.8);
+    spray.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.5 - 6 - Math.random() * 10, t0: t });
+  }
+}
+
 /** Once a frame: tracks behind the skier, a spray of snow at each turn, on landing and at the stop. */
 function stepSkier(l: SkiLift, t: number): void {
   if (spray.length > 0) spray = spray.filter((q) => t - q.t0 < 0.7);
@@ -658,11 +672,7 @@ function stepSkier(l: SkiLift, t: number): void {
   const burst = (key: string, n: number, dir: number, power: number) => {
     if (r.sprayed.has(key)) return;
     r.sprayed.add(key);
-    for (let i = 0; i < n; i++) {
-      const a = (l.axis === "y" ? (dir >= 0 ? 0 : Math.PI) : Math.PI / 2) + (Math.random() - 0.5) * 1.6;
-      const v = power * (0.5 + Math.random() * 0.8);
-      spray.push({ x: s.x, y: s.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.5 - 6 - Math.random() * 10, t0: t });
-    }
+    puff(l, s.x, s.y, n, dir, power, t);
   };
   if (s.mode === "ski") {
     const sign = s.turn;
@@ -707,7 +717,7 @@ export function speech(ctx: Ctx, x: number, y: number, text: string): void {
   drawPixelText(ctx, text, bx + 3, y + 1, OUTLINE);
 }
 
-function gear(ctx: Ctx, r: Run, s: At, X: number, Y: number, vertical: boolean): void {
+function gear(ctx: Ctx, r: { board: boolean; look: { accent: string } }, s: Pick<At, "mode" | "facing" | "turn">, X: number, Y: number, vertical: boolean): void {
   // X, Y: feet (minus the height off the snow).
   if (s.mode === "walk") {
     if (r.board) {
@@ -881,6 +891,263 @@ function weighted<T extends string>(options: [T, number][]): T {
   return options[0]![0];
 }
 
+// ------------------------------------------------------------------ a ski party: your own people, up the lift and down
+
+/** Skiers glide this much faster than a walk (a snowboard a little slower). */
+const SKI_PACE = 1.9;
+const BOARD_PACE = 1.7;
+/** How long the kicker sends you up (px along the piste), and how high. */
+const AIR = 34;
+const AIR_H = 14;
+
+interface Rider {
+  /** Where they wait at the top, where they pull up at the bottom. */
+  spot: Point;
+  end: Point;
+  board: boolean;
+  jump: boolean;
+  /** The S-curves: phase and size. */
+  ph: number;
+  amp: number;
+}
+
+interface Party {
+  g: Gathering;
+  riders: Rider[];
+  /** When they set off down the piste, and whether the onlookers have said something. */
+  goneAt: number | null;
+  cheered: boolean;
+}
+
+let party: Party | null = null;
+/** Per skier this frame: what they're doing, for `dress` (asked right after the pose). */
+const skiing = new Map<string, { mode: "top" | "piste" | "carry"; board: boolean; accent: string; facing: Facing; turn: number }>();
+const gliders = new Map<string, { last: Point | null; sign: number; on: boolean }>();
+
+const ACCENTS = [C.red, C.mustard, "#e86aa8", "#3a8ad8", "#4fbf7a"];
+
+/** Down the fall line (u) and across it, from the top of the piste. */
+const alongOf = (l: SkiLift, x: number, y: number) => (l.axis === "y" ? y - l.start.y : l.start.x - x);
+const acrossOf = (l: SkiLift, x: number, y: number) => (l.axis === "y" ? x - l.start.x : y - l.start.y);
+const at = (l: SkiLift, u: number, c: number): Point => (l.axis === "y" ? { x: Math.round(l.start.x + c), y: Math.round(l.start.y + u) } : { x: Math.round(l.start.x - u), y: Math.round(l.start.y + c) });
+
+const ease = (k: number) => {
+  const q = Math.max(0, Math.min(1, k));
+  return q * q * (3 - 2 * q);
+};
+
+/** Rider r's line across the piste at u: from their place at the top into S-curves, over the kicker if they're jumping, to their stop. */
+function lineOf(l: SkiLift, r: Rider, u: number): number {
+  const { uk } = lengths(l);
+  const u0 = alongOf(l, r.spot.x, r.spot.y);
+  const u1 = alongOf(l, r.end.x, r.end.y);
+  const c0 = acrossOf(l, r.spot.x, r.spot.y);
+  const c1 = acrossOf(l, r.end.x, r.end.y);
+  const lam = l.axis === "y" ? 64 : 48;
+  let amp = r.amp * ease((u - u0) / 24) * ease((u1 - u) / 30);
+  let c = c0 * (1 - ease((u - u0) / 40)) + c1 * ease((u - (u1 - 40)) / 40);
+  if (r.jump) {
+    // Lined up with the kicker for the run-in and the landing.
+    const near = ease(1 - (Math.abs(u - uk - AIR / 2) - AIR / 2 - 6) / 30);
+    amp *= 1 - near;
+    c = c * (1 - near) + acrossOf(l, l.kicker.x, l.kicker.y) * near;
+  }
+  return c + Math.sin((u / lam + r.ph) * Math.PI * 2) * amp;
+}
+
+/** The party's places at the top and stops at the bottom, side by side. */
+function riders(l: SkiLift, n: number): Rider[] {
+  const half = l.axis === "y" ? Math.max(0, l.piste.w / 2 - 7) : 6;
+  const clampC = (c: number) => Math.max(-half, Math.min(half, c));
+  const len = lengths(l).len;
+  const jumper = Math.random() < 0.65 ? Math.floor(Math.random() * n) : -1;
+  const A = l.axis === "y" ? Math.max(4, Math.min(14, l.piste.w / 2 - 9)) : 3;
+  return Array.from({ length: n }, (_, i) => {
+    const board = Math.random() < 0.4;
+    const spot = l.axis === "y" ? at(l, 0, clampC([0, -12, 12][i]!)) : at(l, [0, 8, 16][i]!, -[0, 3, 6][i]!);
+    const end = l.axis === "y" ? at(l, len, clampC([0, -12, 12][i]!)) : at(l, len - [0, 9, 18][i]!, -[0, 3, 6][i]!);
+    return { spot, end, board, jump: i === jumper, ph: i * 0.5 + (i > 1 ? 0.25 : 0) + Math.random() * 0.12, amp: A * (0.7 + Math.random() * 0.35) };
+  });
+}
+
+/** Down the piste in curves (points every few px), then walking out to the lift's way and back along it to the hallway. */
+function leaveOf(l: SkiLift, r: Rider): NonNullable<GatherSpot["leave"]> {
+  const u0 = alongOf(l, r.spot.x, r.spot.y);
+  const u1 = alongOf(l, r.end.x, r.end.y);
+  const glide: Point[] = [];
+  for (let u = u0 + 4; u < u1; u += 4) glide.push(at(l, u, lineOf(l, r, u)));
+  glide.push({ ...r.end });
+  const w = l.way;
+  const walk: Point[] = w.length >= 2 ? [{ x: w[w.length - 2]!.x, y: r.end.y }, ...w.slice(0, -1).reverse().map((p) => ({ ...p }))] : [];
+  return { glide, pace: r.board ? BOARD_PACE : SKI_PACE, walk };
+}
+
+/**
+ * A few of the idle ones take the lift up together, wait at the top for
+ * everyone, then ski (or board) down, maybe over the kicker, and walk back in.
+ * `min`: how many it takes (a random outing wants company).
+ */
+function startParty(act: SceneryActions, l: SkiLift, n: number, min: number): boolean {
+  if (party || l.way.length === 0) return false;
+  const rs = riders(l, n);
+  const spots: GatherSpot[] = rs.map((r) => ({
+    x: r.spot.x,
+    y: r.spot.y,
+    facing: l.axis === "y" ? "front" : "left",
+    pose: "stand",
+    activity: r.board ? "snowboarding" : "skiing",
+    path: [...l.way, { x: l.top.x, y: l.top.y }, { x: r.spot.x, y: l.top.y }, { ...r.spot }],
+    leave: leaveOf(l, r),
+  }));
+  const j = rs.findIndex((r) => r.jump);
+  const cues: GatherCue[] = [
+    { at: 0.3, who: 0, say: pick(["Race you down!", "Last one down buys the cocoa!", "Fresh corduroy!"]), seconds: 2 },
+    { at: 2.0, who: rs.length > 1 ? 1 : 0, say: pick(["You're on!", "Goggles on.", "Three, two, one…"]), seconds: 1.6 },
+  ];
+  if (j >= 0) cues.push({ at: 3.4, who: j, say: pick(["Watch this!", "Hitting the kicker!", "Send it!"]), seconds: 1.4 });
+  const g = act.gather(spots, 4, cues, min);
+  if (!g) return false;
+  party = { g, riders: rs.slice(0, g.size), goneAt: null, cheered: false };
+  return true;
+}
+
+/** Someone in the party, and their rider. */
+function riderOf(id: string): Rider | null {
+  if (!party) return null;
+  const i = party.g.ids.indexOf(id);
+  return i >= 0 ? (party.riders[i] ?? null) : null;
+}
+
+/** How high off the snow someone flying off the kicker is. */
+function airOf(l: SkiLift, x: number, y: number): number {
+  const k = (alongOf(l, x, y) - lengths(l).uk) / AIR;
+  if (k <= 0 || k >= 1 || Math.abs(acrossOf(l, x, y) - acrossOf(l, l.kicker.x, l.kicker.y)) > 6) return 0;
+  return Math.round(Math.sin(k * Math.PI) * AIR_H);
+}
+
+/** Skiing: on the piste between their start and their stop, after the party's set off (and not riding the lift). */
+function gliding(l: SkiLift, r: Rider, x: number, y: number): boolean {
+  if (!party?.g.done || onLine(l, x, y)) return false;
+  const u = alongOf(l, x, y);
+  // On their own line down (not walking back up the side of the piste).
+  return u > alongOf(l, r.spot.x, r.spot.y) + 0.5 && u < alongOf(l, r.end.x, r.end.y) - 0.5 && Math.abs(acrossOf(l, x, y) - lineOf(l, r, u)) < 3;
+}
+
+/** The party's poses: standing ready at the top, carving down, a spin or a grab in the air. */
+function partyPose(l: SkiLift, p: PoseOf, info: PaintInfo): { pose: CharPose; expr: Expression; facing?: Facing } | null {
+  const r = riderOf(p.id);
+  if (!r) {
+    skiing.delete(p.id);
+    return null;
+  }
+  const accent = ACCENTS[p.seed % ACCENTS.length]!;
+  const t = info.t;
+  const gl = gliders.get(p.id) ?? { last: null, sign: 0, on: false };
+  gliders.set(p.id, gl);
+  const vertical = l.axis === "y";
+  if (p.spot === "huddle" && Math.hypot(p.x - r.spot.x, p.y - r.spot.y) < 1) {
+    const facing: Facing = vertical ? "front" : "left";
+    skiing.set(p.id, { mode: "top", board: r.board, accent, facing, turn: 0 });
+    return { pose: "stand", expr: "happy", facing };
+  }
+  if (p.spot === null && gliding(l, r, p.x, p.y)) {
+    gl.on = true;
+    const u = alongOf(l, p.x, p.y);
+    const d = lineOf(l, r, u + 2) - lineOf(l, r, u - 2);
+    const turn = Math.abs(d) < 0.5 ? 0 : Math.sign(d);
+    // Tracks behind them, a spray where the turn changes.
+    if (!gl.last || Math.hypot(p.x - gl.last.x, p.y - gl.last.y) >= 2) {
+      const h = airOf(l, p.x, p.y);
+      if (h === 0) tracks.push({ x: Math.round(p.x), y: Math.round(p.y), t, board: r.board });
+      if (tracks.length > 900) tracks.shift();
+      gl.last = { x: p.x, y: p.y };
+    }
+    if (turn !== 0 && gl.sign !== 0 && turn !== gl.sign) puff(l, p.x, p.y, 6, -turn, 26, t);
+    if (turn !== 0) gl.sign = turn;
+    const k = (u - lengths(l).uk) / AIR;
+    if (airOf(l, p.x, p.y) > 0) {
+      if (k > 0.85 && k < 0.95) puff(l, p.x, p.y, 2, 0, 30, t);
+      const spin = (p.seed + (party?.g.ids.length ?? 0)) % 2 === 0;
+      const facing: Facing = spin ? (["front", "right", "back", "left"] as const)[Math.min(3, Math.floor(k * 4))]! : vertical ? "front" : "left";
+      skiing.set(p.id, { mode: "piste", board: r.board, accent, facing, turn: 0 });
+      return { pose: spin ? "cheer" : "raise", expr: "happy", facing };
+    }
+    let facing: Facing;
+    if (r.board) facing = d >= 0 ? "front" : "back";
+    else if (!vertical) facing = "left";
+    else facing = d > 1.6 ? "right" : d < -1.6 ? "left" : "front";
+    skiing.set(p.id, { mode: "piste", board: r.board, accent, facing, turn });
+    return { pose: "stand", expr: Math.floor(t * 0.7 + p.seed) % 6 === 0 ? "blink" : "happy", facing };
+  }
+  if (gl.on) {
+    // Pulled up at the bottom: a spray of snow.
+    gl.on = false;
+    gl.last = null;
+    puff(l, p.x, p.y, 12, 1, 34, t);
+  }
+  if (p.spot === null && !onLine(l, p.x, p.y) && inside(l.area, p.x, p.y)) skiing.set(p.id, { mode: "carry", board: r.board, accent, facing: p.facing, turn: 0 });
+  else skiing.delete(p.id);
+  return null;
+}
+
+const inside = (r: Rect, x: number, y: number) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+
+/** Off the kicker: drawn higher (their shadow stays on the snow). */
+export function liftDrift(who: { kind: string; id: string; x: number; y: number }): { dx: number; dy: number } | null {
+  const l = cur;
+  if (!l || who.kind !== "agent") return null;
+  const r = riderOf(who.id);
+  if (!r || !gliding(l, r, who.x, who.y)) return null;
+  const h = airOf(l, who.x, who.y);
+  return h > 0 ? { dx: 0, dy: -h } : null;
+}
+
+/** On the party (from `dress`): skis or the board on their feet with goggles on, or over the shoulder walking out and back. */
+export function skiGear(ctx: Ctx, a: { x: number; y: number; facing: Facing; pose: CharPose; id?: string }): void {
+  const l = cur;
+  const s = a.id ? skiing.get(a.id) : undefined;
+  if (!l || !s) return;
+  const X = a.x + 10;
+  const Y = a.y + 27;
+  const r = { board: s.board, look: { accent: s.accent } };
+  if (s.mode === "carry") {
+    gear(ctx, r, { mode: "walk", facing: a.facing, turn: 0 }, X, Y, l.axis === "y");
+    return;
+  }
+  goggles(ctx, a.x, a.y, a.facing, s.accent);
+  gear(ctx, r, { mode: s.mode === "top" ? "stop" : "ski", facing: a.facing, turn: s.turn }, X, Y, l.axis === "y");
+}
+
+/** Once the party's off: the onlookers at the bottom say something; it's over once they're all back in. */
+function partyTick(act: SceneryActions, l: SkiLift): void {
+  const p = party;
+  if (!p) return;
+  const t = act.t;
+  if (!p.g.done) {
+    if (t - (p.g.arrivedAt ?? t) > 120) party = null;
+    return;
+  }
+  if (p.goneAt === null) p.goneAt = t;
+  if (!p.cheered && p.g.arrivedAt !== null) {
+    p.cheered = true;
+    const { uk, len } = lengths(l);
+    const V0 = SKI_PACE * 32;
+    const near = act.near(l.finish.x, l.finish.y, 320).filter((n) => !p.g.ids.includes(n.id));
+    const first = p.g.ids[0];
+    if (first) act.say(first, pick(["Woo-hoo!", "Wheee!", "Yeehaw!"]), 1.6, 0.4);
+    const watcher = near[0];
+    if (watcher) {
+      if (p.riders.some((r) => r.jump)) act.say(watcher.id, pick(["Whoa, big air!", "Did you see that?!", "Sick jump!"]), 2.4, uk / V0 + 0.4);
+      else act.say(watcher.id, pick(["Nice turns!", "Look at them go!", "Smooth."]), 2.4, len / V0 * 0.6);
+    }
+  }
+  if (t - p.goneAt > 90) {
+    party = null;
+    skiing.clear();
+    gliders.clear();
+  }
+}
+
 // ------------------------------------------------------------------ clicks
 
 export function liftClickables(p: CabinPlan): SceneryClickable[] {
@@ -889,6 +1156,7 @@ export function liftClickables(p: CabinPlan): SceneryClickable[] {
   const h = l.hut;
   return [
     { id: "lift-hut", rect: { x: h.x - 4, y: h.y + h.h - 22, w: h.w + 4, h: 22 }, hover: "The lift hut · ring the bell" },
+    { id: "piste", rect: l.piste, hover: "The piste · who's up for a run?" },
     { id: "lift", rect: l.area, hover: "The chairlift · who's riding up?" },
   ];
 }
@@ -916,13 +1184,19 @@ export function liftClick(id: string, act: SceneryActions): string | null {
     say(l.hut.x, l.hut.y, SAY.bell, 0.5);
     return "cab-ding";
   }
-  if (id !== "lift") return null;
-  // The summit flag: someone sets off down the piste.
-  if (Math.hypot(act.at.x - l.flag.x - 2, act.at.y - l.flag.y + 7) <= 8) {
+  // The piste (or the summit flag): whoever's free goes up for a run together; nobody free, a stranger comes down.
+  const flag = Math.hypot(act.at.x - l.flag.x - 2, act.at.y - l.flag.y + 7) <= 8;
+  if (id === "piste" || (id === "lift" && flag)) {
+    if (party) return null;
+    if (startParty(act, l, Math.random() < 0.5 ? 2 : 3, 1)) {
+      say(l.bottom.x, l.bottom.y, ["Who's coming skiing?", "Powder day!", "Grab your skis!"], 0.3);
+      return "cab-clank";
+    }
     if (skier) return null;
     startRun(act, l);
     return "cab-swoosh";
   }
+  if (id !== "lift") return null;
   // Stopped: clicking gets it going again.
   if (stopped(t)) {
     stop = { t0: t - 6 };
@@ -964,7 +1238,11 @@ export function liftClick(id: string, act: SceneryActions): string | null {
 /** Now and then, on a bright day, someone comes down the piste on their own. */
 export function liftTick(act: SceneryActions): void {
   const l = bind(act.L);
-  if (!l || skier || act.night > 0.5 || act.weather === "storm" || act.weather === "fog") return;
-  // About once every 20 minutes (ticks come twice a second).
-  if (Math.random() < 1 / 2400) startRun(act, l);
+  if (!l) return;
+  partyTick(act, l);
+  if (act.night > 0.5 || act.weather === "storm" || act.weather === "fog") return;
+  // A few of the idle ones go up for a run together about every eight minutes (ticks come twice a second).
+  if (!party && Math.random() < 1 / 960) startParty(act, l, Math.random() < 0.55 ? 2 : 3, 2);
+  // A stranger comes down now and then (about every 20 minutes).
+  if (!skier && Math.random() < 1 / 2400) startRun(act, l);
 }

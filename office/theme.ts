@@ -87,6 +87,12 @@ export interface GatherSpot {
   path?: Point[];
   /** Drawn this many pixels higher (sitting up on something). */
   lift?: number;
+  /**
+   * The way back when it's over (default: back along `path`): first along
+   * `glide` at `pace` × walking speed (skiing down a slope), then along `walk`
+   * at a walk, its last point on a hallway ({ c: true }), then home.
+   */
+  leave?: { glide: Point[]; pace: number; walk: Point[] };
 }
 
 /** Something that happens `at` seconds after everyone has arrived: a bubble over the one at spot `who`, a sound. */
@@ -109,6 +115,8 @@ export interface Gathering {
   readonly done: boolean;
   /** Whether someone's at spot i right now. */
   readonly present: readonly boolean[];
+  /** Who came (thread ids), in spot order. */
+  readonly ids: readonly string[];
 }
 
 /** What a scenery's click can do with the people in the office. */

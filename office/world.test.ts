@@ -63,3 +63,31 @@ test("they run to and from the desk; a stroll from the coffee to the couch is a 
   world.sync([{ ...thread(0), mood: "needs-you", spotId: "wait-0-0-n0" }, { ...thread(1), mood: "drafting", spotId: "boss-guest-0" }], false);
   assert.ok(agents.get("t1")!.path.length > 0 && agents.get("t1")!.pace > 2);
 });
+
+test("a show's spot can send them back another way: gliding fast along its points, then walking home", () => {
+  const world = new World(() => {});
+  const L = buildLayout(900, 420, { threads: 8 });
+  world.setLayout(L, "8");
+  world.sync([{ ...thread(0), mood: "idle", spotId: "couch-1" }], true);
+  const w = world as unknown as {
+    agents: Map<string, { x: number; y: number; pace: number; path: { x: number; y: number }[]; glide?: unknown; target: string | null }>;
+    gather: (spots: unknown[], seconds: number, cues: unknown[], min: number) => { done: boolean; ids: string[] } | null;
+  };
+  const hall = L.net.halls[0]!;
+  const spot = { x: 200, y: hall, facing: "front", pose: "stand", activity: "skiing", path: [{ x: 200, y: hall, c: true }] };
+  const glide = [{ x: 240, y: hall }, { x: 280, y: hall }];
+  const g = w.gather([{ ...spot, leave: { glide, pace: 2, walk: [{ x: 300, y: hall, c: true }] } }], 1, [], 1)!;
+  assert.deepEqual(g.ids, ["t0"]);
+  const a = w.agents.get("t0")!;
+  for (let i = 0; i < 60 * 60 && !g.done; i++) world.update(1 / 60);
+  assert.ok(g.done);
+  // Off along the glide first, faster than a walk, then home to the couch.
+  assert.deepEqual(a.path.slice(0, 2), glide);
+  assert.ok(a.glide);
+  assert.equal(a.target, "couch-1");
+  const x0 = a.x;
+  world.update(0.25);
+  assert.ok(a.x - x0 > 32 * 0.25 * 1.4, "gliding faster than walking");
+  for (let i = 0; i < 60 * 2; i++) world.update(1 / 60);
+  assert.equal(a.glide, null);
+});

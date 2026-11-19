@@ -102,8 +102,11 @@ has room for one.
 ## 🏔️ Mountain Cabin
 
 The chairlift and the piste are out in the open: click the lift for a ride (or
-a stop, a dog, rarely a yeti), the lift hut for its bell, and the summit flag
-for someone skiing or snowboarding down. Hidden:
+a stop, a dog, rarely a yeti), the lift hut for its bell, and the piste (or
+the summit flag) and two or three of the idle ones ride up together and ski
+or snowboard down, sometimes over the kicker with a spin or a grab. They go
+on their own now and then on a bright day; with nobody free, a stranger comes
+down instead. Hidden:
 
 - **Alphorn:** click the brass mouthpiece left on the sun deck. Someone carries
   the alphorn out and plays; the peaks echo the call twice, softer each time,

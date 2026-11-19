@@ -10,7 +10,7 @@ import type { VisitorKind } from "../../theme.ts";
 import { hash, mix, OUTLINE, type Look } from "../../themekit.ts";
 import { C } from "./kit.ts";
 import { laptopOnLap } from "./nooks.ts";
-import { liftRider } from "./lift.ts";
+import { liftRider, skiGear } from "./lift.ts";
 
 const PANTS = ["#2f3a4f", "#3a3d46", "#4a3a32", "#2e4a3e", "#5a4a3a", "#45384a", "#3d4a6b"];
 const HATS = [C.red, C.navy, C.cream, C.mustard, C.moss, "#e86aa8", "#3a8ad8"];
@@ -98,7 +98,7 @@ function socks(px: Px, pose: CharPose, facing: Facing, top: string): void {
   }
 }
 
-export function dress(ctx: CanvasRenderingContext2D, a: { x: number; y: number; facing: Facing; pose: CharPose; seed: number; seated: boolean; look: Look; spot?: string | null }, t: number): void {
+export function dress(ctx: CanvasRenderingContext2D, a: { x: number; y: number; facing: Facing; pose: CharPose; seed: number; seated: boolean; look: Look; spot?: string | null; id?: string }, t: number): void {
   // Squeezed in somewhere with a laptop on the lap.
   laptopOnLap(ctx, a, t);
   // On the chairlift: the chair round them.
@@ -128,6 +128,8 @@ export function dress(ctx: CanvasRenderingContext2D, a: { x: number; y: number; 
     px(side ? 7 : 6, 4, 2, 1, "#ffd27a");
   }
   if (!a.seated && STANDING.has(a.pose)) socks(px, a.pose, a.facing, [C.red, C.navy, C.moss, C.mustard][a.seed % 4]!);
+  // Off skiing with the others: the skis or the board, and goggles.
+  skiGear(ctx, a);
 }
 
 export function dressVisitor(ctx: CanvasRenderingContext2D, v: { x: number; y: number; facing: Facing; pose: CharPose; kind: VisitorKind; look?: Look }): void {

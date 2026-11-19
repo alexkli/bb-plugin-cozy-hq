@@ -198,7 +198,10 @@ starts something and returns a sound. Draw the show yourself from `decor`,
 `overlay` and `lighting.lights`, timed by `PaintInfo.t`. `act.gather(spots,
 seconds, cues)` asks the nearest idle people over to your spots; the cues
 are bubbles and sounds after they've all arrived, and the returned
-`Gathering` tells you when they got there and when they've gone. Skip the
+`Gathering` tells you who came, when they got there and when they've gone.
+A spot's `leave` sends them back another way: gliding along points faster
+than a walk (skiing down a slope), then walking to a hallway and home; the
+Mountain Cabin's ski runs are an example (`cabin/lift.ts`). Skip the
 gathering when it returns null (everyone's busy). `act.near` and `act.say`
 are for a quick word from whoever's close. Redwood Camp's campfire, trees
 and creek are an example (`redwoods/clicks.ts`).

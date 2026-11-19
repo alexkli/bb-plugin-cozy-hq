@@ -175,6 +175,8 @@ interface Agent extends Walker {
   pace: number;
   /** Got to work since you last looked: a cool glow until the work ends. */
   started: boolean;
+  /** Gliding along these waypoints this much faster (skiing down after a scenery's show). */
+  glide?: { pace: number; pts: Set<string> } | null;
 }
 
 type HuddleKind = "coffee" | "cooler" | "chat" | "couch" | "pingpong" | "darts";
@@ -193,7 +195,7 @@ interface Huddle {
   topic: Topic | null;
   lastSpeaker: string | null;
   /** A scenery's show: what it sees, how long they stay once there, and the cues left to play. */
-  show?: { gathering: { size: number; arrivedAt: number | null; done: boolean; present: boolean[] }; stay: number; cues: GatherCue[]; next: number };
+  show?: { gathering: { size: number; arrivedAt: number | null; done: boolean; present: boolean[]; ids: string[] }; stay: number; cues: GatherCue[]; next: number; leave: (GatherSpot["leave"] | undefined)[] };
 }
 
 /** The server-room gag: poke at the cables, get zapped, lie down, shuffle off. */
@@ -397,6 +399,8 @@ export interface ClickTarget {
 }
 
 const WALK_SPEED = 32; // px/s
+/** A waypoint on a glide (by where it is: a re-route keeps the points, not the objects). */
+const glideKey = (p: Point) => `${Math.round(p.x)},${Math.round(p.y)}`;
 const SLOW_SPEED = 11;
 /** Work doesn't wait: between the waiting room, meeting room and your office. */
 const BRISK = 1.3;
@@ -1505,7 +1509,9 @@ export class World {
     this.time += dt;
     const t = this.time;
     for (const a of [...this.agents.values()]) {
-      if (a.path.length > 0 && step(a, dt, a.slow ? SLOW_SPEED : WALK_SPEED * a.pace * (0.82 + ((a.seed >>> 11) % 36) / 100))) {
+      if (a.glide && !(a.path[0] && a.glide.pts.has(glideKey(a.path[0])))) a.glide = null;
+      const pace = a.glide ? a.glide.pace : a.pace;
+      if (a.path.length > 0 && step(a, dt, a.slow ? SLOW_SPEED : WALK_SPEED * pace * (0.82 + ((a.seed >>> 11) % 36) / 100))) {
         if (a.leaving) {
           this.agents.delete(a.id);
           this.doorOpenUntil = this.time + 1.2;
@@ -3083,8 +3089,8 @@ export class World {
       lift: sp.lift,
       path: sp.path ?? fromHall(sp.x, sp.y),
     }));
-    const gathering = { size: n, arrivedAt: null, done: false, present: made.map(() => false) };
     const members = pool.slice(0, n);
+    const gathering = { size: n, arrivedAt: null, done: false, present: made.map(() => false), ids: members.map((a) => a.id) };
     this.huddles.push({
       id,
       kind: "scenery",
@@ -3097,7 +3103,7 @@ export class World {
       maxLines: 0,
       topic: null,
       lastSpeaker: null,
-      show: { gathering, stay: seconds, cues: [...cues].sort((p, q) => p.at - q.at), next: 0 },
+      show: { gathering, stay: seconds, cues: [...cues].sort((p, q) => p.at - q.at), next: 0, leave: spots.slice(0, n).map((sp) => sp.leave) },
     });
     members.forEach((a, i) => {
       a.huddle = id;
@@ -3297,8 +3303,28 @@ export class World {
       a.huddle = null;
       // On a call they never left.
       const home = walk && h.kind !== "call" ? this.L?.byId.get(a.thread.spotId) : undefined;
-      if (home) this.walkTo(a, home);
+      if (!home) continue;
+      const i = h.spots.findIndex((sp) => sp.id === a.spot?.id);
+      const leave = i >= 0 && this.settled(a) ? h.show?.leave[i] : undefined;
+      if (leave) this.leaveBy(a, leave, home);
+      else this.walkTo(a, home);
     }
+  }
+
+  /** Home from a show its own way: gliding along, then walking out to a hallway and on home. */
+  private leaveBy(a: Agent, leave: NonNullable<GatherSpot["leave"]>, home: Spot): void {
+    const way = [...leave.glide, ...leave.walk];
+    const end = way[way.length - 1];
+    if (!end || !end.c) {
+      this.walkTo(a, home);
+      return;
+    }
+    const rest = route({ ...a, x: end.x, y: end.y, path: [], approach: [] }, this.L!.net, home.path);
+    a.path = [...way, ...rest];
+    a.glide = leave.glide.length > 0 ? { pace: leave.pace, pts: new Set(leave.glide.map(glideKey)) } : null;
+    a.pace = 1;
+    a.spot = null;
+    a.target = home.id;
   }
 
   private leaveHuddle(a: Agent, walk = false): void {

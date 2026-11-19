@@ -316,6 +316,7 @@ export function click(id: string, act: SceneryActions): string | null {
     case "drift":
       return eggClick(id, act);
     case "lift-hut":
+    case "piste":
       return p.lift ? liftClick(id, act) : null;
     case "lift": {
       if (p.lift) return liftClick(id, act);
