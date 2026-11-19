@@ -3343,7 +3343,7 @@ export class World {
           m.phase = "zap";
           m.until = t + 1.7;
           this.flashUntil = t + 0.4;
-          this.emit("zap", true);
+          this.emit("zap", false);
           this.say(a.id, ["BZZZT!", "OUCH!!", "YEOWCH!"][Math.floor(this.rand() * 3)]!, 2);
           for (let i = 0; i < 12; i++) {
             const ang = (i / 12) * Math.PI * 2;

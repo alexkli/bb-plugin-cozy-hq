@@ -281,9 +281,15 @@ export class Sound {
         tone(170, 0, 0.22, "sine", 0.16, 85);
         break;
       case "zap":
-        tone(55, 0, 0.7, "sawtooth", 0.12);
-        tone(3100, 0, 0.55, "square", 0.025, 1400);
-        for (let i = 0; i < 10; i++) noise(i * 0.06, 0.05, 0.22, 2200 + Math.random() * 3500);
+        // BZZZT: a snap, a buzzing arc that crackles and sputters out, then the thud of hitting the floor.
+        noise(0, 0.06, 0.35, 3500);
+        tone(1900, 0, 0.08, "square", 0.08, 500);
+        for (let i = 0; i < 9; i++) tone(i % 2 ? 180 : 120, i * 0.07, 0.075, "sawtooth", 0.09 * (1 - i * 0.07));
+        tone(240, 0, 0.65, "square", 0.04, 150);
+        tone(2600, 0.05, 0.6, "square", 0.025, 900);
+        for (let i = 0; i < 16; i++) noise(0.04 + i * 0.04 + Math.random() * 0.02, 0.03, 0.3 * (1 - i * 0.04), 1800 + Math.random() * 4500);
+        tone(150, 1.68, 0.18, "sine", 0.25, 55);
+        noise(1.68, 0.1, 0.12, 400);
         break;
       case "wrench":
         for (let i = 0; i < 4; i++) tone(2800 + (i % 2) * 300, i * 0.06, 0.025, "square", 0.025);
