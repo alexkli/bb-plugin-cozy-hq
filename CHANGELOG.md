@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.3 (2026-11-19)
+
+- **Hear the shock**: when someone pokes at the server cables, the zap now crackles and buzzes, and they hit the floor with a thud. It used to play as a quiet background sound (muted with ambient sounds off) and was mostly a hum laptop speakers can't play.
+- **Villain's Lair map aims where you click**: the pizza goes to the city you clicked, or to the exact spot by its coordinates (`TARGET: 34N 120W`) when no city is near, instead of a random city.
+
 ## 0.6.2 (2026-11-17)
 
 Getting around: shorter walks, your own desk, and a shortcut to the office.
