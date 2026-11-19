@@ -43,8 +43,6 @@ import { Cabinet } from "./arcade/Cabinet.tsx";
 import { agentRect, Guide, guideSteps } from "./Guide.tsx";
 import { AudioLead } from "./audioLead.ts";
 
-const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-
 export const TOPIC_EMOJI: Record<Topic, string> = {
   game: "🎮",
   auth: "🔑",
@@ -2079,10 +2077,6 @@ function SettingsPanel(props: {
         <span>Office buddy</span>
         <small>an agent strolls in a corner of bb wherever you are; click it to come back here</small>
       </label>
-      <p className="chq-settings-hint">
-        <b>In its own window:</b> {MAC ? "⌘⇧N" : "Ctrl+Shift+N"} opens a new bb window (File → New Window), then{" "}
-        {MAC ? "⌘⇧H" : "Ctrl+Shift+H"} brings the office there. Only the office you're looking at makes sound.
-      </p>
       <div className="chq-settings-label">You</div>
       <YouRow you={props.you} theme={props.scenery} onChange={props.onYou} onCustomize={props.onCustomize} />
       <div className="chq-settings-label">Scenery</div>

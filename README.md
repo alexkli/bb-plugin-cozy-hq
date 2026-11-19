@@ -38,7 +38,8 @@ back").
 To keep the office in its own window (say, on a second screen) in the bb
 desktop app, open a new bb window with **Cmd+Shift+N** (File → New Window),
 then press **Cmd+Shift+H** there. A plugin can't open a bb window itself, so
-this takes the two shortcuts. Only an office you can see makes sound: none
+this takes the two shortcuts; the new-window button in the office's title bar
+shows them. Only an office you can see makes sound: none
 while you're in a thread, and with the office open in several windows, the
 one you clicked or focused last.
 

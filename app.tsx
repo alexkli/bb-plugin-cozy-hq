@@ -14,6 +14,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import type { InboxItem, RpcContract, Story, UsageCard, Weather } from "./contract.ts";
 import { lookKey, OfficeView, type OfficeThread } from "./office/OfficeView.tsx";
+import { NewWindowButton } from "./office/NewWindow.tsx";
 import { Buddy, freshSince, newsLevel, readLook } from "./office/Buddy.tsx";
 import { visibleThreads, type InteractionKind } from "./office/model.ts";
 import { updateOpened } from "./office/highlight.ts";
@@ -325,6 +326,7 @@ export default definePluginApp((app) => {
     icon: "cozy-hq/office",
     path: "office",
     component: OfficePanel,
+    headerContent: NewWindowButton,
     experimental_useBadge: useNewsBadge,
   });
   app.slots.experimental_appOverlay({ id: "buddy", component: BuddyOverlay });

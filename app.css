@@ -1327,5 +1327,38 @@
 @media (prefers-reduced-motion: reduce) {
   .chq-guide-ring, .chq-guide-card { animation: none; }
 }
-.chq-settings-hint { margin: 10px 0 0; font-size: 11px; line-height: 1.4; color: #8a7a8e; }
-.chq-settings-hint b { color: inherit; font-weight: 700; }
+/* Title bar: open the office in a new window (explains the shortcuts). */
+.chq-newwin {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-foreground, currentColor);
+  cursor: pointer;
+}
+.chq-newwin:hover, .chq-newwin.is-open { background: var(--accent, rgba(127, 127, 127, 0.15)); color: var(--foreground, currentColor); }
+.chq-newwin-pop {
+  position: fixed;
+  z-index: 100000;
+  width: 280px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #c9bda9);
+  border-radius: 8px;
+  background: var(--popover, var(--background, #fff));
+  color: var(--popover-foreground, var(--foreground, #222));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.chq-newwin-pop ol { margin: 6px 0; padding-left: 18px; list-style: decimal; }
+.chq-newwin-pop li { margin: 3px 0; }
+.chq-newwin-pop p { margin: 6px 0 0; color: var(--muted-foreground, #777); }
+.chq-newwin-pop kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--border, #c9bda9);
+  border-radius: 4px;
+  font: 600 11px/1.4 ui-monospace, monospace;
+}
