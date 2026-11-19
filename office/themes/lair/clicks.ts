@@ -11,7 +11,7 @@
 import type { Drawable, GatherCue, GatherSpot, Gathering, Light, PaintInfo, SceneryActions, SceneryClickable } from "../../theme.ts";
 import type { Layout } from "../../layout.ts";
 import { cached, drawPixelText, Grid, OUTLINE, pixelTextWidth, rect } from "../../themekit.ts";
-import { CITIES, mapPoint } from "./atlas.ts";
+import { CITIES, mapLonLat, mapPoint } from "./atlas.ts";
 import { fluffyCat } from "./critters.ts";
 import { C } from "./kit.ts";
 import { planOf, type LairPlan } from "./plan.ts";
@@ -46,7 +46,7 @@ let forL: Layout | null = null;
 let fx: { kind: "confetti" | "alert" | "disco"; t0: number } | null = null;
 let swivel: { t0: number } | null = null;
 let pit: { t0: number; g: Gathering | null; shut?: number } | null = null;
-let target: { t0: number; city: (typeof CITIES)[number] } | null = null;
+let target: { t0: number; name: string; lon: number; lat: number } | null = null;
 let countdown: { t0: number } | null = null;
 let train: { t0: number; passenger: Passenger } | null = null;
 let lava: { kind: LavaKind; t0: number; x: number }[] = [];
@@ -167,13 +167,25 @@ function openPit(plan: LairPlan, act: SceneryActions): string | null {
   return "lair-trapdoor";
 }
 
+/** A city this close to the click (map px) gets the pizza; anywhere else is aimed at by its coordinates. */
+const SNAP = 8;
+
 function clickMap(plan: LairPlan, act: SceneryActions): string {
-  const city = pick(CITIES.filter((c) => c !== target?.city));
-  target = { t0: act.t, city };
   const m = plan.map;
+  const dist = (c: (typeof CITIES)[number]) => {
+    const p = mapPoint(m, c[1], c[2]);
+    return Math.hypot(p.x - act.at.x, p.y - act.at.y);
+  };
+  const city = CITIES.reduce((a, b) => (dist(b) < dist(a) ? b : a));
+  if (dist(city) <= SNAP) target = { t0: act.t, name: city[0], lon: city[1], lat: city[2] };
+  else {
+    const { lon, lat } = mapLonLat(m, act.at.x, act.at.y);
+    const name = `${Math.round(Math.abs(lat))}${lat < 0 ? "S" : "N"} ${Math.round(Math.abs(lon))}${lon < 0 ? "W" : "E"}`;
+    target = { t0: act.t, name, lon, lat };
+  }
   const who = act.near(m.x + m.w / 2, m.y + m.h + 60, 140)[0];
   if (who) {
-    act.say(who.id, `${W.targetPrefix}${city[0]}.`, 2.6, 2.2);
+    act.say(who.id, `${W.targetPrefix}${target.name}.`, 2.6, 2.2);
     act.say(who.id, pick(W.target), 2.8, 5.2);
   }
   return "lair-target";
@@ -540,7 +552,7 @@ function drawTarget(ctx: Ctx, plan: LairPlan, t: number): void {
     return;
   }
   const m = plan.map;
-  const p = mapPoint(m, target.city[1], target.city[2]);
+  const p = mapPoint(m, target.lon, target.lat);
   // The reticle closes in.
   const s = Math.max(3, Math.round(24 * (1 - Math.min(1, tt / 1.4))) + 3);
   const on = tt > 1.4 ? Math.floor(t * 6) % 2 === 0 : true;
@@ -568,7 +580,7 @@ function drawTarget(ctx: Ctx, plan: LairPlan, t: number): void {
     ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
   }
   // The caption along the bottom of the map.
-  const text = tt > 3.8 ? `DELIVERED: ${target.city[0]}` : `TARGET: ${target.city[0]}`;
+  const text = tt > 3.8 ? `DELIVERED: ${target.name}` : `TARGET: ${target.name}`;
   const tw = pixelTextWidth(text);
   if (tw + 6 <= m.w && (tt < 3.8 || Math.floor(t * 3) % 2 === 0)) {
     rect(ctx, m.x + 2, m.y + m.h - 9, tw + 4, 7, "#00000099");

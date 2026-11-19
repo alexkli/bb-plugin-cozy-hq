@@ -41,6 +41,13 @@ export function mapPoint(map: Rect, lon: number, lat: number): { x: number; y: n
   return { x: Math.round(map.x + 2 + u * (map.w - 4)), y: Math.round(map.y + 2 + Math.max(0, Math.min(1, v)) * (map.h - 4)) };
 }
 
+/** The longitude and latitude at a point on the map rect (the inverse of `mapPoint`). */
+export function mapLonLat(map: Rect, x: number, y: number): { lon: number; lat: number } {
+  const u = Math.max(0, Math.min(1, (x - map.x - 2) / (map.w - 4)));
+  const v = Math.max(0, Math.min(1, (y - map.y - 2) / (map.h - 4)));
+  return { lon: u * 360 - 180, lat: 80 - v * 150 };
+}
+
 /** Cities that get a pizza when the map "targets" them. */
 export const CITIES: [string, number, number][] = [
   ["Lisbon", -9, 38.7],
