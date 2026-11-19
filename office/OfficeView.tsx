@@ -2067,7 +2067,7 @@ function SettingsPanel(props: {
           onChange={(e) => props.onChange({ ...prefs, ambient: e.target.checked })}
         />
         <span>Ambient sounds</span>
-        <small>ping-pong, fish tank, coffee, roomba</small>
+        <small>ping-pong, fish tank, coffee, roomba, typing</small>
       </label>
       <button type="button" className="chq-sound-test" disabled={!prefs.on} onClick={props.onTest}>
         ♪ Play a test sound

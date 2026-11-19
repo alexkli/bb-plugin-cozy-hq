@@ -71,6 +71,7 @@ export type SoundName =
   | "putt"
   | "cup"
   | "clack"
+  | "typing"
   | "clank"
   | "swish"
   // The arcade's games
@@ -90,7 +91,7 @@ export type SoundName =
 const QUICK = new Set<SoundName>(["blip", "bonk", "chomp", "pew", "pop", "boom", "miss", "point", "select"]);
 
 /** Quiet background sounds play softer than event sounds. */
-const AMBIENT = new Set<SoundName>(["pingpong", "bubble", "coffee", "roomba", "purr", "door", "marker", "toss", "giggle", "whistle", "walkie", "wrench", "drill", "fixed"]);
+const AMBIENT = new Set<SoundName>(["pingpong", "bubble", "coffee", "roomba", "purr", "door", "marker", "toss", "giggle", "whistle", "walkie", "wrench", "drill", "fixed", "typing"]);
 
 /** Building blocks a theme's sound recipes use. */
 export interface Synth {
@@ -326,6 +327,19 @@ export class Sound {
         tone(240, 0, 0.09, "sine", 0.22, 150);
         [0.08, 0.15, 0.2, 0.24, 0.27].forEach((t0, i) => tone(1700 - i * 120, t0, 0.025, "square", 0.04 - i * 0.006));
         break;
+      case "typing": {
+        // A run of keystrokes at an uneven pace: a sharp tick on top of a
+        // short thock, now and then the space bar.
+        let at = 0;
+        const n = 4 + Math.floor(Math.random() * 6);
+        for (let i = 0; i < n; i++) {
+          const space = Math.random() < 0.15;
+          noise(at, 0.018, space ? 0.09 : 0.07, space ? 1400 : 3200 + Math.random() * 1800);
+          tone(space ? 180 : 260 + Math.random() * 120, at, 0.025, "triangle", 0.05);
+          at += 0.07 + Math.random() * 0.11 + (Math.random() < 0.12 ? 0.25 : 0);
+        }
+        break;
+      }
       case "clack":
         // Newton's cradle: clack… clack… dying away.
         for (let i = 0; i < 6; i++) {

@@ -427,8 +427,12 @@ function drawRainCloud(ctx: CanvasRenderingContext2D, bx: number, by: number): v
 }
 
 /** The two highlight tints, warm gold and cool sky blue: a saturated rim that shows on pale floors, and a lighter haze around it. */
-const GLOW: Record<Highlight, string> = { finished: "#ffb23c", started: "#4fb8ff" };
-const GLOW_HAZE: Record<Highlight, string> = { finished: "#ffdf80", started: "#a0e8ff" };
+const GLOW: Record<Highlight, string> = { finished: "#ffb23c", started: "#4fb8ff", drafting: "#b779ff" };
+/** How far the highlight rim reaches past the figure, in px. */
+const RIM = 3;
+/** Where the sparkles twinkle, from the top of the figure's head (x from its middle). */
+const SPARKLE_SPOTS: readonly (readonly [number, number])[] = [[-10, 2], [9, 0], [-7, -4], [6, -5], [11, 7], [-12, 9], [0, -7], [-3, -6], [3, -3]];
+const GLOW_HAZE: Record<Highlight, string> = { finished: "#ffdf80", started: "#a0e8ff", drafting: "#e2c6ff" };
 
 const SEATED_KINDS = new Set(["desk", "couch", "beanbag", "armchair", "meeting-seat", "review", "boss-guest", "stool", "bench"]);
 
@@ -446,6 +450,8 @@ export class World {
   private fish: Fish[] = [];
   private strokes: Stroke[] = [];
   private nextStroke = 0;
+  /** When the next burst of typing from the desks is heard (this.time). */
+  private nextKeys = 0;
   private wipeUntil = 0;
   private ballT = 0;
   private lastHitSide = 0;
@@ -1551,6 +1557,7 @@ export class World {
     this.updateFish(dt);
     this.updatePingPong(dt);
     this.updateWhiteboard();
+    this.updateTyping();
     this.updateVisitors(dt);
     this.updateKids(dt);
     this.updateEvent(dt);
@@ -1661,6 +1668,22 @@ export class World {
     this.addStroke(false);
     this.nextStroke = t + 2.2 / drawing.length + this.rand() * 1.5;
     this.emit("marker", true);
+  }
+
+  /** A soft clatter of keys now and then while anyone works at a desk (an ambient sound). */
+  private updateTyping(): void {
+    const t = this.time;
+    if (t < this.nextKeys) return;
+    const typists = [...this.agents.values()].filter(
+      (a) => a.spot?.kind === "desk" && a.path.length === 0 && a.thread.mood === "working" && !a.thread.visionPro && !a.leaving,
+    ).length;
+    if (typists === 0) {
+      this.nextKeys = t + 1;
+      return;
+    }
+    this.emit("typing", true);
+    // More typists, more often, but never a wall of noise.
+    this.nextKeys = t + (2.6 + this.rand() * 3) / Math.min(3, Math.sqrt(typists));
   }
 
   private addStroke(byHand: boolean): void {
@@ -4256,6 +4279,7 @@ export class World {
     const glow = this.glowOf(a);
     if (glow) this.drawGlow(ctx, a, glow, sprite, y, seated === true);
     ctx.drawImage(sprite, Math.round(a.x - ANCHOR_X), Math.round(y - ANCHOR_Y));
+    if (glow) this.drawSparkles(ctx, a, glow, y);
     if (this.theme.dress && m?.phase !== "zap") {
       const seatedNow = onChair === true || (settled && s !== null && SEATED_KINDS.has(s.kind));
       this.theme.dress(ctx, { x: Math.round(a.x - ANCHOR_X), y: Math.round(y - ANCHOR_Y), facing, pose, seed: a.seed, seated: seatedNow, look: this.lookOf(a.thread.look, a.id), spot: settled && s ? s.id : null, id: a.id }, this.time);
@@ -4352,21 +4376,50 @@ export class World {
     return highlightOf(a.thread.mood, a.thread.unopened === true, a.started);
   }
 
-  /** A faint rim of light around them (and a soft pool at their feet when standing), breathing slowly. */
+  /** A bright rim of light around them (and a pool at their feet when standing), breathing. */
   private drawGlow(ctx: CanvasRenderingContext2D, a: Agent, glow: Highlight, sprite: HTMLCanvasElement, y: number, seated: boolean): void {
-    const breath = 0.5 + 0.5 * Math.sin(this.time * 2.1 + (a.seed % 7));
+    const breath = 0.5 + 0.5 * Math.sin(this.time * 2.6 + (a.seed % 7));
     ctx.save();
     if (!seated) {
       const x = Math.round(a.x);
       const fy = Math.round(a.y);
+      ctx.fillStyle = GLOW_HAZE[glow];
+      ctx.globalAlpha = 0.22 + 0.18 * breath;
+      ctx.fillRect(x - 13, fy - 2, 27, 4);
+      ctx.fillRect(x - 9, fy - 3, 19, 6);
       ctx.fillStyle = GLOW[glow];
-      ctx.globalAlpha = 0.18 + 0.14 * breath;
-      ctx.fillRect(x - 9, fy - 1, 19, 2);
-      ctx.fillRect(x - 6, fy - 2, 13, 4);
-      ctx.fillRect(x - 4, fy - 1, 9, 2);
+      ctx.globalAlpha = 0.35 + 0.25 * breath;
+      ctx.fillRect(x - 8, fy - 1, 17, 2);
+      ctx.fillRect(x - 5, fy - 2, 11, 4);
     }
-    ctx.globalAlpha = 0.6 + 0.4 * breath;
-    ctx.drawImage(this.rimOf(sprite, glow), Math.round(a.x - ANCHOR_X) - 2, Math.round(y - ANCHOR_Y) - 2);
+    ctx.globalAlpha = 0.82 + 0.18 * breath;
+    ctx.drawImage(this.rimOf(sprite, glow), Math.round(a.x - ANCHOR_X) - RIM, Math.round(y - ANCHOR_Y) - RIM);
+    ctx.restore();
+  }
+
+  /** A few pixel sparkles twinkling round the head, so a highlighted agent catches the eye at a glance. */
+  private drawSparkles(ctx: CanvasRenderingContext2D, a: Agent, glow: Highlight, y: number): void {
+    const x0 = Math.round(a.x);
+    const top = Math.round(y - ANCHOR_Y);
+    ctx.save();
+    for (let i = 0; i < 3; i++) {
+      // Each sparkle flares and fades in turn, at its own spot round the head.
+      const phase = (this.time * 1.3 + i / 3 + (a.seed % 11) / 11) % 1;
+      const k = Math.sin(phase * Math.PI);
+      if (k < 0.15) continue;
+      const slot = (Math.floor(this.time * 1.3 + i / 3 + (a.seed % 11) / 11) * 3 + i + a.seed) % SPARKLE_SPOTS.length;
+      const [dx, dy] = SPARKLE_SPOTS[slot]!;
+      const sx = x0 + dx;
+      const sy = top + dy - Math.round(phase * 3);
+      ctx.globalAlpha = k;
+      ctx.fillStyle = GLOW_HAZE[glow];
+      ctx.fillRect(sx - 1, sy, 3, 1);
+      ctx.fillRect(sx, sy - 1, 1, 3);
+      if (k > 0.7) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(sx, sy, 1, 1);
+      }
+    }
     ctx.restore();
   }
 
@@ -4378,20 +4431,21 @@ export class World {
     if (hit) return hit;
     const grown = (ring: readonly (readonly [number, number])[], color: string) => {
       const c = document.createElement("canvas");
-      c.width = sprite.width + 4;
-      c.height = sprite.height + 4;
+      c.width = sprite.width + RIM * 2;
+      c.height = sprite.height + RIM * 2;
       const x = ctx2d(c);
-      for (const [dx, dy] of ring) x.drawImage(sprite, 2 + dx, 2 + dy);
+      for (const [dx, dy] of ring) x.drawImage(sprite, RIM + dx, RIM + dy);
       x.globalCompositeOperation = "source-in";
       x.fillStyle = color;
       x.fillRect(0, 0, c.width, c.height);
       return c;
     };
-    const rim = grown([[-1, 0], [1, 0], [0, -1], [0, 1]], GLOW[glow]);
+    // Two crisp pixels of the glow color, then a softer third of haze.
+    const rim = grown([[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1], [-2, 0], [2, 0], [0, -2], [0, 2]], GLOW[glow]);
     const x = ctx2d(rim);
     x.globalCompositeOperation = "destination-over";
-    x.globalAlpha = 0.5;
-    x.drawImage(grown([[-2, 0], [2, 0], [0, -2], [0, 2], [-1, -1], [1, -1], [-1, 1], [1, 1]], GLOW_HAZE[glow]), 0, 0);
+    x.globalAlpha = 0.6;
+    x.drawImage(grown([[-3, 0], [3, 0], [0, -3], [0, 3], [-2, -1], [2, -1], [-2, 1], [2, 1], [-1, -2], [1, -2], [-1, 2], [1, 2], [-2, -2], [2, -2], [-2, 2], [2, 2]], GLOW_HAZE[glow]), 0, 0);
     byGlow.set(glow, rim);
     return rim;
   }

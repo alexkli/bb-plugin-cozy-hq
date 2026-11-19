@@ -10,8 +10,8 @@
 
 import { moodOf, type Mood, type ThreadLike } from "./model.ts";
 
-/** Warm: finished, new for you. Cool: got to work since you last looked. */
-export type Highlight = "finished" | "started";
+/** Warm: finished, new for you. Cool: got to work since you last looked. Violet: you're writing to it (it sits in your office). */
+export type Highlight = "finished" | "started" | "drafting";
 
 /** What we know about one thread beyond bb's own fields. */
 export interface Opened {
@@ -112,6 +112,7 @@ export function keepsStarted(was: boolean, from: Mood | null, to: Mood): boolean
 /** The glow an agent wears right now: a new finish until opened, a start for as long as it works (positional: called every frame). */
 export function highlightOf(mood: Mood, unopened: boolean, started: boolean): Highlight | null {
   if (unopened) return "finished";
+  if (mood === "drafting") return "drafting";
   if (started && isWork(mood)) return "started";
   return null;
 }

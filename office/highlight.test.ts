@@ -149,3 +149,9 @@ test("starting work glows on the way to the desk and while it works there", () =
   assert.equal(highlightOf("working", false, false), null, "moving desks is not news");
   assert.equal(highlightOf("done", true, false), "finished", "walking to the waiting room and sitting there");
 });
+
+test("you writing to a thread lights it violet in your office; a new finish still comes first", () => {
+  assert.equal(highlightOf("drafting", false, false), "drafting");
+  assert.equal(highlightOf("drafting", false, true), "drafting");
+  assert.equal(highlightOf("drafting", true, false), "finished");
+});
