@@ -42,13 +42,20 @@ test("an archived thread walks out even when the floor plan shrinks behind it", 
   assert.deepEqual([...agents.keys()].sort(), ["t0", "t1", "t2", "t3"]);
 });
 
-test("errands between the desk and the waiting room are brisk; a coffee break isn't", () => {
+test("they run to and from the desk; a stroll from the coffee to the couch is a walk", () => {
   const world = new World(() => {});
   world.setLayout(buildLayout(900, 420, { threads: 8 }), "8");
-  const agents = (world as unknown as { agents: Map<string, { brisk: boolean; path: unknown[] }> }).agents;
+  const agents = (world as unknown as { agents: Map<string, { pace: number; path: unknown[] }> }).agents;
+  // A newcomer who starts working walks in from the door at a run.
+  world.sync([thread(0), thread(1)], false);
+  assert.ok(agents.get("t0")!.path.length > 0 && agents.get("t0")!.pace > 2);
   world.sync([thread(0), thread(1)], true);
-  // t0 needs you: off to the waiting room. t1 is done for now: a coffee.
+  // t0 needs you: off to the waiting room. t1 is done for now: a coffee. Both leave the desk at a run.
   world.sync([{ ...thread(0), mood: "needs-you", spotId: "wait-0-0-n0" }, { ...thread(1), mood: "idle", spotId: "coffee" }], false);
-  assert.ok(agents.get("t0")!.path.length > 0 && agents.get("t0")!.brisk);
-  assert.ok(agents.get("t1")!.path.length > 0 && !agents.get("t1")!.brisk);
+  assert.ok(agents.get("t0")!.path.length > 0 && agents.get("t0")!.pace > 2);
+  assert.ok(agents.get("t1")!.path.length > 0 && agents.get("t1")!.pace > 2);
+  // From the coffee to the couch: a stroll.
+  world.sync([{ ...thread(0), mood: "needs-you", spotId: "wait-0-0-n0" }, { ...thread(1), mood: "idle", spotId: "coffee" }], true);
+  world.sync([{ ...thread(0), mood: "needs-you", spotId: "wait-0-0-n0" }, { ...thread(1), mood: "idle", spotId: "couch-1" }], false);
+  assert.ok(agents.get("t1")!.path.length > 0 && agents.get("t1")!.pace === 1);
 });

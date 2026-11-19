@@ -171,8 +171,8 @@ interface Agent extends Walker {
   huddle: number | null;
   /** Shuffling along after a mishap. */
   slow: boolean;
-  /** On a work errand (desk ↔ waiting room, meeting room, your office): a brisker pace. */
-  brisk: boolean;
+  /** Pace on this walk: a run to or from the desk, brisk on other work errands, else 1. */
+  pace: number;
   /** Got to work since you last looked: a cool glow until the work ends. */
   started: boolean;
 }
@@ -398,8 +398,10 @@ export interface ClickTarget {
 
 const WALK_SPEED = 32; // px/s
 const SLOW_SPEED = 11;
-/** Work doesn't wait: between desks and the waiting room, meeting room or your office. */
+/** Work doesn't wait: between the waiting room, meeting room and your office. */
 const BRISK = 1.3;
+/** To or from the desk they run, so they're there before the thread answers. */
+const RUN = 2.3;
 const WORK_GROUPS: ReadonlySet<string> = new Set(["desk", "review", "present", "meeting", "boss"]);
 const NPC_SPEED = 24;
 const KID_SPEED = 40;
@@ -912,7 +914,7 @@ export class World {
           nextHobby: this.time + 4 + (hash(t.id) % 7),
           huddle: null,
           slow: false,
-          brisk: false,
+          pace: 1,
           started: false,
           // Everyone walks a little differently: their own lane, corner cutting and pace.
           lane: { x: ((hash(t.id) >>> 2) % 11) - 5, y: ((hash(t.id) >>> 6) % 9) - 4 },
@@ -1003,7 +1005,14 @@ export class World {
 
   private walkTo(a: Agent, spot: Spot): void {
     const from = a.spot?.group ?? this.spotById(a.target)?.group;
-    a.brisk = from !== undefined && WORK_GROUPS.has(from) && WORK_GROUPS.has(spot.group) && a.huddle === null;
+    a.pace =
+      a.huddle !== null
+        ? 1
+        : spot.group === "desk" || from === "desk"
+          ? RUN
+          : from !== undefined && WORK_GROUPS.has(from) && WORK_GROUPS.has(spot.group)
+            ? BRISK
+            : 1;
     a.path = route(a, this.L!.net, spot.path);
     a.spot = null;
     a.target = spot.id;
@@ -1490,7 +1499,7 @@ export class World {
     this.time += dt;
     const t = this.time;
     for (const a of [...this.agents.values()]) {
-      if (a.path.length > 0 && step(a, dt, a.slow ? SLOW_SPEED : WALK_SPEED * (a.brisk ? BRISK : 1) * (0.82 + ((a.seed >>> 11) % 36) / 100))) {
+      if (a.path.length > 0 && step(a, dt, a.slow ? SLOW_SPEED : WALK_SPEED * a.pace * (0.82 + ((a.seed >>> 11) % 36) / 100))) {
         if (a.leaving) {
           this.agents.delete(a.id);
           this.doorOpenUntil = this.time + 1.2;
