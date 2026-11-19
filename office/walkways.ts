@@ -130,6 +130,11 @@ function link(adj: Edge[][] | Map<number, Edge[]>, u: number, v: number, d: numb
   }
 }
 
+/** The floor plan's walkways (for a look at them), or null when they haven't been learned. */
+export function walkwaysOf(net: Network): readonly { a: Point; b: Point }[] | null {
+  return known.get(net)?.segs ?? null;
+}
+
 /** The floor plan's walled rooms, or null when its walkways haven't been learned. */
 export function wallsOf(net: Network): readonly Rect[] | null {
   return known.get(net)?.walled ?? null;

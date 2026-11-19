@@ -33,6 +33,7 @@ import { isUnopened, NO_RECORD, noteOpened, updateOpened, type OpenedRecord } fr
 import { ctx2d, hash } from "./pixel.ts";
 import { Sound, type SoundName } from "./sound.ts";
 import { familiesOf, subagentsOf } from "./subagents.ts";
+import { walkwaysOf } from "./walkways.ts";
 import { World, type Hit, type LabelAnchor, type SeenState, type SpeechBubble, type Talk, type WorldThread } from "./world.ts";
 import { chairToneFor } from "./desks.ts";
 import { relabel, withPets, type Theme, type ThemeLabels } from "./theme.ts";
@@ -349,7 +350,7 @@ export function OfficeView(input: OfficeProps) {
   }, [input, debug.sample, debug.news, debug.patch]);
   const { threads } = props;
   useEffect(() => {
-    if (debug.expose) (window as unknown as { __cozyHq?: unknown }).__cozyHq = worldRef.current;
+    if (debug.expose) Object.assign(window, { __cozyHq: worldRef.current, __cozyWalkways: walkwaysOf });
   }, [debug.expose]);
 
   useEffect(() => {
