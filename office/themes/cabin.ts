@@ -59,8 +59,8 @@ export const CABIN: Theme = {
   look: (l, id) => look(l, id),
   npc,
   pose: (p, info) => liftPose(p, info),
-  // Off the kicker.
-  drift: (who) => liftDrift(who),
+  // Off the kicker, or wobbling on foot on the piste.
+  drift: (who, info) => liftDrift(who, info),
   dress: (ctx, a, t) => dress(ctx, a, t),
   dressVisitor: (ctx, v) => dressVisitor(ctx, v),
   pet: (kind, pose, facing, blink) => pet(kind, pose, facing, blink),

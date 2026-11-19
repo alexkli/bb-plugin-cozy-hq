@@ -530,6 +530,25 @@ function stripLift(W: number, s: Rect): SkiLift {
   };
 }
 
+/**
+ * The walk out to the bottom station: along the hallway onto the piste, down
+ * its far edge from the lift (not under the chairs), across above the hut
+ * and the foot of the piste, and over to the bull wheel. Straight down the
+ * side by the lift (`side`) when the hallway meets the piste lower down.
+ */
+function wayDown(l: SkiLift, from: number, hall: number, side: number): Point[] {
+  const s = l.piste;
+  const h = l.hut;
+  const wx = s.x + 4;
+  let yb = Math.min(s.y + s.h - 4, l.bottom.y);
+  if (h.x < s.x + s.w && h.x + h.w > s.x) yb = Math.min(yb, h.y - 4);
+  const pts: Point[] =
+    hall < yb - 20 && wx < side - 8
+      ? [{ x: from, y: hall, c: true }, { x: wx, y: hall }, { x: wx, y: yb }, { x: side, y: yb }, { x: side, y: l.bottom.y }, { ...l.bottom }]
+      : [{ x: from, y: hall, c: true }, { x: side, y: hall }, { x: side, y: l.bottom.y }, { ...l.bottom }];
+  return pts.filter((p, i) => i === 0 || p.x !== pts[i - 1]!.x || p.y !== pts[i - 1]!.y);
+}
+
 /** A skier's walk back in from the finish: to the hallway, along it to the nearest door, in at the wall. */
 function walkHome(p: CabinPlan, from: Point, hall: number): Point[] {
   const w = p.deckWall;
@@ -854,7 +873,7 @@ function widePlan(W: number, H: number, threads: number): Layout {
     const hall = front ? halls[1]! : hy;
     const side = lift.bottom.x - 13;
     const from = front ? Math.min(XI - 10, side) : plan.deck ? plan.deck.x + plan.deck.w - 10 : XI + 4;
-    lift.way = [{ x: from, y: hall, c: true }, { x: side, y: hall }, { x: side, y: lift.bottom.y }, { ...lift.bottom }];
+    lift.way = wayDown(lift, from, hall, side);
     lift.home = walkHome(plan, lift.finish, hall);
   }
   // When the desks are full the rest squeeze in: by the fire, on the window seat and the boot bench, on kitchen stools, out on the deck.

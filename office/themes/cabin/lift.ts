@@ -154,6 +154,7 @@ function bind(L: Layout): SkiLift | null {
     party = null;
     skiing.clear();
     gliders.clear();
+    wobbly.clear();
   }
   cur = planOf(L)?.lift ?? null;
   return cur;
@@ -182,6 +183,10 @@ function onLine(l: SkiLift, x: number, y: number): boolean {
 export function liftPose(p: PoseOf, info: PaintInfo): { pose: CharPose; expr: Expression; facing?: Facing } | null {
   const l = cur;
   if (!l || p.kind !== "agent") return null;
+  // On foot on the piste: wobbly in ski boots (see liftDrift).
+  const r = riderOf(p.id);
+  if (p.spot === null && inside(l.piste, p.x, p.y) && !onLine(l, p.x, p.y) && !(r && gliding(l, r, p.x, p.y))) wobbly.add(p.id);
+  else wobbly.delete(p.id);
   if (p.spot === null && onLine(l, p.x, p.y)) {
     if (l.axis === "y" && p.facing === "back") return { pose: "sit-back", expr: p.expr, facing: "back" };
     return { pose: "slump", expr: Math.floor(info.t * 0.7 + p.seed) % 5 === 0 ? "blink" : "happy", facing: "front" };
@@ -491,21 +496,39 @@ export function liftDecor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
   if (sp !== null) busy.push(sp);
   const len = vertical ? l.bottom.y - l.top.y : l.top.x - l.bottom.x;
   const free = (v: number) => !busy.some((b) => Math.abs(b - v) < 26);
-  for (let i = 0; i * GAP < len; i++) {
-    const u = (((run + i * GAP) % len) + len) % len;
-    const d = (((run + i * GAP + GAP / 2) % len) + len) % len;
-    if (vertical) {
-      const yu = l.bottom.y - u;
-      const yd = l.top.y + d;
-      if (u > 4 && u < len - 4 && free(yu)) out.push({ z: yu - 1, draw: () => chairAt(ctx, l.bottom.x, yu, false, swing(t, i), true) });
-      if (d > 4 && d < len - 4) out.push({ z: yd - 1, draw: () => chairAt(ctx, l.bottom.x + 12, yd, true, swing(t, i + 0.5), true) });
+  // One loop of cable: up, round the top bull wheel, down, round the bottom one.
+  const R = vertical ? 6 : 2;
+  const arc = Math.PI * R;
+  const P = 2 * len + 2 * arc;
+  const N = Math.max(2, Math.round(P / GAP));
+  for (let i = 0; i < N; i++) {
+    const s = (((run + (i * P) / N) % P) + P) % P;
+    const sw = swing(t, i);
+    let x: number;
+    let g: number;
+    let front: boolean;
+    let up = false;
+    if (s < len) {
+      up = true;
+      [x, g, front] = vertical ? [l.bottom.x, l.bottom.y - s, false] : [l.bottom.x + s, l.bottom.y, true];
+    } else if (s < len + arc) {
+      // Round the top wheel: behind it, from the up side over to the down side.
+      const a = ((s - len) / arc) * Math.PI;
+      if (vertical) [x, g, front] = [l.bottom.x + R - Math.cos(a) * R, l.top.y - Math.sin(a) * 2, a > Math.PI / 2];
+      else [x, g, front] = [l.top.x + Math.sin(a) * 4, l.bottom.y - R + Math.cos(a) * R, true];
+    } else if (s < 2 * len + arc) {
+      const d = s - len - arc;
+      [x, g, front] = vertical ? [l.bottom.x + 12, l.top.y + d, true] : [l.top.x - d, l.bottom.y - 4, true];
     } else {
-      const xu = l.bottom.x + u;
-      const xd = l.top.x - d;
-      const g = l.bottom.y;
-      if (d > 4 && d < len - 4) out.push({ z: g - 5, draw: () => chairAt(ctx, xd, g - 4, true, swing(t, i + 0.5), false) });
-      if (u > 4 && u < len - 4 && free(xu)) out.push({ z: g - 1, draw: () => chairAt(ctx, xu, g, true, swing(t, i), false) });
+      // Round the bottom wheel, in front of it, back to the up side.
+      const a = ((s - 2 * len - arc) / arc) * Math.PI;
+      if (vertical) [x, g, front] = [l.bottom.x + R + Math.cos(a) * R, l.bottom.y + Math.sin(a) * 2, a < Math.PI / 2];
+      else [x, g, front] = [l.bottom.x - Math.sin(a) * 4, l.bottom.y - R - Math.cos(a) * R, true];
     }
+    if (up && !free(vertical ? g : x)) continue;
+    const X = Math.round(x);
+    const G = Math.round(g);
+    out.push({ z: G - 1, draw: () => chairAt(ctx, X, G, front, sw, vertical) });
   }
   if (sp !== null && special) {
     const kind = special.kind;
@@ -923,6 +946,8 @@ let party: Party | null = null;
 /** Per skier this frame: what they're doing, for `dress` (asked right after the pose). */
 const skiing = new Map<string, { mode: "top" | "piste" | "carry"; board: boolean; accent: string; facing: Facing; turn: number }>();
 const gliders = new Map<string, { last: Point | null; sign: number; on: boolean }>();
+/** Walking on the piste this frame (asked by `drift` the next). */
+const wobbly = new Set<string>();
 
 const ACCENTS = [C.red, C.mustard, "#e86aa8", "#3a8ad8", "#4fbf7a"];
 
@@ -978,7 +1003,9 @@ function leaveOf(l: SkiLift, r: Rider): NonNullable<GatherSpot["leave"]> {
   for (let u = u0 + 4; u < u1; u += 4) glide.push(at(l, u, lineOf(l, r, u)));
   glide.push({ ...r.end });
   const w = l.way;
-  const walk: Point[] = w.length >= 2 ? [{ x: w[w.length - 2]!.x, y: r.end.y }, ...w.slice(0, -1).reverse().map((p) => ({ ...p }))] : [];
+  // Back up the far edge of the piste (the way they walked out), to the hallway.
+  const up = w.length >= 3 ? [w[1]!, w[0]!] : w.slice(0, 1);
+  const walk: Point[] = up.length > 0 ? [{ x: up[0]!.x, y: r.end.y }, ...up.map((p) => ({ ...p }))] : [];
   return { glide, pace: r.board ? BOARD_PACE : SKI_PACE, walk };
 }
 
@@ -1008,8 +1035,18 @@ function startParty(act: SceneryActions, l: SkiLift, n: number, min: number): bo
   const g = act.gather(spots, 4, cues, min);
   if (!g) return false;
   party = { g, riders: rs.slice(0, g.size), goneAt: null, cheered: false };
+  // Off they go, saying so (and carrying their skis or board from the start).
+  g.ids.forEach((id, i) => {
+    const board = party!.riders[i]?.board;
+    act.say(id, pick(board ? SAY_OFF.board : SAY_OFF.ski), 2.4, 0.15 + i * 0.8);
+  });
   return true;
 }
+
+const SAY_OFF = {
+  ski: ["Skiing, anyone?", "Grabbing my skis!", "To the slopes!", "Fresh powder!", "I'm in. Skis on!"],
+  board: ["Board time!", "Grabbing my board!", "Let's shred!", "Powder day!", "I'm in. Board's waxed!"],
+};
 
 /** Someone in the party, and their rider. */
 function riderOf(id: string): Rider | null {
@@ -1085,17 +1122,21 @@ function partyPose(l: SkiLift, p: PoseOf, info: PaintInfo): { pose: CharPose; ex
     gl.last = null;
     puff(l, p.x, p.y, 12, 1, 34, t);
   }
-  if (p.spot === null && !onLine(l, p.x, p.y) && inside(l.area, p.x, p.y)) skiing.set(p.id, { mode: "carry", board: r.board, accent, facing: p.facing, turn: 0 });
+  if (p.spot === null && !onLine(l, p.x, p.y)) skiing.set(p.id, { mode: "carry", board: r.board, accent, facing: p.facing, turn: 0 });
   else skiing.delete(p.id);
   return null;
 }
 
 const inside = (r: Rect, x: number, y: number) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 
-/** Off the kicker: drawn higher (their shadow stays on the snow). */
-export function liftDrift(who: { kind: string; id: string; x: number; y: number }): { dx: number; dy: number } | null {
+/** Off the kicker: drawn higher (their shadow stays on the snow); on foot on the piste, wobbling. */
+export function liftDrift(who: { kind: string; id: string; seed: number; x: number; y: number }, info: PaintInfo): { dx: number; dy: number; tilt?: number } | null {
   const l = cur;
   if (!l || who.kind !== "agent") return null;
+  if (wobbly.has(who.id)) {
+    const k = info.t * 7 + (who.seed % 13);
+    return { dx: Math.round(Math.sin(k / 2) * 1.2), dy: 0, tilt: Math.sin(k) * 0.12 };
+  }
   const r = riderOf(who.id);
   if (!r || !gliding(l, r, who.x, who.y)) return null;
   const h = airOf(l, who.x, who.y);
@@ -1188,10 +1229,7 @@ export function liftClick(id: string, act: SceneryActions): string | null {
   const flag = Math.hypot(act.at.x - l.flag.x - 2, act.at.y - l.flag.y + 7) <= 8;
   if (id === "piste" || (id === "lift" && flag)) {
     if (party) return null;
-    if (startParty(act, l, Math.random() < 0.5 ? 2 : 3, 1)) {
-      say(l.bottom.x, l.bottom.y, ["Who's coming skiing?", "Powder day!", "Grab your skis!"], 0.3);
-      return "cab-clank";
-    }
+    if (startParty(act, l, Math.random() < 0.5 ? 2 : 3, 1)) return "cab-clatter";
     if (skier) return null;
     startRun(act, l);
     return "cab-swoosh";
