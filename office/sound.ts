@@ -120,8 +120,13 @@ export class Sound {
     if (this.master && this.ctx) this.master.gain.setTargetAtTime(this.effectiveGain(), this.ctx.currentTime, 0.05);
   }
 
+  /**
+   * The recipes are written quiet (single tones at 0.05–0.3), so the master
+   * boosts them a lot: at 100% about 16 dB more than the old 0.6, enough to
+   * hear over music. A limiter after it keeps stacked sounds from clipping.
+   */
   private effectiveGain(): number {
-    return this.enabled ? this.volume * this.volume * 0.6 : 0;
+    return this.enabled ? this.volume * this.volume * 4 : 0;
   }
 
   /** Must run from a user gesture the first time (autoplay policy). */
@@ -132,7 +137,13 @@ export class Sound {
       this.ctx = new AC();
       this.master = this.ctx.createGain();
       this.master.gain.value = this.effectiveGain();
-      this.master.connect(this.ctx.destination);
+      const limiter = this.ctx.createDynamicsCompressor();
+      limiter.threshold.value = -8;
+      limiter.knee.value = 6;
+      limiter.ratio.value = 12;
+      limiter.attack.value = 0.002;
+      limiter.release.value = 0.2;
+      this.master.connect(limiter).connect(this.ctx.destination);
     }
     if (this.ctx.state === "suspended") void this.ctx.resume();
   }
