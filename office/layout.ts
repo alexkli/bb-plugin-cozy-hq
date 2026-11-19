@@ -86,6 +86,11 @@ export interface Spot {
    * (and to shared spots, which have no home: events, gatherings).
    */
   home?: number;
+  /**
+   * A spare seat in its group (squeezing in on a stool with a laptop): taken
+   * only once the group's other free spots are, in order.
+   */
+  spare?: boolean;
 }
 
 /** One of the separate homes in a plan where everyone works from home. */

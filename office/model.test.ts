@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { assignSpots, updateHomeDesks, deskStyleFor, diffEvents, idleGroup, moodOf, topicOf, waitKindOf, wantedGroup, type ThreadLike } from "./model.ts";
 import { buildLayout, connect, MIN_H_WIDE, MIN_W_WIDE, PORTRAIT_MIN_H, PORTRAIT_W, type Layout, type Point } from "./layout.ts";
 import { EVENTS, EVENT_KINDS, pickEventKind, planEvent } from "./life.ts";
+import { THEMES } from "./themes/index.ts";
 import { easterSunday, SEASONS, seasonOf, seasonsOf, thanksgivingDay } from "./seasons.ts";
 
 const NOW = 1_800_000_000_000;
@@ -110,6 +111,28 @@ test("new workers pick desks at random, not the first ones in order", () => {
   assert.equal(new Set(picked).size, 4);
   for (const id of picked) assert.ok(desks.includes(id));
   assert.notDeepEqual(picked.sort(), desks.slice(0, 4).sort(), "not just the first four desks");
+});
+
+test("squeeze-in seats: the hearth is picked at random with the desks, spare seats only once those are full", () => {
+  const cabin = THEMES.find((t) => t.id === "cabin")!;
+  const C = cabin.layout!(900, 520, { threads: 20, portrait: false })!;
+  const desk = C.spots.filter((s) => s.group === "desk");
+  const real = desk.filter((s) => s.kind === "desk");
+  const open = desk.filter((s) => !s.spare);
+  const spare = desk.filter((s) => s.spare);
+  assert.ok(spare.length > 0 && open.length > real.length, "the hearth is open, the rest spare");
+  // Every desk is someone's home (they're idle now): newcomers still pick desks and the hearth, not the spare seats.
+  const homes = new Map(real.map((s, i) => [`home-${i}`, Number(s.id.slice(5))] as const));
+  const idle = real.map((_, i) => thread(`home-${i}`));
+  const workers = Array.from({ length: 4 }, (_, i) => thread(`w${i}`, { status: "active" }));
+  const few = assignSpots([...idle, ...workers], C.spots, new Map(), homes, NOW);
+  for (const w of workers) assert.ok(open.some((s) => s.id === few.spots.get(w.id)), `${w.id} at a desk or the hearth`);
+  // More than the desks and the hearth hold: the spare seats fill in order.
+  const many = Array.from({ length: open.length + 2 }, (_, i) => thread(`m${i}`, { status: "active" }));
+  const full = assignSpots(many, C.spots, new Map(), new Map(), NOW);
+  const used = new Set(full.spots.values());
+  for (const s of open) assert.ok(used.has(s.id));
+  assert.deepEqual(spare.filter((s) => used.has(s.id)).map((s) => s.id), spare.slice(0, 2).map((s) => s.id));
 });
 
 test("a home desk stays free for its thread while others are free, and stays its home after a detour", () => {

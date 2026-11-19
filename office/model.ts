@@ -257,7 +257,8 @@ export function assignSpots(
     if (home !== undefined && !homesOf.has(`desk-${home}`)) homesOf.set(`desk-${home}`, t.id);
   }
   // Pass 3: a free spot in the wanted area, or a fallback. A desk is picked at
-  // random across all the work rooms (it becomes their home desk), others' homes last.
+  // random across all the work rooms (it becomes their home desk), spare seats
+  // once the desks are taken, others' homes last.
   for (const t of rest) {
     let pick: Spot | undefined;
     const want = wantedGroup(t, now, event);
@@ -266,8 +267,14 @@ export function assignSpots(
       // Extra plans to review wait at the table, leaving the whiteboard to the planners.
       if (want === "present" && group === "meeting") free.sort((a, b) => Number(b.kind === "meeting-seat") - Number(a.kind === "meeting-seat"));
       if (group === "desk") {
-        const unclaimed = free.filter((s) => (homesOf.get(s.id) ?? t.id) === t.id);
-        if (unclaimed.length > 0) free = unclaimed;
+        // A desk (or an open seat, like the cabin's hearth) that's nobody else's
+        // home, at random; with no such desk left, others' homes join in too
+        // (their home stays theirs), so the open seats don't fill first; the
+        // spare seats in order once all that's taken.
+        const open = free.filter((s) => !s.spare);
+        const mine = open.filter((s) => (homesOf.get(s.id) ?? t.id) === t.id);
+        const spare = free.filter((s) => s.spare);
+        free = mine.some((s) => s.kind === "desk") ? mine : open.length > 0 ? open : spare.length > 0 ? spare.slice(0, 1) : free;
       }
       if (free.length > 0) {
         pick = ORDERED.has(group) && group !== "desk" ? free[0] : free[seeded(t.id) % free.length];

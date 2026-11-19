@@ -899,7 +899,7 @@ function cabinZones(L: Layout, plan: CabinPlan, r: { great: Rect; mud: Rect; kit
   // Sheepskins on the hearth, either side of the fire.
   const hy = f.hearth.y + 15;
   const hall = (y: number) => L.net.halls.reduce((b, h) => (h > y && (b < y || h < b) ? h : b), L.net.halls[L.net.halls.length - 1]!);
-  out.push({ at: [f.box.x - 10, f.box.x + f.box.w + 10, f.box.x - 30, f.box.x + f.box.w + 30].map((x) => ({ x, y: hy })), seat: "sheepskin", entry: { x: r.a1, y: hall(hy) }, lane: hy, max: 4 });
+  out.push({ at: [f.box.x - 10, f.box.x + f.box.w + 10, f.box.x - 30, f.box.x + f.box.w + 30].map((x) => ({ x, y: hy })), seat: "sheepskin", entry: { x: r.a1, y: hall(hy) }, lane: hy, max: 4, open: true });
   // The window seat along the great room's floor below the sofa.
   const c = L.couch;
   out.push({ at: row(r.great.x + 14, r.great.x + r.great.w - 14, c.y + c.h + 26), seat: "seat", entry: { x: near(r.great.x), y: hall(c.y) }, max: 6 });

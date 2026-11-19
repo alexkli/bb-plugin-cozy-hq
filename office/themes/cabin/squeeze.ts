@@ -2,9 +2,11 @@
 // count needs (eight at most); when they're all taken, the rest of the busy
 // ones work wherever there's a seat: on sheepskins on the hearth, the window
 // seat, the boot bench in the mudroom, a kitchen stool, a knitted pouf in the
-// reading loft or a log stump out on the deck. Those are desk-group spots
-// after the real desks (the desk group fills in order), of another kind than
-// "desk", so the office types away there with a laptop on the lap.
+// reading loft or a log stump out on the deck. Those are desk-group spots of
+// another kind than "desk", so the office types away there with a laptop on
+// the lap. A zone marked `open` (the sheepskins by the fire) is picked at
+// random along with the real desks; the others are spare seats, taken in
+// order once those are full.
 // Pure geometry (no canvas): the layout tests run it in Node.
 import type { Layout, Point, Rect, Spot } from "../../layout.ts";
 
@@ -47,6 +49,8 @@ export interface Zone {
   max?: number;
   /** Keep clear of these too. */
   avoid?: Rect[];
+  /** Picked at random along with the real desks (default: a spare seat, once those are all taken). */
+  open?: boolean;
 }
 
 const WIDTH: Record<string, number> = {
@@ -130,6 +134,7 @@ export function squeezeIn(L: Layout, zones: Zone[], need: number, keepClear: Rec
       if (crossesWalls(L, path)) continue;
       const spot: Spot = { id, kind: "bench", group: "desk", x: p.x, y: p.y, facing: "front", pose: "sit-desk-front", path, activity: ACTIVITY[z.seat] };
       if (LIFT[z.seat] > 0) spot.lift = LIFT[z.seat];
+      if (!z.open) spot.spare = true;
       L.spots.push(spot);
       L.byId.set(id, spot);
       taken.push(f);
