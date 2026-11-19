@@ -58,4 +58,8 @@ test("they run to and from the desk; a stroll from the coffee to the couch is a 
   world.sync([{ ...thread(0), mood: "needs-you", spotId: "wait-0-0-n0" }, { ...thread(1), mood: "idle", spotId: "coffee" }], true);
   world.sync([{ ...thread(0), mood: "needs-you", spotId: "wait-0-0-n0" }, { ...thread(1), mood: "idle", spotId: "couch-1" }], false);
   assert.ok(agents.get("t1")!.path.length > 0 && agents.get("t1")!.pace === 1);
+  // You start writing to t1: it runs over to your office.
+  world.sync([{ ...thread(0), mood: "needs-you", spotId: "wait-0-0-n0" }, { ...thread(1), mood: "idle", spotId: "couch-1" }], true);
+  world.sync([{ ...thread(0), mood: "needs-you", spotId: "wait-0-0-n0" }, { ...thread(1), mood: "drafting", spotId: "boss-guest-0" }], false);
+  assert.ok(agents.get("t1")!.path.length > 0 && agents.get("t1")!.pace > 2);
 });

@@ -400,7 +400,7 @@ const WALK_SPEED = 32; // px/s
 const SLOW_SPEED = 11;
 /** Work doesn't wait: between the waiting room, meeting room and your office. */
 const BRISK = 1.3;
-/** To or from the desk they run, so they're there before the thread answers. */
+/** To or from the desk, and into your office when you start writing to them, they run. */
 const RUN = 2.3;
 const WORK_GROUPS: ReadonlySet<string> = new Set(["desk", "review", "present", "meeting", "boss"]);
 const NPC_SPEED = 24;
@@ -1014,7 +1014,7 @@ export class World {
     a.pace =
       a.huddle !== null
         ? 1
-        : spot.group === "desk" || from === "desk"
+        : spot.group === "desk" || spot.group === "boss" || from === "desk"
           ? RUN
           : from !== undefined && WORK_GROUPS.has(from) && WORK_GROUPS.has(spot.group)
             ? BRISK
