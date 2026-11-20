@@ -6,7 +6,7 @@ import type { Layout, Rect } from "../../layout.ts";
 import { cached, classicProp, drawPixelText, floorPlan, Grid, hash, makeCanvas, mix, OUTLINE, rng } from "../../themekit.ts";
 import { floorDashes, paintingSign, roomSign, wallSigns } from "./background.ts";
 import { glowBar, glowDot, glyph, P, perLayout } from "./kit.ts";
-import { planOf } from "./plan.ts";
+import { onAWay, planOf } from "./plan.ts";
 import { bikeFx, billboardFx, clickItems, clickLights, clickOverlay, drawAframe, drawBikeTrail, signalWalk, strayBusy } from "./clicks.ts";
 
 // ------------------------------------------------------------------ sky
@@ -688,7 +688,7 @@ function floorBits(L: Layout): { vents: Rect[]; holo: Rect[] } {
     const street = manholes(L);
     if (street) vents.push(...street); // manholes on the street, steaming
     else pick(L.W * L.H > 400000 ? 4 : 3, vents, 0.5);
-    const big = fp.find(16, 22, 40).filter((r) => !inside(r) && !nearSeat(r) && !vents.some((v) => Math.abs(v.x - r.x) < 30 && Math.abs(v.y - r.y) < 30));
+    const big = fp.find(16, 22, 40).filter((r) => !inside(r) && !nearSeat(r) && !onAWay(L, r) && !vents.some((v) => Math.abs(v.x - r.x) < 30 && Math.abs(v.y - r.y) < 30));
     if (big.length > 0) holo.push(big[Math.floor(big.length * 0.6)]!);
     return { vents, holo };
   });

@@ -26,6 +26,7 @@ import {
   type WallSegment,
 } from "../../themekit.ts";
 import type { PlantPlacement } from "../../layout.ts";
+import { learnWalkways, walkwaysOf } from "../../walkways.ts";
 
 /** What the drawing code needs to know about the plan (kept in `L.themeData`). */
 export interface NeonPlan {
@@ -655,5 +656,44 @@ function dress(L: Layout, portrait: boolean): Layout {
       x += 120;
     }
   }
+  L.walls = wallsOf(L, plan);
   return L;
+}
+
+/** Rooms drawn with a neon border round their floor (the noodle bar, the arcade, the queue lounge, the archive, the bio-dome). */
+const BORDERED = new Set(["kitchen", "games", "waiting", "library", "garden"]);
+
+/**
+ * What nobody cuts across: the streets' curbs (nobody jaywalks: the
+ * crosswalks at the alleys and everyone's own ways are the crossings), the
+ * capsules, the storefronts' awnings and ledges, the neon borders round the
+ * shops, and the carts, bollards and street furniture.
+ */
+function wallsOf(L: Layout, plan: NeonPlan): Rect[] {
+  const out: Rect[] = [];
+  for (const st of plan.streets) {
+    out.push({ x: 0, y: st.y - st.half - 5, w: L.W, h: 6 }, { x: 0, y: st.y + st.half - 1, w: L.W, h: 6 });
+  }
+  for (const p of L.pods) out.push({ x: p.x - 4, y: p.y + 2, w: p.w + 8, h: p.h - 2 });
+  for (const f of plan.fronts ?? []) {
+    if (f.side === "top") out.push({ x: f.x0, y: f.y - 3, w: f.x1 - f.x0, h: f.kind === "kitchen" ? 15 : 9 });
+    else out.push({ x: f.x0, y: f.y - 12, w: f.x1 - f.x0, h: 14 });
+  }
+  for (const room of L.rooms) {
+    if (!BORDERED.has(room.kind)) continue;
+    const r = room.rect;
+    out.push({ x: r.x, y: r.y, w: r.w, h: 3 }, { x: r.x, y: r.y + r.h - 3, w: r.w, h: 3 }, { x: r.x, y: r.y, w: 3, h: r.h }, { x: r.x + r.w - 3, y: r.y, w: 3, h: r.h });
+  }
+  for (const b of plan.bollards) out.push({ x: b.x - 2, y: b.y - 6, w: 4, h: 9 });
+  for (const c of plan.carts) out.push({ x: c.x, y: c.y - 12, w: 26, h: 13 });
+  for (const b of plan.bits ?? []) if (b.kind !== "billboard") out.push({ x: b.x - 2, y: b.y - 12, w: 28, h: 14 });
+  return out;
+}
+
+/** Whether a rect of floor lies on (or just by) a way people walk: the things left about keep off them. */
+export function onAWay(L: Layout, r: Rect): boolean {
+  if (!walkwaysOf(L.net)) learnWalkways(L);
+  return (walkwaysOf(L.net) ?? []).some(
+    ({ a: p, b: q }) => r.x < Math.max(p.x, q.x) + 8 && r.x + r.w > Math.min(p.x, q.x) - 8 && r.y < Math.max(p.y, q.y) + 4 && r.y + r.h > Math.min(p.y, q.y) - 8,
+  );
 }
