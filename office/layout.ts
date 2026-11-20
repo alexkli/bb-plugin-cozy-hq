@@ -300,6 +300,13 @@ export interface Layout {
   props: PropPlacement[];
   plants: PlantPlacement[];
   pokeables: Pokeable[];
+  /**
+   * Every wall the floor plan has besides its walled rooms (thin rects: a log
+   * wall, a partition, the line between indoors and out). Set (even empty),
+   * people may also cut across open floor between walkways where nothing
+   * stands; left out, they keep to the hallways, aisles and spots' paths.
+   */
+  walls?: Rect[];
   /** The office door: newcomers walk in, leavers walk out. */
   entrance: Point;
   entrancePath: Point[];
@@ -1101,7 +1108,10 @@ export function layoutSize(Win: number, Hin: number): { W: number; H: number; po
 
 export function buildLayout(Win: number, Hin: number, opts: LayoutOptions = {}): Layout {
   const { W, H, portrait } = layoutSize(Win, Hin);
-  return portrait ? buildPortrait(W, H, opts) : buildWide(W, H, opts);
+  const L = portrait ? buildPortrait(W, H, opts) : buildWide(W, H, opts);
+  // The office's only walls are its walled rooms: people may cut across the open floor.
+  L.walls = [];
+  return L;
 }
 
 export function finish(

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { buildLayout, layoutSize, type Point } from "./layout.ts";
 import { route, step, type Walker } from "./life.ts";
 import { THEMES } from "./themes/index.ts";
-import { learnWalkways } from "./walkways.ts";
+import { learnWalkways, walkwaysOf } from "./walkways.ts";
 
 const length = (w: Point, path: readonly Point[]) => {
   let s = 0;
@@ -73,4 +73,48 @@ test("walks over the learned walkways are never longer than over the hallways, a
       assert.deepEqual([w.x, w.y], [goal.x, goal.y], `${theme.id}: arrives`);
     });
   }
+});
+
+test("across open floor: only where a floor plan lists its walls, and never through them or a walled room", () => {
+  const cabin = THEMES.find((t) => t.id === "cabin")!;
+  const hits = (a: Point, b: Point, r: { x: number; y: number; w: number; h: number }) => {
+    const n = Math.max(2, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y)));
+    for (let k = 0; k <= n; k++) {
+      const x = a.x + ((b.x - a.x) * k) / n;
+      const y = a.y + ((b.y - a.y) * k) / n;
+      if (x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h) return true;
+    }
+    return false;
+  };
+  for (const [w, h] of [[700, 497], [1100, 480], [600, 698], [900, 420]] as const) {
+    const size = layoutSize(w, h);
+    for (const L of [buildLayout(w, h, { threads: 12 }), cabin.layout!(size.W, size.H, { threads: 12, portrait: size.portrait })!]) {
+      assert.ok(L.walls, "the floor plan lists its walls");
+      const plain = { ...L, walls: undefined, net: { ...L.net } };
+      learnWalkways(plain);
+      learnWalkways(L);
+      const key = (s: { a: Point; b: Point }) => `${s.a.x},${s.a.y},${s.b.x},${s.b.y}`;
+      const before = new Set(walkwaysOf(plain.net)!.map(key));
+      const added = walkwaysOf(L.net)!.filter((s) => !before.has(key(s)));
+      assert.ok(added.length > 0, `some ways across the floor at ${w}×${h}`);
+      const walled = L.rooms.filter((r) => r.walls).map((r) => r.rect);
+      for (const s of added) for (const r of [...L.walls!, ...walled]) assert.ok(!hits(s.a, s.b, r), `${key(s)} cuts through ${JSON.stringify(r)} at ${w}×${h}`);
+    }
+  }
+  // A scenery that doesn't list its walls keeps to its walkways.
+  const beach = THEMES.find((t) => t.id === "beach")!;
+  assert.equal(beach.layout!(700, 497, { threads: 12, portrait: false })!.walls, undefined);
+});
+
+test("in the cabin, the kitchen stools are reached through the gap beside the counter, not round by the far aisle", () => {
+  const cabin = THEMES.find((t) => t.id === "cabin")!;
+  const L = cabin.layout!(700, 497, { threads: 20, portrait: false })!;
+  learnWalkways(L);
+  const piano = L.byId.get("piano")!;
+  const stool = L.byId.get("stool-0")!;
+  const w: Walker = { x: piano.x, y: piano.y, path: [], approach: [...piano.path], facing: "front", walked: 0 };
+  w.path = route(w, L.net, stool.path);
+  assert.ok(length(w, w.path) < 420, `piano → stool: ${Math.round(length(w, w.path))} px`);
+  walk(w);
+  assert.deepEqual([w.x, w.y], [stool.x, stool.y]);
 });

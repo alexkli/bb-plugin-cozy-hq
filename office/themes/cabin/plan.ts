@@ -549,6 +549,20 @@ function wayDown(l: SkiLift, from: number, hall: number, side: number): Point[] 
   return pts.filter((p, i) => i === 0 || p.x !== pts[i - 1]!.x || p.y !== pts[i - 1]!.y);
 }
 
+/** The lodge's log walls (all round it, and between inside and the deck): nobody cuts across them. */
+function wallsOf(p: CabinPlan): Rect[] {
+  const r = p.lodge;
+  const out: Rect[] = [
+    { x: r.x - 2, y: r.y - 2, w: r.w + 4, h: 4 },
+    { x: r.x - 2, y: r.y + r.h - 2, w: r.w + 4, h: 4 },
+    { x: r.x - 2, y: r.y - 2, w: 4, h: r.h + 4 },
+    { x: r.x + r.w - 2, y: r.y - 2, w: 4, h: r.h + 4 },
+  ];
+  const d = p.deckWall;
+  if (d) out.push({ x: Math.min(d.x0, d.x1) - 2, y: Math.min(d.y0, d.y1) - 2, w: Math.abs(d.x1 - d.x0) + 4, h: Math.abs(d.y1 - d.y0) + 4 });
+  return out;
+}
+
 /** A skier's walk back in from the finish: to the hallway, along it to the nearest door, in at the wall. */
 function walkHome(p: CabinPlan, from: Point, hall: number): Point[] {
   const w = p.deckWall;
@@ -887,6 +901,7 @@ function widePlan(W: number, H: number, threads: number): Layout {
   scatter(t, [{ x: 2, y: hillTop + 4, w: ML - 6, h: hillBottom - hillTop - 6 }, ...(east ? [{ x: W - B + 2, y: D + 4, w: B - 4, h: H - D - 8 }] : [{ x: XI + 4, y: hillTop + 4, w: W - XI - 6, h: hillBottom - hillTop - 6 }]), ...(front ? [{ x: 2, y: yardTop + 6, w: W - 4, h: yardH - 8 }] : [])], [...keep, ...streamBand], W * 31 + H);
 
   L.themeData = plan;
+  L.walls = wallsOf(plan);
   if (plan.deck) L.words = { "in the lounge": "on the sun deck" };
   return L;
 }
@@ -1146,6 +1161,7 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
   }
   plan.nooks = squeezeIn(L, cabinZones(L, plan, { great: gr, mud: mud as Rect, kitchen: kitchen as Rect, library, hall: net.halls[0]!, a1: aisleX, a2: aisleX }), threads - L.desks.length);
   L.themeData = plan;
+  L.walls = wallsOf(plan);
   if (plan.deck) L.words = { "in the lounge": "on the sun deck" };
   return L;
 }

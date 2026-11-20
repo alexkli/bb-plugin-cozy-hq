@@ -81,6 +81,7 @@ export function learnWalkways(L: Layout): void {
     const bottom = Math.max(...net.halls);
     for (const x of net.aisles) raw.push({ a: { x, y: top }, b: { x, y: bottom } });
   }
+  if (L.walls) raw.push(...acrossFloor(L, raw.filter((s) => dist(s.a, s.b) >= EPS), walled, L.walls));
   const segs = raw.filter((s) => dist(s.a, s.b) >= EPS);
 
   const pts: Point[] = [];
@@ -116,6 +117,114 @@ export function learnWalkways(L: Layout): void {
     return out;
   });
   known.set(net, { segs, along, pts, ids, adj, halls: [...net.halls], walled });
+}
+
+// ------------------------------------------------------------------ across open floor
+
+/** Furniture without a width of its own: about this wide (px). */
+const PROP_W: Record<string, number> = {
+  couch: 84,
+  "coffee-table": 40,
+  piano: 32,
+  "fishtank-stand": 42,
+  arcade: 26,
+  reception: 36,
+  printer: 30,
+  fridge: 20,
+  vending: 24,
+  "meeting-table": 68,
+  "boss-chair": 22,
+  "library-shelf": 32,
+  "dog-bed": 26,
+  armchair: 28,
+};
+
+/** The longest cut across open floor (px). */
+const REACH = 150;
+/** How far apart the ways across are tried (px). */
+const PITCH = 4;
+/** Room the feet keep from furniture and walls (px). */
+const CLEAR = 3;
+
+/** Where the floor is taken: furniture, desks, seats, fixtures, walled rooms and walls. */
+function takenFloor(L: Layout, walled: Rect[], walls: Rect[]): Rect[] {
+  const out: Rect[] = [...walls, ...walled.map((r) => ({ x: r.x - 4, y: r.y - 4, w: r.w + 8, h: r.h + 8 }))];
+  for (const p of L.props) if (p.z > p.y + 2) out.push({ x: p.x, y: p.y, w: p.w ?? PROP_W[p.kind] ?? 32, h: p.z - p.y });
+  for (const p of L.plants) if (p.z > p.y + 2) out.push({ x: p.x, y: p.y, w: 20, h: p.z - p.y });
+  for (const d of L.desks) out.push({ x: d.x - 2, y: d.y - 12, w: 52, h: 50 });
+  // Where people sit or stand (their feet).
+  for (const s of L.spots) out.push({ x: s.x - 7, y: s.y - 5, w: 14, h: 8 });
+  for (const p of L.pokeables) out.push(p.rect);
+  out.push(L.couch, L.fishtank, ...L.speakers);
+  for (const r of [L.arcade, L.pingpong, L.server]) if (r) out.push(r);
+  return out;
+}
+
+/**
+ * Short straight ways across open floor between walkways that run side by
+ * side: from a lane down to the one below it (or across to the next one over)
+ * wherever the strip between them is clear. Only for floor plans that list
+ * their walls (`L.walls`).
+ */
+function acrossFloor(L: Layout, segs: Seg[], walled: Rect[], walls: Rect[]): Seg[] {
+  const taken = takenFloor(L, walled, walls);
+  const clear = (x0: number, y0: number, x1: number, y1: number) => {
+    const r = { x: Math.min(x0, x1) - CLEAR, y: Math.min(y0, y1) - CLEAR, w: Math.abs(x1 - x0) + 2 * CLEAR, h: Math.abs(y1 - y0) + 2 * CLEAR };
+    if (r.x < 2 || r.y < 2 || r.x + r.w > L.W - 2 || r.y + r.h > L.H - 2) return false;
+    return !taken.some((t) => r.x < t.x + t.w && t.x < r.x + r.w && r.y < t.y + t.h && t.y < r.y + r.h);
+  };
+  const flat = segs.filter((s) => s.a.y === s.b.y).map((s) => ({ y: s.a.y, x0: Math.min(s.a.x, s.b.x), x1: Math.max(s.a.x, s.b.x) }));
+  const tall = segs.filter((s) => s.a.x === s.b.x).map((s) => ({ x: s.a.x, y0: Math.min(s.a.y, s.b.y), y1: Math.max(s.a.y, s.b.y) }));
+  const out: Seg[] = [];
+  const seen = new Set<string>();
+  const add = (a: Point, b: Point) => {
+    const k = `${a.x},${a.y},${b.x},${b.y}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push({ a, b });
+  };
+  /** Runs of clear ways side by side: one at each end and one in the middle. */
+  const runs = (list: { at: number; from: number; to: number }[], make: (at: number, from: number, to: number) => void) => {
+    let run: typeof list = [];
+    const flush = () => {
+      if (run.length === 0) return;
+      const picks = new Set([run[0]!, run[Math.floor(run.length / 2)]!, run[run.length - 1]!]);
+      for (const c of picks) make(c.at, c.from, c.to);
+      run = [];
+    };
+    for (const c of list) {
+      const last = run[run.length - 1];
+      if (last && (c.at - last.at > PITCH + 0.5 || c.from !== last.from || c.to !== last.to)) flush();
+      run.push(c);
+    }
+    flush();
+  };
+  // Down from each lane to the nearest one below it.
+  for (const A of flat) {
+    const found: { at: number; from: number; to: number }[] = [];
+    for (let x = Math.ceil(A.x0); x <= A.x1; x += PITCH) {
+      let below: number | null = null;
+      for (const B of flat) if (B.y > A.y + 4 && B.y - A.y <= REACH && B.x0 <= x && x <= B.x1 && (below === null || B.y < below)) below = B.y;
+      if (below === null) continue;
+      // Not alongside a walkway that already goes there.
+      if (tall.some((T) => Math.abs(T.x - x) < 6 && T.y0 <= A.y + 0.5 && T.y1 >= below! - 0.5)) continue;
+      if (clear(x, A.y, x, below)) found.push({ at: x, from: A.y, to: below });
+    }
+    runs(found, (x, y0, y1) => add({ x, y: y0 }, { x, y: y1 }));
+  }
+  // Across from each upright walkway to the nearest one on its right.
+  for (const A of tall) {
+    const found: { at: number; from: number; to: number }[] = [];
+    for (let y = Math.ceil(A.y0); y <= A.y1; y += PITCH) {
+      let right: number | null = null;
+      for (const B of tall) if (B.x > A.x + 4 && B.x - A.x <= REACH && B.y0 <= y && y <= B.y1 && (right === null || B.x < right)) right = B.x;
+      if (right === null) continue;
+      if (flat.some((F) => Math.abs(F.y - y) < 6 && F.x0 <= A.x + 0.5 && F.x1 >= right! - 0.5)) continue;
+      if (clear(A.x, y, right, y)) found.push({ at: y, from: A.x, to: right });
+    }
+    runs(found, (y, x0, x1) => add({ x: x0, y }, { x: x1, y }));
+  }
+  return out;
 }
 
 function link(adj: Edge[][] | Map<number, Edge[]>, u: number, v: number, d: number): void {

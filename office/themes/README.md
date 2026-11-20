@@ -134,6 +134,15 @@ sofa onto the hearth). So keep every lane on open floor. Only the last step
 into a spot, lanes inside walled rooms and lanes that run through something
 clickable are never used as a way through.
 
+Set `L.walls` to every wall your floor plan has besides its walled rooms (thin
+rects: a log wall, the line between indoors and out, a railing, a pool's edge;
+an empty list when there are none) and people may also cut straight across
+open floor between two lanes side by side, wherever nothing stands in between
+(furniture, desks, seats, clickables, walled rooms, your walls). Leave it out
+and they keep to the walkways. The classic office and the Mountain Cabin set
+it; check with the overlay in the preview (`window.__cozyWalkways`) before
+you do, since anything you draw that isn't listed gets walked through.
+
 **Room builders** (in themekit) lay out a room and its spots, props and
 clickables inside a rect; compose them anywhere, or write your own rooms
 with the same spot kinds and ids:
