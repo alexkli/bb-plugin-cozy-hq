@@ -242,7 +242,10 @@ function buildStudy(b: Builder, r: Rect, hallY: number, plan: CabinPlan): Layout
   b.prop("boss-desk", "boss-desk", desk.x, desk.y, desk.y + 22, deskW);
   b.poke("boss", "boss", { x: seat.x - 9, y: desk.y - 24, w: 18, h: 24 });
   const guestY = desk.y + 44;
-  const lane = r.y + r.h - 8;
+  // In and out along just below the guest chairs: in at the door, a step right past the floor lamp
+  // standing under it, down beside the desk and straight across to the chair.
+  const lane = Math.min(r.y + r.h - 8, guestY + 6);
+  const side = Math.min(r.x + 26, desk.x - 2);
   for (const [i, dx] of [-12, 12].entries()) {
     const x = Math.round(seat.x + dx);
     b.spot({
@@ -253,7 +256,7 @@ function buildStudy(b: Builder, r: Rect, hallY: number, plan: CabinPlan): Layout
       y: guestY,
       facing: "back",
       pose: "sit-back",
-      path: [{ x: doorX, y: hallY, c: true }, { x: doorX, y: r.y - 3 }, { x: doorX, y: lane }, { x, y: lane }, { x, y: guestY }],
+      path: [{ x: doorX, y: hallY, c: true }, { x: doorX, y: r.y - 3 }, { x: doorX, y: r.y + 2 }, { x: side, y: r.y + 2 }, { x: side, y: lane }, { x, y: lane }, { x, y: guestY }],
       activity: "going over a draft with you",
     });
     b.prop(`guest-chair-${i}`, "guest-chair", x - 8, guestY - 14, guestY + 2);

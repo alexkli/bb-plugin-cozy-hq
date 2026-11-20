@@ -555,7 +555,8 @@ export function buildBoss(b: Builder, r: Rect, hallY: number, keepOut: Rect[] = 
   b.prop("boss-desk", "boss-desk", desk.x, desk.y, desk.y + 22, deskW);
   b.poke("boss", "boss", { x: seat.x - 9, y: desk.y - 24, w: 18, h: 24 });
   const guestY = desk.y + 44;
-  const lane = r.y + r.h - 8;
+  // In and out along just below the guest chairs: from the door straight down, across to the chair (not round by the bottom wall).
+  const lane = Math.min(r.y + r.h - 8, guestY + 6);
   for (const [i, dx] of [-12, 12].entries()) {
     const x = Math.round(seat.x + dx);
     b.spot({
@@ -647,7 +648,8 @@ export function bossToys(b: Builder, boss: Layout["boss"], keepOut: Rect[] = [])
   const lines: [Point, Point][] = [];
   const guests = b.spots.filter((sp) => sp.kind === "boss-guest");
   for (const sp of guests) for (let i = 1; i < sp.path.length; i++) lines.push([sp.path[i - 1]!, sp.path[i]!]);
-  const lane = guests[0]?.path[2];
+  // Where the guests' lane starts: the turn before the step across to the chair and into it.
+  const lane = guests[0]?.path[guests[0].path.length - 3];
   if (lane) {
     lines.push([lane, { x: boss.dogBed.x, y: lane.y }], [{ x: boss.dogBed.x, y: lane.y }, boss.dogBed]);
     lines.push([lane, { x: desk.x - 4, y: lane.y }], [{ x: desk.x - 4, y: lane.y }, { x: desk.x - 4, y: desk.y + 34 }]);
