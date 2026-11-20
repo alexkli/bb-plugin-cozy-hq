@@ -19,19 +19,20 @@ const WOOD: Record<DeskStyle, [string, string, string, string]> = {
 export function desk(style: DeskStyle): HTMLCanvasElement {
   const [base, hi, lo, dk] = WOOD[style];
   return sprite(`desk-${style}`, 48, 32, (g) => {
-    // The top: two wide boards.
-    g.rect(1, 3, 46, 14, base);
-    g.rect(1, 3, 46, 1, hi);
-    g.hline(2, 10, 44, lo);
-    for (let x = 9; x < 46; x += 17) g.set(x, 6, lo).set(x + 1, 6, lo);
+    // The top: two wide boards, as low as the office's own desk (row 11), so
+    // whoever sits behind it shows head and shoulders.
+    g.rect(1, 11, 46, 11, base);
+    g.rect(1, 11, 46, 1, hi);
+    g.hline(2, 16, 44, lo);
+    for (let x = 9; x < 46; x += 17) g.set(x, 13, lo).set(x + 1, 13, lo);
     // The apron with a drawer and an iron pull.
-    g.rect(1, 17, 46, 5, lo).rect(1, 17, 46, 1, dk);
-    g.rect(17, 18, 14, 3, base).set(23, 19, C.iron).set(24, 19, C.iron);
+    g.rect(1, 22, 46, 4, lo).rect(1, 22, 46, 1, dk);
+    g.rect(17, 23, 14, 2, base).set(23, 24, C.iron).set(24, 24, C.iron);
     // Trestle legs with a stretcher.
-    g.rect(3, 22, 3, 9, dk).rect(42, 22, 3, 9, dk);
-    g.rect(2, 29, 5, 2, lo).rect(41, 29, 5, 2, lo);
-    g.rect(6, 25, 36, 1, dk);
-    g.vline(4, 22, 7, shade(dk, 0.15));
+    g.rect(3, 26, 3, 5, dk).rect(42, 26, 3, 5, dk);
+    g.rect(2, 30, 5, 2, lo).rect(41, 30, 5, 2, lo);
+    g.rect(6, 28, 36, 1, dk);
+    g.vline(4, 26, 4, shade(dk, 0.15));
   });
 }
 

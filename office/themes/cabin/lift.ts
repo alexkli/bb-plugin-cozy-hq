@@ -131,7 +131,8 @@ let special: { kind: Special; t0: number } | null = null;
 let ride: { g: Gathering; t0: number } | null = null;
 let bell: { t0: number } | null = null;
 let skier: Run | null = null;
-let rider: { y: number; x: number; t: number } | null = null;
+/** Who's sitting on a chair this frame (their feet, and which line): no empty chair drawn there. */
+let seated: { y: number; x: number; t: number; down: boolean }[] = [];
 let tracks: { x: number; y: number; t: number; board: boolean }[] = [];
 let spray: { x: number; y: number; vx: number; vy: number; t0: number }[] = [];
 let clouds: { x: number; y: number; t0: number }[] = [];
@@ -147,11 +148,11 @@ function bind(L: Layout): SkiLift | null {
     ride = null;
     bell = null;
     skier = null;
-    rider = null;
+    seated = [];
     tracks = [];
     spray = [];
     clouds = [];
-    party = null;
+    parties = [];
     skiing.clear();
     gliders.clear();
     wobbly.clear();
@@ -171,10 +172,30 @@ function swing(t: number, k: number): number {
   return Math.round(Math.sin(e * 4.6 + k * 1.3) * (3 * Math.exp(-e / 2.4) + (after > 0 ? 1.6 * Math.exp(-after / 0.8) : 0)));
 }
 
-/** Where the lift's line is (feet positions along it): someone there is riding. */
-function onLine(l: SkiLift, x: number, y: number): boolean {
-  if (l.axis === "y") return Math.abs(x - l.bottom.x) < 0.5 && y < l.bottom.y - 1 && y > l.top.y + 1;
-  return Math.abs(y - l.bottom.y) < 0.5 && x > l.bottom.x + 1 && x < l.top.x - 1;
+/** The cable coming down: this far right of the one going up (below it on a phone). */
+const DOWN_DX = 12;
+const DOWN_DY = -4;
+
+/** Which of the lift's lines someone's feet are on (riding up or coming down), or null. */
+function lineOf_(l: SkiLift, x: number, y: number): "up" | "down" | null {
+  if (l.axis === "y") {
+    if (y >= l.bottom.y - 1 || y <= l.top.y + 1) return null;
+    return Math.abs(x - l.bottom.x) < 0.5 ? "up" : Math.abs(x - l.bottom.x - DOWN_DX) < 0.5 ? "down" : null;
+  }
+  if (x <= l.bottom.x + 1 || x >= l.top.x - 1) return null;
+  return Math.abs(y - l.bottom.y) < 0.5 ? "up" : Math.abs(y - l.bottom.y - DOWN_DY) < 0.5 ? "down" : null;
+}
+
+/** Where the lift's lines are (feet positions along them): someone there is riding. */
+const onLine = (l: SkiLift, x: number, y: number) => lineOf_(l, x, y) !== null;
+
+/** From the top station back down on the chairs coming down, then out the way they came to the hallway. */
+function rideDown(l: SkiLift): Point[] {
+  const w = l.way;
+  if (w.length < 2) return [];
+  const back = w.slice(0, -1).reverse().map((p) => ({ ...p }));
+  if (l.axis === "y") return [{ x: l.top.x + DOWN_DX, y: l.top.y }, { x: l.bottom.x + DOWN_DX, y: l.bottom.y }, ...back];
+  return [{ x: l.top.x, y: l.top.y + DOWN_DY }, { x: l.bottom.x, y: l.bottom.y + DOWN_DY }, ...back];
 }
 
 // ------------------------------------------------------------------ the people
@@ -187,8 +208,9 @@ export function liftPose(p: PoseOf, info: PaintInfo): { pose: CharPose; expr: Ex
   const r = riderOf(p.id);
   if (p.spot === null && inside(l.piste, p.x, p.y) && !onLine(l, p.x, p.y) && !(r && gliding(l, r, p.x, p.y))) wobbly.add(p.id);
   else wobbly.delete(p.id);
-  if (p.spot === null && onLine(l, p.x, p.y)) {
-    if (l.axis === "y" && p.facing === "back") return { pose: "sit-back", expr: p.expr, facing: "back" };
+  const side = p.spot === null ? lineOf_(l, p.x, p.y) : null;
+  if (side) {
+    if (l.axis === "y" && side === "up" && p.facing === "back") return { pose: "sit-back", expr: p.expr, facing: "back" };
     return { pose: "slump", expr: Math.floor(info.t * 0.7 + p.seed) % 5 === 0 ? "blink" : "happy", facing: "front" };
   }
   const skier = partyPose(l, p, info);
@@ -207,8 +229,10 @@ export function liftRider(ctx: Ctx, a: { x: number; y: number; facing: Facing; p
   if (!l || a.spot) return;
   const fx = a.x + 10;
   const fy = a.y + 27;
-  if (!onLine(l, fx, fy)) return;
-  rider = { x: fx, y: fy, t };
+  const side = lineOf_(l, fx, fy);
+  if (!side) return;
+  seated = seated.filter((q) => t - q.t < 0.3);
+  seated.push({ x: fx, y: fy, t, down: side === "down" });
   const { x, y } = a;
   // The hanger: from the cable over their head, round to the chair's right side.
   px(ctx, IRON, fx, fy - CABLE, 1, 3);
@@ -490,12 +514,11 @@ export function liftDecor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
     },
   });
   // The chairs going round (none where someone's riding, or a special guest).
-  const busy: number[] = [];
-  if (rider && t - rider.t < 0.3) busy.push(vertical ? rider.y : rider.x);
+  const busy: { v: number; down: boolean }[] = seated.filter((q) => t - q.t < 0.3).map((q) => ({ v: vertical ? q.y : q.x, down: q.down }));
   const sp = special ? specialAt(l, t) : null;
-  if (sp !== null) busy.push(sp);
+  if (sp !== null) busy.push({ v: sp, down: false });
   const len = vertical ? l.bottom.y - l.top.y : l.top.x - l.bottom.x;
-  const free = (v: number) => !busy.some((b) => Math.abs(b - v) < 26);
+  const free = (v: number, down: boolean) => !busy.some((b) => b.down === down && Math.abs(b.v - v) < 26);
   // One loop of cable: up, round the top bull wheel, down, round the bottom one.
   const R = vertical ? 6 : 2;
   const arc = Math.PI * R;
@@ -508,6 +531,7 @@ export function liftDecor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
     let g: number;
     let front: boolean;
     let up = false;
+    let down = false;
     if (s < len) {
       up = true;
       [x, g, front] = vertical ? [l.bottom.x, l.bottom.y - s, false] : [l.bottom.x + s, l.bottom.y, true];
@@ -518,6 +542,7 @@ export function liftDecor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
       else [x, g, front] = [l.top.x + Math.sin(a) * 4, l.bottom.y - R + Math.cos(a) * R, true];
     } else if (s < 2 * len + arc) {
       const d = s - len - arc;
+      down = true;
       [x, g, front] = vertical ? [l.bottom.x + 12, l.top.y + d, true] : [l.top.x - d, l.bottom.y - 4, true];
     } else {
       // Round the bottom wheel, in front of it, back to the up side.
@@ -525,7 +550,7 @@ export function liftDecor(ctx: Ctx, L: Layout, info: PaintInfo): Drawable[] {
       if (vertical) [x, g, front] = [l.bottom.x + R + Math.cos(a) * R, l.bottom.y + Math.sin(a) * 2, a < Math.PI / 2];
       else [x, g, front] = [l.bottom.x - Math.sin(a) * 4, l.bottom.y - R - Math.cos(a) * R, true];
     }
-    if (up && !free(vertical ? g : x)) continue;
+    if ((up || down) && !free(vertical ? g : x, down)) continue;
     const X = Math.round(x);
     const G = Math.round(g);
     out.push({ z: G - 1, draw: () => chairAt(ctx, X, G, front, sw, vertical) });
@@ -932,6 +957,8 @@ interface Rider {
   /** The S-curves: phase and size. */
   ph: number;
   amp: number;
+  /** The party they're in (set once it's gathered). */
+  g?: Gathering;
 }
 
 interface Party {
@@ -942,7 +969,9 @@ interface Party {
   cheered: boolean;
 }
 
-let party: Party | null = null;
+/** The parties out (one gathering at a time; the ones before may still be on their way back). */
+let parties: Party[] = [];
+const gathering = () => parties.some((p) => !p.g.done);
 /** Per skier this frame: what they're doing, for `dress` (asked right after the pose). */
 const skiing = new Map<string, { mode: "top" | "piste" | "carry"; board: boolean; accent: string; facing: Facing; turn: number }>();
 const gliders = new Map<string, { last: Point | null; sign: number; on: boolean }>();
@@ -1015,7 +1044,7 @@ function leaveOf(l: SkiLift, r: Rider): NonNullable<GatherSpot["leave"]> {
  * `min`: how many it takes (a random outing wants company).
  */
 function startParty(act: SceneryActions, l: SkiLift, n: number, min: number): boolean {
-  if (party || l.way.length === 0) return false;
+  if (gathering() || l.way.length === 0) return false;
   const rs = riders(l, n);
   const spots: GatherSpot[] = rs.map((r) => ({
     x: r.spot.x,
@@ -1034,10 +1063,12 @@ function startParty(act: SceneryActions, l: SkiLift, n: number, min: number): bo
   if (j >= 0) cues.push({ at: 3.4, who: j, say: pick(["Watch this!", "Hitting the kicker!", "Send it!"]), seconds: 1.4 });
   const g = act.gather(spots, 4, cues, min);
   if (!g) return false;
-  party = { g, riders: rs.slice(0, g.size), goneAt: null, cheered: false };
+  const party: Party = { g, riders: rs.slice(0, g.size), goneAt: null, cheered: false };
+  for (const r of party.riders) r.g = g;
+  parties.push(party);
   // Off they go, saying so (and carrying their skis or board from the start).
   g.ids.forEach((id, i) => {
-    const board = party!.riders[i]?.board;
+    const board = party.riders[i]?.board;
     act.say(id, pick(board ? SAY_OFF.board : SAY_OFF.ski), 2.4, 0.15 + i * 0.8);
   });
   return true;
@@ -1050,9 +1081,12 @@ const SAY_OFF = {
 
 /** Someone in the party, and their rider. */
 function riderOf(id: string): Rider | null {
-  if (!party) return null;
-  const i = party.g.ids.indexOf(id);
-  return i >= 0 ? (party.riders[i] ?? null) : null;
+  for (let k = parties.length - 1; k >= 0; k--) {
+    const p = parties[k]!;
+    const i = p.g.ids.indexOf(id);
+    if (i >= 0) return p.riders[i] ?? null;
+  }
+  return null;
 }
 
 /** How high off the snow someone flying off the kicker is. */
@@ -1064,7 +1098,7 @@ function airOf(l: SkiLift, x: number, y: number): number {
 
 /** Skiing: on the piste between their start and their stop, after the party's set off (and not riding the lift). */
 function gliding(l: SkiLift, r: Rider, x: number, y: number): boolean {
-  if (!party?.g.done || onLine(l, x, y)) return false;
+  if (!r.g?.done || onLine(l, x, y)) return false;
   const u = alongOf(l, x, y);
   // On their own line down (not walking back up the side of the piste).
   return u > alongOf(l, r.spot.x, r.spot.y) + 0.5 && u < alongOf(l, r.end.x, r.end.y) - 0.5 && Math.abs(acrossOf(l, x, y) - lineOf(l, r, u)) < 3;
@@ -1104,7 +1138,7 @@ function partyPose(l: SkiLift, p: PoseOf, info: PaintInfo): { pose: CharPose; ex
     const k = (u - lengths(l).uk) / AIR;
     if (airOf(l, p.x, p.y) > 0) {
       if (k > 0.85 && k < 0.95) puff(l, p.x, p.y, 2, 0, 30, t);
-      const spin = (p.seed + (party?.g.ids.length ?? 0)) % 2 === 0;
+      const spin = (p.seed + (r.g?.ids.length ?? 0)) % 2 === 0;
       const facing: Facing = spin ? (["front", "right", "back", "left"] as const)[Math.min(3, Math.floor(k * 4))]! : vertical ? "front" : "left";
       skiing.set(p.id, { mode: "piste", board: r.board, accent, facing, turn: 0 });
       return { pose: spin ? "cheer" : "raise", expr: "happy", facing };
@@ -1161,11 +1195,21 @@ export function skiGear(ctx: Ctx, a: { x: number; y: number; facing: Facing; pos
 
 /** Once the party's off: the onlookers at the bottom say something; it's over once they're all back in. */
 function partyTick(act: SceneryActions, l: SkiLift): void {
-  const p = party;
-  if (!p) return;
+  for (const p of [...parties]) partyStep(act, l, p);
+}
+
+function partyStep(act: SceneryActions, l: SkiLift, p: Party): void {
   const t = act.t;
+  const drop = () => {
+    parties = parties.filter((q) => q !== p);
+    for (const id of p.g.ids) {
+      if (riderOf(id)) continue;
+      skiing.delete(id);
+      gliders.delete(id);
+    }
+  };
   if (!p.g.done) {
-    if (t - (p.g.arrivedAt ?? t) > 120) party = null;
+    if (t - (p.g.arrivedAt ?? t) > 120) drop();
     return;
   }
   if (p.goneAt === null) p.goneAt = t;
@@ -1182,11 +1226,7 @@ function partyTick(act: SceneryActions, l: SkiLift): void {
       else act.say(watcher.id, pick(["Nice turns!", "Look at them go!", "Smooth."]), 2.4, len / V0 * 0.6);
     }
   }
-  if (t - p.goneAt > 90) {
-    party = null;
-    skiing.clear();
-    gliders.clear();
-  }
+  if (t - p.goneAt > 90) drop();
 }
 
 // ------------------------------------------------------------------ clicks
@@ -1227,12 +1267,21 @@ export function liftClick(id: string, act: SceneryActions): string | null {
   }
   // The piste (or the summit flag): whoever's free goes up for a run together; nobody free, a stranger comes down.
   const flag = Math.hypot(act.at.x - l.flag.x - 2, act.at.y - l.flag.y + 7) <= 8;
-  if (id === "piste" || (id === "lift" && flag)) {
-    if (party) return null;
+  const run = () => {
     if (startParty(act, l, Math.random() < 0.5 ? 2 : 3, 1)) return "cab-clatter";
     if (skier) return null;
     startRun(act, l);
     return "cab-swoosh";
+  };
+  if (id === "piste" || (id === "lift" && flag)) {
+    if (gathering()) {
+      // They're already on their way: someone says so.
+      const p = parties[parties.length - 1]!;
+      const who = p.g.ids[Math.floor(Math.random() * p.g.ids.length)];
+      if (who) act.say(who, pick(["On my way!", "Wait for me!", "Coming!", "Nearly there!"]), 1.8);
+      return null;
+    }
+    return run();
   }
   if (id !== "lift") return null;
   // Stopped: clicking gets it going again.
@@ -1242,6 +1291,11 @@ export function liftClick(id: string, act: SceneryActions): string | null {
     return "cab-clank";
   }
   const riding = ride !== null && !ride.g.done;
+  // Mostly a few of them go up for a run; now and then just a ride, a stop, a guest.
+  if (!gathering() && !riding && Math.random() < 0.7) {
+    const sound = run();
+    if (sound) return sound;
+  }
   const kind = weighted<"ride" | "stop" | "special">(riding ? [["special", 1]] : [["ride", 5], ["stop", 2], ["special", 1]]);
   if (kind === "ride") {
     const spot: GatherSpot = {
@@ -1251,6 +1305,8 @@ export function liftClick(id: string, act: SceneryActions): string | null {
       pose: "stand",
       activity: "riding the chairlift",
       path: [...l.way, { x: l.top.x, y: l.top.y }, { x: l.wave.x, y: l.wave.y }],
+      // Back down on the chairs coming down.
+      leave: { glide: [], pace: 1, walk: rideDown(l) },
     };
     const g = act.gather([spot], 4.5, [
       { at: 0.2, who: 0, say: pick(SAY.ride), seconds: 2 },
@@ -1280,7 +1336,7 @@ export function liftTick(act: SceneryActions): void {
   partyTick(act, l);
   if (act.night > 0.5 || act.weather === "storm" || act.weather === "fog") return;
   // A few of the idle ones go up for a run together about every eight minutes (ticks come twice a second).
-  if (!party && Math.random() < 1 / 960) startParty(act, l, Math.random() < 0.55 ? 2 : 3, 2);
+  if (!gathering() && Math.random() < 1 / 960) startParty(act, l, Math.random() < 0.55 ? 2 : 3, 2);
   // A stranger comes down now and then (about every 20 minutes).
   if (!skier && Math.random() < 1 / 2400) startRun(act, l);
 }

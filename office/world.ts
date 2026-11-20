@@ -964,13 +964,16 @@ export class World {
       a.leaving = false;
       // Mid-mishap: they get up and go in their own time.
       if (this.mishap?.id === a.id) continue;
+      let leave: GatherSpot["leave"];
       if (a.huddle !== null) {
-        // Still idle: stay at the get-together; otherwise back to work.
+        // Still idle: stay at the get-together; otherwise back to work (a show's own way, if it has one).
         if (t.mood === "idle" && !instant) continue;
+        leave = this.showLeave(a);
         this.leaveHuddle(a);
       }
       if (spot && a.spot?.id !== spot.id && a.target !== spot.id) {
         if (instant) this.place(a, spot);
+        else if (leave) this.leaveBy(a, leave, spot);
         else this.walkTo(a, spot);
       }
     }
@@ -3327,12 +3330,21 @@ export class World {
     a.target = home.id;
   }
 
+  /** The way back from the show someone's at (its spot's `leave`), if they got there. */
+  private showLeave(a: Agent): GatherSpot["leave"] {
+    const h = this.huddles.find((x) => x.id === a.huddle);
+    const i = h ? h.spots.findIndex((sp) => sp.id === a.spot?.id) : -1;
+    return h && i >= 0 && this.settled(a) ? h.show?.leave[i] : undefined;
+  }
+
   private leaveHuddle(a: Agent, walk = false): void {
     const h = this.huddles.find((x) => x.id === a.huddle);
+    const leave = this.showLeave(a);
     a.huddle = null;
     if (walk && h?.kind !== "call") {
       const home = this.L?.byId.get(a.thread.spotId);
-      if (home) this.walkTo(a, home);
+      if (home && leave) this.leaveBy(a, leave, home);
+      else if (home) this.walkTo(a, home);
     }
     if (!h) return;
     h.members = h.members.filter((id) => id !== a.id);
