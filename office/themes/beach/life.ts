@@ -9,6 +9,7 @@ import type { Layout, Rect } from "../../layout.ts";
 import { cached, floorPlan, Grid, hash, mix, OUTLINE } from "../../themekit.ts";
 import { C, fill } from "./kit.ts";
 import { planOf } from "./plan.ts";
+import { walkwaysOf } from "../../walkways.ts";
 
 type P = { x: number; y: number };
 
@@ -42,8 +43,10 @@ export function spotsOf(L: Layout): Spots {
       if (B.bonfire) blocked.push({ x: B.bonfire.x - 14, y: B.bonfire.y - 20, w: 28, h: 28 });
       if (B.shack) blocked.push(grow(B.shack, 4));
     }
+    // Off the ways across the open floor too (the plan lists what stands there in L.walls, but not these).
+    const ways = (walkwaysOf(L.net) ?? []).map((s) => grow({ x: Math.min(s.a.x, s.b.x), y: Math.min(s.a.y, s.b.y), w: Math.abs(s.b.x - s.a.x), h: Math.abs(s.b.y - s.a.y) }, 5));
     const taken: Rect[] = [];
-    const ok = (r: Rect, gap = 10) => plan.isFree(r) && !blocked.some((b) => hit(b, r)) && !taken.some((o) => hit(grow(o, gap), r));
+    const ok = (r: Rect, gap = 10) => plan.isFree(r) && !blocked.some((b) => hit(b, r)) && !ways.some((w) => hit(w, r)) && !taken.some((o) => hit(grow(o, gap), r));
     const wallDepth = (x: number) => L.segments.find((sg) => x >= sg.x0 && x < sg.x1)?.depth ?? 64;
     // A thing standing on a footprint, as tall as `tall`: its whole height must be clear (leaning on the wall is fine).
     const stands = (r: Rect, tall: number) => {

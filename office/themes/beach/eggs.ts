@@ -89,6 +89,15 @@ function towelSpot(L: Layout, near: number, beach: { y0: number; y1: number }): 
   return null;
 }
 
+/** Where the clues stand on the floor (the fin by the pool, the flip-flop on the sand): nobody walks through them. */
+export function eggFloor(L: Layout): Rect[] {
+  const s = spots(L);
+  const out: Rect[] = [];
+  if (s.fin) out.push({ x: s.fin.x - 1, y: s.fin.y + 4, w: 9, h: 7 });
+  if (s.flop) out.push({ x: s.flop.x - 1, y: s.flop.y - 1, w: 9, h: 6 });
+  return out;
+}
+
 export function eggClickables(L: Layout): SceneryClickable[] {
   const s = spots(L);
   const out: SceneryClickable[] = [];

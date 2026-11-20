@@ -23,6 +23,7 @@ import {
   type Network,
   type WallSegment,
 } from "../../themekit.ts";
+import { eggFloor } from "./eggs.ts";
 
 /** What the drawing needs to know about the plan (kept in L.themeData). */
 export interface BeachPlan {
@@ -278,6 +279,7 @@ function wide(W: number, H: number, threads: number): Layout {
     wallTv,
   });
   L.themeData = { beach: plan };
+  L.walls = wallsOf(L, plan);
   return L;
 }
 
@@ -418,7 +420,35 @@ function portrait(W: number, H: number, threads: number): Layout {
     lamp: boss!.lamp,
   });
   L.themeData = { beach: plan };
+  L.walls = wallsOf(L, plan);
   return L;
+}
+
+/**
+ * What stands on the open floor besides the furniture, for the ways across it
+ * (`L.walls`): the pools with their coping, the surf, the towels and umbrella
+ * poles, the lifeguard tower, the bonfire, the shade-sail poles round the work
+ * decks, the surf shack's rope with its eave along the top, and the Easter
+ * eggs' fin and flip-flop. The palms, torches, racks, shower and sandcastle
+ * are placed when drawn (life.ts, needing sprites), off the walkways these
+ * leave.
+ */
+function wallsOf(L: Layout, p: BeachPlan): Rect[] {
+  const out: Rect[] = [];
+  for (const pl of p.pools) out.push({ x: pl.x - 4, y: pl.y - 4, w: pl.w + 8, h: pl.h + 8 });
+  if (p.sea) out.push({ x: p.sea.x, y: p.sea.y - 3, w: p.sea.w, h: p.sea.h + 3 });
+  out.push(...p.towels);
+  for (const u of p.umbrellas) out.push({ x: u.x - 2, y: u.y - 4, w: 4, h: 6 });
+  if (p.tower) out.push({ x: p.tower.x - 14, y: p.tower.y - 14, w: 28, h: 16 });
+  if (p.bonfire) out.push({ x: p.bonfire.x - 10, y: p.bonfire.y - 5, w: 21, h: 10 });
+  out.push(...eggFloor(L));
+  for (const pod of L.pods) for (const x of [pod.x - 5, pod.x + pod.w + 4]) for (const y of [pod.y + 8, pod.y + pod.h + 2]) out.push({ x: x - 2, y: y - 3, w: 4, h: 4 });
+  for (const r of L.rooms) {
+    if (r.kind !== "games") continue;
+    const g = r.rect;
+    out.push({ x: g.x - 1, y: g.y - 10, w: g.w + 2, h: 12 }, { x: g.x - 1, y: g.y, w: 3, h: g.h }, { x: g.x + g.w - 2, y: g.y, w: 3, h: g.h }, { x: g.x - 1, y: g.y + g.h - 2, w: g.w + 2, h: 3 });
+  }
+  return out;
 }
 
 export function beachLayout(W: number, H: number, opts: { threads: number; portrait: boolean }): Layout | null {
