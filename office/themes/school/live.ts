@@ -7,7 +7,7 @@ import type { Layout, Rect } from "../../layout.ts";
 import { wallItems } from "./background.ts";
 import { BOOKS, C, CRAYONS, OUTLINE, sprite } from "./kit.ts";
 import { clickItems, clickLights, clickOverlay, storyArea } from "./clicks.ts";
-import { planOf } from "./plan.ts";
+import { onAWay, planOf } from "./plan.ts";
 import { busStop, climberSprite, lampPost, shadeTree, slideSprite, swingBack, swingFront } from "./yard.ts";
 import { cubbyStand, teacherDesk } from "./props.ts";
 import { hamsterOut } from "./hamster.ts";
@@ -215,7 +215,9 @@ function extras(L: Layout): Extra[] {
           const ph = pl.sprite === "LARGE_PLANT" ? 48 : 32;
           return r.x < pl.x + pw + 2 && pl.x - 2 < r.x + r.w && r.y < pl.y + ph && pl.y < r.y + r.h;
         });
-      const spot = plan.find(w, h, 12, within).find(clear);
+      // Off the ways people cut across the floor, where there's a choice.
+      const free = plan.find(w, h, 40, within).filter(clear);
+      const spot = free.find((r) => !onAWay(L, r)) ?? free[0];
       if (!spot) continue;
       out.push({ kind, ...spot });
       placed.add(kind);

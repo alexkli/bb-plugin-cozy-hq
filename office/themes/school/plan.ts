@@ -24,6 +24,7 @@ import {
 } from "../../themekit.ts";
 import type { Access, Network, Point, Spot, WallSegment } from "../../themekit.ts";
 import type { Layout, Rect } from "../../layout.ts";
+import { learnWalkways, walkwaysOf } from "../../walkways.ts";
 
 /** What the school's drawing needs to know about its own floor plan. */
 export interface SchoolPlan {
@@ -57,6 +58,14 @@ export interface SchoolPlan {
 export function planOf(L: Layout): SchoolPlan | null {
   const d = L.themeData as { school?: SchoolPlan } | undefined;
   return d?.school ?? null;
+}
+
+/** Whether a rect of floor lies on (or just by) a way people walk: the things left about keep off them. */
+export function onAWay(L: Layout, r: Rect): boolean {
+  if (!walkwaysOf(L.net)) learnWalkways(L);
+  return (walkwaysOf(L.net) ?? []).some(
+    ({ a: p, b: q }) => r.x < Math.max(p.x, q.x) + 8 && r.x + r.w > Math.min(p.x, q.x) - 8 && r.y < Math.max(p.y, q.y) + 4 && r.y + r.h > Math.min(p.y, q.y) - 8,
+  );
 }
 
 // ------------------------------------------------------------------ pieces
@@ -485,9 +494,41 @@ function portrait(W: number, H: number, threads: number): Layout {
   return withGate(L, school);
 }
 
+/**
+ * What nobody cuts across: the half-walls round the open rooms (their tops
+ * only where they stand clear of the back wall), the teacher's corners, and
+ * outside the building's front wall, the walkway's roof posts, the portable,
+ * the playground corner, the swings and the slide, the field with its lamps,
+ * the garden, the bus stop and the yard's fence. The front office's navy
+ * border and the cafeteria's red one are floor trim, not walls.
+ */
+function wallsOf(L: Layout, plan: SchoolPlan): Rect[] {
+  const out: Rect[] = [];
+  for (const { rect: r } of plan.walls) {
+    const seg = L.segments.find((s) => r.x + r.w / 2 >= s.x0 && r.x + r.w / 2 < s.x1);
+    if (!(seg !== undefined && r.y <= seg.depth + 2)) out.push({ x: r.x, y: r.y - 4, w: r.w, h: 7 });
+    out.push({ x: r.x, y: r.y + r.h - 4, w: r.w, h: 7 }, { x: r.x - 3, y: r.y, w: 6, h: r.h }, { x: r.x + r.w - 3, y: r.y, w: 6, h: r.h });
+  }
+  out.push(...plan.corners);
+  if (!plan.yard || plan.walk === null) return out;
+  const W = L.W;
+  const H = L.H;
+  out.push({ x: 0, y: plan.front - 3, w: W, h: 7 });
+  for (let x = 20; x < W - 10; x += 44) out.push({ x: x - 1, y: plan.walk + 4, w: 4, h: 4 });
+  const p = plan.portable;
+  if (p) out.push({ x: p.x - 6, y: p.y - 4, w: p.w + 12, h: p.h + 8 });
+  for (const r of [plan.playground, plan.swings, plan.slide, plan.field, plan.garden]) if (r) out.push(r);
+  const f = plan.field;
+  if (f) for (const x of [f.x + 2, f.x + f.w - 10]) out.push({ x, y: f.y - 2, w: 8, h: 14 });
+  if (plan.gate) out.push({ x: plan.gate.x - 30, y: H - 34, w: 14, h: 30 });
+  out.push({ x: 0, y: H - 8, w: W, h: 8 }, { x: 0, y: plan.walk + 8, w: 3, h: H - plan.walk - 8 }, { x: W - 3, y: plan.walk + 8, w: 3, h: H - plan.walk - 8 });
+  return out;
+}
+
 /** Move the way in to the yard gate (by the bus stop) when there is a yard. */
 function withGate(L: Layout, plan: SchoolPlan): Layout {
   L.themeData = { school: plan };
+  L.walls = wallsOf(L, plan);
   // Events happen out in the yard only when there is one.
   if (plan.yard && L.eventArea.y >= plan.yard.y) L.words = { "in the lounge": "out in the schoolyard" };
   if (!plan.gate || plan.walk === null) return L;
