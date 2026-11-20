@@ -11,7 +11,7 @@ import type { Drawable } from "../../life.ts";
 import { Grid, shade } from "../../themekit.ts";
 import { C, FABRICS, h2, memo, OUTLINE, rect, sprite } from "./kit.ts";
 import { blanket } from "./props.ts";
-import { homeData, type HomeData, type Unit } from "./plan.ts";
+import { homeData, streetLamps, type HomeData, type Unit } from "./plan.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -110,18 +110,7 @@ function parked(ctx: Ctx, d: HomeData): Drawable[] {
 }
 
 function lampPosts(d: HomeData, L: Layout): { x: number; y: number }[] {
-  return memo(`lamps|${L.W}x${L.H}|${d.units.length}|${d.rows.length}`, () => {
-    const out: { x: number; y: number }[] = [];
-    const doors = [...d.units.map((u) => u.doorX), L.boss.way?.[0]?.x ?? -99, ...(d.cafe ? [d.cafeDoor] : [])];
-    for (const row of d.rows) {
-      for (let x = 50; x < L.W - 10; x += 120) {
-        const lx = [x, x + 10, x - 10, x + 20].find((q) => doors.every((dx) => Math.abs(dx - q) > 10) && d.avenues.every((a) => q < a.x - 4 || q > a.x + a.w + 4));
-        // On the far sidewalk, between the trees (not in front of anyone's door).
-        if (lx !== undefined) out.push({ x: lx + 32, y: row.street.y + row.street.h - 2 });
-      }
-    }
-    return out;
-  });
+  return memo(`lamps|${L.W}x${L.H}|${d.units.length}|${d.rows.length}`, () => streetLamps(d, L));
 }
 
 // ------------------------------------------------------------------ calls

@@ -718,8 +718,65 @@ export function homePlan(W: number, H: number, threads: number, portrait: boolea
       if (clear) trees.push({ x: tx, y: r.street.y + r.street.h - 2, size: 0, seed: tx * 3 + ri });
     }
   }
-  L.themeData = { kind: "home", units, lots, rows, avenues, house, garden, park: park.rect, lawn: park.lawn, cafe, cafeDoor, trees, pond } satisfies HomeData;
+  const data = { kind: "home", units, lots, rows, avenues, house, garden, park: park.rect, lawn: park.lawn, cafe, cafeDoor, trees, pond } satisfies HomeData;
+  L.themeData = data;
+  L.walls = wallsOf(L, data);
   return L;
+}
+
+/** The street lamps: on the far sidewalk of each street, between the trees (not in front of anyone's door). */
+export function streetLamps(d: HomeData, L: Layout): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = [];
+  const doors = [...d.units.map((u) => u.doorX), L.boss.way?.[0]?.x ?? -99, ...(d.cafe ? [d.cafeDoor] : [])];
+  for (const row of d.rows) {
+    for (let x = 50; x < L.W - 10; x += 120) {
+      const lx = [x, x + 10, x - 10, x + 20].find((q) => doors.every((dx) => Math.abs(dx - q) > 10) && d.avenues.every((a) => q < a.x - 4 || q > a.x + a.w + 4));
+      // On the far sidewalk, between the trees (not in front of anyone's door).
+      if (lx !== undefined) out.push({ x: lx + 32, y: row.street.y + row.street.h - 2 });
+    }
+  }
+  return out;
+}
+
+/**
+ * Everything people mustn't cut across (`L.walls`): the roads (crossed only
+ * at the alleys' crosswalks), the fences along the back of each block, the
+ * homes' and the café's back and side walls, the gardens with their
+ * pickets, the park's hedge, flower beds and benches, the corner shops, the
+ * green lots' hedges, parked cars, the trees and the street lamps.
+ */
+function wallsOf(L: Layout, d: HomeData): Rect[] {
+  const out: Rect[] = [];
+  const open = (x0: number, x1: number, y: number, h: number) => {
+    let from = x0;
+    for (const a of [...d.avenues].sort((p, q) => p.x - q.x)) {
+      if (a.x > from) out.push({ x: from, y, w: a.x - from, h });
+      from = Math.max(from, a.x + a.w);
+    }
+    if (x1 > from) out.push({ x: from, y, w: x1 - from, h });
+  };
+  for (const r of d.rows) {
+    open(0, L.W, r.street.y + 10, r.street.h - 17);
+    open(0, L.W, r.y + 2, 7);
+  }
+  for (const b of [...d.units.map((u) => u.rect), ...(d.cafe ? [d.cafe] : [])]) {
+    out.push({ x: b.x, y: b.y, w: b.w, h: BACK }, { x: b.x, y: b.y, w: 3, h: b.h - FRONT + 1 }, { x: b.x + b.w - 3, y: b.y, w: 3, h: b.h - FRONT + 1 });
+  }
+  for (const u of d.units) if (u.garden) out.push(u.garden);
+  if (d.garden) out.push(d.garden);
+  const p = d.park;
+  out.push({ x: p.x, y: p.y, w: p.w, h: 4 }, { x: p.x, y: p.y, w: 3, h: p.h - 6 }, { x: p.x + p.w - 3, y: p.y, w: 3, h: p.h - 6 });
+  for (const x of [p.x + 6, p.x + p.w - 28]) out.push({ x, y: p.y + 8, w: 22, h: 9 });
+  for (const lot of d.lots) {
+    const r = lot.rect;
+    if (lot.kind === "shop") out.push({ x: r.x, y: r.y + 14, w: r.w, h: r.h - 14 });
+    else if (lot.kind === "green") out.push({ x: r.x + 2, y: r.y + 10, w: r.w - 4, h: 4 }, { x: r.x + 6, y: r.y + r.h - 20, w: 36, h: 10 });
+    else if (lot.kind === "parking") out.push({ x: r.x, y: r.y + 22, w: r.w, h: 18 });
+    else if (lot.kind === "yard" && r.w >= 14 && lot.seed % 3 === 0) out.push({ x: r.x + 1, y: r.y + r.h - 22, w: 7, h: 9 });
+  }
+  for (const t of d.trees) out.push({ x: t.x - 4, y: t.y - 6, w: 8, h: 7 });
+  for (const l of streetLamps(d, L)) out.push({ x: l.x - 2, y: l.y - 4, w: 4, h: 5 });
+  return out;
 }
 
 /** The shopfronts along the top: a few buildings of different depth. */
