@@ -141,6 +141,14 @@ meetings, lunch, events, gags) stay the same:
 
 Your pick is kept per browser; the buddy dresses to match.
 
+At the **Mountain Cabin**, idle threads go skiing: two or three of them grab
+their skis or snowboard, ride the chairlift up, wait at the top in goggles
+and come down the piste in S-curves, sometimes over the kicker with a spin or
+a grab. They go on their own now and then on a bright day; click the piste or
+the lift to send whoever's free.
+
+<img src="docs/ski-run.png" width="568" alt="Three agents in goggles at the top of the piste, then carving down past the lodge, one in the air over the kicker">
+
 The **Home Office** works a little differently, since nobody shares an
 office there:
 

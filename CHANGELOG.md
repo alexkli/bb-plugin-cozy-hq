@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.0 (2026-11-19)
+
+Ski runs at the Mountain Cabin, and shorter walks everywhere.
+
+- **Ski runs**: at the Mountain Cabin, two or three idle threads grab their skis or snowboard (and say so), walk out to the chairlift, ride up together, wait at the top in goggles and come down the piste in S-curves, leaving tracks and sprays of snow, sometimes over the kicker with a spin or a grab while the others cheer. They go on their own now and then on a bright day; click the piste, the summit flag or (mostly) the lift to send whoever's free. Nobody free: a stranger comes down instead. Called back to work at the top, they ski down.
+- **The chairlift**: the chairs go round one loop of cable and round each bull wheel instead of vanishing at the ends, riders come back down on the chairs coming down, and the walk out goes down the piste's far edge, not under the chairs (wobbling a little in ski boots).
+- **Shorter walks, across open floor**: besides the hallways, aisles and every spot's lanes, people now cut straight across open floor between two lanes wherever nothing stands in between. Every scenery lists its walls, railings, water, trees and street edges for it, so the cuts never go through anything drawn; about 4% less walking on average, up to 17% in the cabin (the piano to a kitchen stool: 398 px instead of 516). Things a scenery drops on the floor at random (clutter, palms, an easel) keep off the paths.
+- **Your office**: guests come and go along a lane just below their chairs, not round by the bottom wall, and in the cabin's study they step past the floor lamp under the door instead of through it.
+- **Agents hurry**: they run to and from their desk (2.3× walking pace) and into your office when you start writing to them.
+- **Bolder highlights**: a crisper glow with sparkles round the head, a violet one for the thread you're writing to, and typing at the desks now and then (an ambient sound).
+- **Your own window**: a new-window button in the title bar explains the two shortcuts (Cmd+Shift+N for a new bb window, then Cmd+Shift+H in it); only the office you can see makes sound.
+- **Louder sound**: up to about 16 dB more at full volume, with a limiter against clipping.
+- **The cabin's desks** keep their top as low as the office's own, so whoever sits behind one shows head and shoulders, not just their eyes; and the sheepskins by the fire are picked at random along with the desks instead of filling up first (the window seat, boot bench, stools and stumps only once the desks are taken).
+- **P** (a hidden key) draws the paths over the office: every spot's way in, the walkways, the cuts across the floor, the walls and where everyone's headed.
+
 ## 0.6.3 (2026-11-19)
 
 - **Hear the shock**: when someone pokes at the server cables, the zap now crackles and buzzes, and they hit the floor with a thud. It used to play as a quiet background sound (muted with ambient sounds off) and was mostly a hum laptop speakers can't play.
