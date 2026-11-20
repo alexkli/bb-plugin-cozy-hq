@@ -11,7 +11,7 @@ import type { Drawable, Light, PaintInfo, WallLightsInfo } from "../../theme.ts"
 import type { Layout, Point, Rect } from "../../layout.ts";
 import { cached, floorPlan, mix, shade } from "../../themekit.ts";
 import { C, CANS, can, fill, ih, OUTLINE, sprite, STICKERS } from "./kit.ts";
-import { planOf, type StartupPlan } from "./plan.ts";
+import { acrossFloorOf, planOf, type StartupPlan } from "./plan.ts";
 import { clickDecor, clickLights, clickOverlay, clickUnderlay, pyramidAt, pyramidDown, rehearsalSpots } from "./clicks.ts";
 import { lounger, nookDecor, nookLights } from "./nooks.ts";
 
@@ -433,6 +433,8 @@ function spotsOf(L: Layout): Spots {
     const taken: Rect[] = rehearsalSpots(L).map((p) => ({ x: p.x - 10, y: p.y - 26, w: 20, h: 30 }));
     for (const n of plan?.nooks ?? []) taken.push({ x: n.x - 13, y: n.y - 26, w: 24, h: 28 });
     if (plan?.futon) taken.push(plan.futon);
+    // Nor on the ways people cut across the floor.
+    taken.push(...acrossFloorOf(L));
     const keep = (r: Rect | null) => {
       if (r) taken.push(r);
       return r;

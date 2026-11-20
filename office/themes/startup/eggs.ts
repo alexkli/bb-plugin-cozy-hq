@@ -14,7 +14,7 @@ import type { Drawable, Light, PaintInfo, SceneryActions, SceneryClickable, Soun
 import { cached, floorPlan } from "../../themekit.ts";
 import { chorus, ease, pick, rarely } from "../eggs.ts";
 import { C, OUTLINE, STICKERS, fill, sprite, text } from "./kit.ts";
-import { planOf } from "./plan.ts";
+import { acrossFloorOf, planOf } from "./plan.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -61,7 +61,8 @@ function gongOf(L: Layout): Rect | null {
   const gr = planOf(L)?.garage?.r;
   if (!gr || typeof document === "undefined") return null;
   return cached(`startup|egg-gong-at|${L.W}x${L.H}|${L.props.length}|${L.spots.length}`, () => {
-    const c = floorPlan(L).find(14, 18, 10, gr);
+    const lanes = acrossFloorOf(L);
+    const c = floorPlan(L).find(14, 18, 10, gr).filter((r) => !lanes.some((t) => r.x < t.x + t.w && t.x < r.x + r.w && r.y < t.y + t.h && t.y < r.y + r.h));
     return c[c.length - 1] ?? null;
   });
 }

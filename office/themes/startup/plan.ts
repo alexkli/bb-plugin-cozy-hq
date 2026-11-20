@@ -29,6 +29,7 @@ import {
   type Network,
   type WallSegment,
 } from "../../themekit.ts";
+import { learnWalkways, walkwaysOf } from "../../walkways.ts";
 import { columnsFromRight, cycle, inRows, squeezeIn, type Nook, type Zone } from "./squeeze.ts";
 
 /** What a stretch of floor is in the house (it picks the floor and the walls around it). */
@@ -106,6 +107,59 @@ export function planOf(L: Layout): StartupPlan | null {
 }
 
 const HALF = 10; // hallways are 20 px wide
+
+// ------------------------------------------------------------------ walls and doorways
+
+type Gap = [number, number];
+
+/** Where a wall opens: a doorway wherever a spot's path, a gag's walk, a hallway or an aisle crosses it. */
+export function doorways(L: Layout, plan: StartupPlan, horizontal: boolean, at: number, from: number, to: number): Gap[] {
+  return gapsOf(crossings(L, plan, horizontal, at, from, to));
+}
+
+function crossings(L: Layout, plan: StartupPlan, horizontal: boolean, at: number, from: number, to: number): number[] {
+  const out: number[] = [];
+  const check = (path: Point[]) => {
+    for (let i = 0; i + 1 < path.length; i++) {
+      const p = path[i]!;
+      const q = path[i + 1]!;
+      const a = horizontal ? p.y : p.x;
+      const b = horizontal ? q.y : q.x;
+      if ((a - at) * (b - at) >= 0 && !(a === at && b !== at)) continue;
+      const t = (at - a) / (b - a);
+      const v = horizontal ? p.x + (q.x - p.x) * t : p.y + (q.y - p.y) * t;
+      if (v >= from - 8 && v <= to + 8) out.push(v);
+    }
+  };
+  for (const s of L.spots) check(s.path);
+  for (const p of plan.extra) check(p);
+  // Hallways and aisles always get through.
+  for (const v of horizontal ? L.net.aisles : L.net.halls) if (v >= from - 8 && v <= to + 8) out.push(v);
+  return out;
+}
+
+function gapsOf(points: number[], half = 11): Gap[] {
+  const gaps = points.map((v): Gap => [v - half, v + half]).sort((a, b) => a[0] - b[0]);
+  const out: Gap[] = [];
+  for (const g of gaps) {
+    const last = out[out.length - 1];
+    if (last && g[0] <= last[1] + 10) last[1] = Math.max(last[1], g[1]);
+    else out.push([g[0], g[1]]);
+  }
+  return out;
+}
+
+export function wallRuns(from: number, to: number, gaps: Gap[]): Gap[] {
+  const out: Gap[] = [];
+  let x = from;
+  for (const [a, b] of gaps) {
+    if (b <= from || a >= to) continue;
+    if (a > x) out.push([x, Math.min(a, to)]);
+    x = Math.max(x, b);
+  }
+  if (x < to) out.push([x, to]);
+  return out.filter(([a, b]) => b - a >= 4);
+}
 
 // ------------------------------------------------------------------ rooms
 
@@ -472,11 +526,72 @@ function hangWall(L: Layout, lot: Lot, wallTv: Rect | null): void {
   }
 }
 
+/**
+ * Everything people mustn't cut across (`L.walls`): every room's walls as
+ * drawn (doorways left open), the house's outer walls, the side yards, and
+ * out back the pool, the palms, the hammock, the loungers, the grill, the
+ * lemon tree, the vegetable beds and the fence.
+ */
+function wallsOf(L: Layout, plan: StartupPlan): Rect[] {
+  const out: Rect[] = [];
+  for (const c of plan.cells) {
+    const r = c.r;
+    for (const [on, y] of [[c.sides.t, r.y], [c.sides.b, r.y + r.h + 1]] as const) {
+      if (!on) continue;
+      for (const [a, b] of wallRuns(r.x, r.x + r.w, doorways(L, plan, true, y, r.x, r.x + r.w))) out.push({ x: a - 2, y: y - 3, w: b - a + 4, h: 11 });
+    }
+    for (const [on, x] of [[c.sides.l, r.x + 1], [c.sides.r, r.x + r.w - 2]] as const) {
+      if (!on) continue;
+      for (const [a, b] of wallRuns(r.y, r.y + r.h - (c.sides.b ? 0 : 6), doorways(L, plan, false, x, r.y, r.y + r.h))) out.push({ x: x - 2, y: a - 2, w: 4, h: b - a + 2 });
+    }
+  }
+  // The squeeze-ins' seats (a camping chair, a stool, a beanbag) and the old futon.
+  for (const n of plan.nooks) out.push({ x: n.x - 9, y: n.y - 14, w: 18, h: 16 });
+  if (plan.futon) out.push(plan.futon);
+  const { x0, x1, front } = plan.lot;
+  const top = Math.min(...L.segments.map((s) => s.depth)) - 6;
+  const bottom = Math.min(plan.lot.back + 1, L.H);
+  out.push({ x: x0, y: top, w: 5, h: bottom - top }, { x: x1 - 5, y: top, w: 5, h: bottom - top });
+  // The side yards: driveway, car, beds, hedges, the bins and the gate.
+  const side = plan.patio ? plan.patio.y : L.H;
+  if (x0 > 0) out.push({ x: 0, y: front, w: x0, h: side - front });
+  if (x1 < L.W) out.push({ x: x1, y: front, w: L.W - x1, h: side - front });
+  const y = plan.yard;
+  if (y) {
+    const p = y.pool;
+    out.push({ x: p.x - 4, y: p.y - 4, w: p.w + 8, h: p.h + 8 });
+    for (const t of y.palms) out.push({ x: t.x - 4, y: t.y - 6, w: 8, h: 7 });
+    if (y.hammock) out.push({ x: y.hammock.x, y: y.hammock.y - 16, w: y.hammock.w, h: 19 });
+    for (const l of y.loungers) out.push({ x: l.x - 7, y: l.y - 16, w: 14, h: 18 });
+    if (y.grill) out.push({ x: y.grill.x - 10, y: y.grill.y - 12, w: 24, h: 14 });
+    if (y.lemon) out.push({ x: y.lemon.x - 8, y: y.lemon.y - 10, w: 16, h: 11 });
+    if (y.beds) out.push(y.beds);
+    out.push({ x: 0, y: L.H - 7, w: L.W, h: 7 });
+  }
+  return out;
+}
+
+/**
+ * The ways people cut across open floor (between the lanes, where the walls
+ * let them), as strips to keep the decor off: they're learned with the
+ * layout, the decor is placed after.
+ */
+export function acrossFloorOf(L: Layout): Rect[] {
+  const now = walkwaysOf(L.net);
+  if (!now || !L.walls) return [];
+  const L0: Layout = { ...L, walls: undefined, net: { ...L.net } };
+  learnWalkways(L0);
+  const key = (s: { a: Point; b: Point }) => `${s.a.x},${s.a.y},${s.b.x},${s.b.y}`;
+  const old = new Set((walkwaysOf(L0.net) ?? []).map(key));
+  return now.filter((s) => !old.has(key(s))).map((s) => ({ x: Math.min(s.a.x, s.b.x) - 5, y: Math.min(s.a.y, s.b.y) - 5, w: Math.abs(s.b.x - s.a.x) + 10, h: Math.abs(s.b.y - s.a.y) + 10 }));
+}
+
 function done(L: Layout, plan: Omit<StartupPlan, "startup" | "extra">, wallTv: Rect | null): Layout {
   hangWall(L, plan.lot, wallTv);
   const full: StartupPlan = { startup: true, ...plan, extra: [] };
   L.themeData = full;
   full.extra = extras(L);
+  L.walls = wallsOf(L, full);
   const e = L.eventArea;
   if (plan.yard && e.y >= plan.yard.r.y) L.words = { "in the lounge": "out in the backyard" };
   return L;

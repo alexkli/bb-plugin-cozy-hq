@@ -10,7 +10,7 @@ import type { BackgroundSteps } from "../../theme.ts";
 import type { Layout, Point, Rect, Room } from "../../layout.ts";
 import { Grid, hash, mix, rng, shade } from "../../themekit.ts";
 import { C, noise, OUTLINE, rect, STICKERS, text } from "./kit.ts";
-import { planOf, type Cell, type StartupPlan } from "./plan.ts";
+import { doorways, planOf, wallRuns as runs, type Cell, type StartupPlan } from "./plan.ts";
 
 type Ctx = CanvasRenderingContext2D;
 type Gap = [number, number];
@@ -789,50 +789,6 @@ function slider(ctx: Ctx, a: number, b: number, y: number): void {
   rect(ctx, b + 4, y + 1, 1, 1, "#ffffff");
 }
 
-function crossings(L: Layout, plan: StartupPlan, horizontal: boolean, at: number, from: number, to: number): number[] {
-  const out: number[] = [];
-  const check = (path: Point[]) => {
-    for (let i = 0; i + 1 < path.length; i++) {
-      const p = path[i]!;
-      const q = path[i + 1]!;
-      const a = horizontal ? p.y : p.x;
-      const b = horizontal ? q.y : q.x;
-      if ((a - at) * (b - at) >= 0 && !(a === at && b !== at)) continue;
-      const t = (at - a) / (b - a);
-      const v = horizontal ? p.x + (q.x - p.x) * t : p.y + (q.y - p.y) * t;
-      if (v >= from - 8 && v <= to + 8) out.push(v);
-    }
-  };
-  for (const s of L.spots) check(s.path);
-  for (const p of plan.extra) check(p);
-  // Hallways and aisles always get through.
-  for (const v of horizontal ? L.net.aisles : L.net.halls) if (v >= from - 8 && v <= to + 8) out.push(v);
-  return out;
-}
-
-function gapsOf(points: number[], half = 11): Gap[] {
-  const gaps = points.map((v): Gap => [v - half, v + half]).sort((a, b) => a[0] - b[0]);
-  const out: Gap[] = [];
-  for (const g of gaps) {
-    const last = out[out.length - 1];
-    if (last && g[0] <= last[1] + 10) last[1] = Math.max(last[1], g[1]);
-    else out.push([g[0], g[1]]);
-  }
-  return out;
-}
-
-function runs(from: number, to: number, gaps: Gap[]): Gap[] {
-  const out: Gap[] = [];
-  let x = from;
-  for (const [a, b] of gaps) {
-    if (b <= from || a >= to) continue;
-    if (a > x) out.push([x, Math.min(a, to)]);
-    x = Math.max(x, b);
-  }
-  if (x < to) out.push([x, to]);
-  return out.filter(([a, b]) => b - a >= 4);
-}
-
 function outdoors(plan: StartupPlan, x: number, y: number): boolean {
   const yd = plan.yard?.r;
   if (yd && x >= yd.x && x < yd.x + yd.w && y >= yd.y && y < yd.y + yd.h) return true;
@@ -846,7 +802,7 @@ function partitions(ctx: Ctx, L: Layout): void {
   if (!plan) return;
   for (const c of plan.cells) {
     const r = c.r;
-    const edge = (horizontal: boolean, at: number, from: number, to: number) => gapsOf(crossings(L, plan, horizontal, at, from, to));
+    const edge = (horizontal: boolean, at: number, from: number, to: number) => doorways(L, plan, horizontal, at, from, to);
     for (const [on, y] of [[c.sides.t, r.y], [c.sides.b, r.y + r.h + 1]] as const) {
       if (!on) continue;
       const gaps = edge(true, y, r.x, r.x + r.w);
