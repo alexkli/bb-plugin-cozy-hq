@@ -22,6 +22,7 @@
 //  Single aisle: the stairs (every way between floors and halls takes them).
 
 import type { Layout, Point, Rect, Spot } from "../../layout.ts";
+import { learnWalkways, walkwaysOf } from "../../walkways.ts";
 import {
   hash,
   Builder,
@@ -697,11 +698,115 @@ function extras(L: Layout): Point[][] {
   return [L.entrancePath];
 }
 
+/** Bistro tables with a parasol over them (every third or so). */
+export function parasolOver(b: { x: number; y: number }): boolean {
+  return (Math.floor(b.x / 62) * 5 + Math.floor(b.y / 36) * 3) % 7 === 1;
+}
+
+/** Where the A-frame menu board stands on the terrace. */
+export function menuSignAt(L: Layout, t: Rect): Point {
+  const door = L.wall.door;
+  return { x: door.x + door.w + 26 <= L.W ? door.x + door.w + 6 : door.x - 20, y: t.y + 8 };
+}
+
+/**
+ * Everything people mustn't cut across (`L.walls`): the building's side
+ * walls, the mezzanine's balustrade and riser with the stairs, the back
+ * counter behind the bar, the shop's front wall (open at its doors), the
+ * stage, the groves of plants between tables, the armchairs; out front the
+ * bistro tables, their chairs and parasols, the menu board and the olive
+ * pots; in the piazza the fountain on its lawn, the lawn beds, the far lawn
+ * strip and the benches.
+ */
+function wallsOf(L: Layout, plan: CafePlan): Rect[] {
+  const out: Rect[] = [];
+  const { x0, x1 } = plan.bldg;
+  const d = plan.wallD;
+  const f = plan.facade;
+  const bottom = f ? f.y : L.H;
+  out.push({ x: x0 - 6, y: d, w: 6, h: bottom - d }, { x: x1, y: d, w: 6, h: bottom - d });
+  const K = plan.counter.r;
+  const up = plan.upstairs;
+  const st = plan.stairs;
+  if (up) {
+    const e = up.edge;
+    const sx = st ? st.x - 11 : x1;
+    const runs: [number, number][] = st ? [[x0, sx - 3], [sx + 25, x1]] : [[x0, x1]];
+    for (const [a, b] of runs) if (b > a) out.push({ x: a, y: e - 9, w: b - a, h: 25 });
+    if (st) {
+      const top = Math.min(st.y0 - 4, e - 9);
+      out.push({ x: sx - 3, y: top, w: 28, h: st.y1 - top });
+    }
+    out.push({ x: K.x - 2, y: K.y - 10, w: K.w + 4, h: 22 });
+  } else {
+    out.push({ x: K.x - 4, y: d - 16, w: K.w + 8, h: 22 });
+  }
+  if (f) {
+    const gaps = [...f.doors, L.wall.door.x + L.wall.door.w / 2].map((x) => [x - 10, x + 10] as const).sort((a, b) => a[0] - b[0]);
+    let from = x0 - 6;
+    for (const [a, b] of gaps) {
+      if (a > from) out.push({ x: from, y: f.y, w: a - from, h: f.h });
+      from = Math.max(from, b);
+    }
+    if (x1 + 6 > from) out.push({ x: from, y: f.y, w: x1 + 6 - from, h: f.h });
+  }
+  // Your corner has no walls, but you come and go by its way in: nobody cuts across its edge.
+  const boss = L.rooms.find((r) => r.kind === "boss");
+  if (boss) {
+    const q = boss.rect;
+    const dx = boss.doorX ?? q.x + q.w / 2;
+    for (const [side, y] of [["top", q.y - 1], ["bottom", q.y + q.h - 1]] as const) {
+      if (boss.doorSide === side) out.push({ x: q.x, y, w: dx - 10 - q.x, h: 2 }, { x: dx + 10, y, w: q.x + q.w - dx - 10, h: 2 });
+      else out.push({ x: q.x, y, w: q.w, h: 2 });
+    }
+    out.push({ x: q.x - 1, y: q.y, w: 2, h: q.h }, { x: q.x + q.w - 1, y: q.y, w: 2, h: q.h });
+  }
+  if (plan.stage) out.push(plan.stage);
+  if (plan.roaster) out.push({ x: plan.roaster.x - 15, y: plan.roaster.y - 16, w: 30, h: 17 });
+  out.push(...plan.groves);
+  for (const p of plan.armchairs) out.push({ x: p.x - 11, y: p.y - 12, w: 22, h: 12 });
+  for (const b of plan.bistro) {
+    out.push({ x: b.x - 7, y: b.y - 8, w: 14, h: 10 });
+    for (const x of b.chairs) out.push({ x: x - 6, y: b.y - 10, w: 12, h: 10 });
+    if (parasolOver(b)) out.push({ x: b.x - 15, y: b.y - 40, w: 30, h: 16 }, { x: b.x - 2, y: b.y - 26, w: 4, h: 28 });
+  }
+  const t = plan.terrace;
+  if (t) {
+    const m = menuSignAt(L, t);
+    out.push({ x: m.x, y: m.y, w: 14, h: 22 });
+    for (const x of [x0 - 18, x1 + 2]) if (x >= 0 && x + 18 <= L.W) out.push({ x, y: t.y + 14, w: 18, h: 12 });
+  }
+  const P = plan.piazza;
+  if (P) out.push({ x: P.x + P.w - 8, y: P.y, w: 8, h: P.h });
+  const fo = plan.fountain;
+  if (fo) out.push({ x: fo.x - fo.rx - 14, y: fo.y - fo.ry - 10, w: fo.rx * 2 + 28, h: fo.ry * 2 + 20 });
+  for (const g of plan.gardens) out.push(g.lawn);
+  for (const p of plan.benches) out.push({ x: p.x - 11, y: p.y - 10, w: 22, h: 10 });
+  if (plan.street) out.push(plan.street);
+  return out;
+}
+
+/**
+ * The ways people cut across open floor (between the lanes, where the walls
+ * let them), as strips to keep the decor off: they're learned with the
+ * layout, the decor is placed after.
+ */
+export function acrossFloorOf(L: Layout): Rect[] {
+  const now = walkwaysOf(L.net);
+  if (!now || !L.walls) return [];
+  const L0: Layout = { ...L, walls: undefined, net: { ...L.net } };
+  learnWalkways(L0);
+  const key = (s: { a: Point; b: Point }) => `${s.a.x},${s.a.y},${s.b.x},${s.b.y}`;
+  const old = new Set((walkwaysOf(L0.net) ?? []).map(key));
+  return now.filter((s) => !old.has(key(s))).map((s) => ({ x: Math.min(s.a.x, s.b.x) - 5, y: Math.min(s.a.y, s.b.y) - 5, w: Math.abs(s.b.x - s.a.x) + 10, h: Math.abs(s.b.y - s.a.y) + 10 }));
+}
+
 function done(L: Layout, plan: Omit<CafePlan, "cafe" | "extra">, f: Fixtures): Layout {
   hang(L, f, plan.bldg);
   const full: CafePlan = { cafe: true, ...plan, extra: [] };
   L.themeData = full;
   full.extra = extras(L);
+  L.walls = wallsOf(L, full);
   return L;
 }
 

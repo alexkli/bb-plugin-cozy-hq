@@ -15,7 +15,7 @@ import { cached, drawPixelText, floorPlan, pixelTextWidth } from "../../themekit
 import { hash } from "../../pixel.ts";
 import { cafePlant } from "./props.ts";
 import { C, OUTLINE, rect, sprite } from "./kit.ts";
-import { planOf, type CafePlan, type Counter, type Table } from "./plan.ts";
+import { acrossFloorOf, menuSignAt, parasolOver, planOf, type CafePlan, type Counter, type Table } from "./plan.ts";
 import { clickDecor, clickLights, clickOverlay } from "./clicks.ts";
 import { drawPerson } from "./view.ts";
 
@@ -672,6 +672,8 @@ function fillers(L: Layout, plan: CafePlan): Placed[] {
     }
     for (const p of plan.benches) taken.push({ x: p.x - 12, y: p.y - 14, w: 24, h: 16 });
     taken.push(...plan.groves);
+    // Off the ways people cut across the floor.
+    taken.push(...acrossFloorOf(L));
     if (plan.street) taken.push({ x: 0, y: plan.street.y - 18, w: L.W, h: L.H });
     const clash = (r: Rect) => taken.some((q) => r.x < q.x + q.w + 2 && q.x < r.x + r.w + 2 && r.y < q.y + q.h + 2 && q.y < r.y + r.h + 2);
     const put = (region: Rect, items: Filler[], spread = 3) => {
@@ -742,13 +744,13 @@ function staticItems(L: Layout, plan: CafePlan): Placed[] {
     const t = plan.terrace;
     if (t) {
       const door = L.wall.door;
-      const ax = door.x + door.w + 26 <= L.W ? door.x + door.w + 6 : door.x - 20;
-      out.push({ x: ax, y: t.y + 8, z: t.y + 29, s: menuSignSprite() });
+      const m = menuSignAt(L, t);
+      out.push({ x: m.x, y: m.y, z: t.y + 29, s: menuSignSprite() });
       // A bike parked at the curb.
       if (plan.street) out.push({ x: Math.min(L.W - 28, door.x + door.w + 96), y: plan.street.y - 15, z: plan.street.y, s: bikeSprite() });
       // Parasols over every third table.
       plan.bistro.forEach((b, i) => {
-        if ((Math.floor(b.x / 62) * 5 + Math.floor(b.y / 36) * 3) % 7 === 1) out.push({ x: b.x - 15, y: b.y - 40, z: b.y + 3, s: parasolSprite(i % 2) });
+        if (parasolOver(b)) out.push({ x: b.x - 15, y: b.y - 40, z: b.y + 3, s: parasolSprite(i % 2) });
       });
       for (const x of [plan.bldg.x0 - 18, plan.bldg.x1 + 2]) if (x >= 0 && x + 18 <= L.W) out.push({ x, y: t.y - 4, z: t.y + 26, s: olivePotSprite() });
     }
