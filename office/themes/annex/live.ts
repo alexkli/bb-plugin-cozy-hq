@@ -6,7 +6,7 @@ import type { Light, OutsideInfo, PaintInfo, SkyColors, Theme, WallLightsInfo, D
 import type { Layout, Rect } from "../../layout.ts";
 import { Grid, OUTLINE, cached, classicProp, floorPlan, hash, makeCanvas, mix, rng } from "../../themekit.ts";
 import { P, papers } from "./pal.ts";
-import { planOf, siteOf, type Site } from "./plan.ts";
+import { onAWay, planOf, siteOf, type Site } from "./plan.ts";
 import { leakTop, tubes, urnOf, type Tube } from "./fixtures.ts";
 import { clickDecor, clickLights, clickOverlay, clickUnderlay, tubeKick, type ClutterSpots } from "./clicks.ts";
 import { habitDecor, habitLights, habitOverlay } from "./habits.ts";
@@ -574,22 +574,12 @@ function clutter(L: Layout): Item[] {
     const overlap = (a: Rect, b: Rect, m = 0) => a.x < b.x + b.w + m && a.x + a.w + m > b.x && a.y < b.y + b.h + m && a.y + a.h + m > b.y;
     const plants: Rect[] = L.plants.filter((pl) => pl.sprite !== "HANGING_PLANT").map((pl) => ({ x: pl.x, y: pl.y, w: pl.sprite === "LARGE_PLANT" ? 32 : 16, h: pl.sprite === "LARGE_PLANT" ? 48 : 32 }));
     const clash = (r: Rect) => taken.some((o) => overlap(r, o, 4)) || plants.some((o) => overlap(r, o, 2));
-    // Keep off the event floor and wherever the gags and the handyman walk.
+    // Keep off the event floor and wherever the gags and the handyman walk,
+    // and off the ways people cut across the floor.
     const building = planOf(L);
     const ev = L.eventArea;
     const walks = building?.extra ?? [];
-    const nearWalk = (r: Rect) =>
-      walks.some((path) =>
-        path.some((p, i) => {
-          const q = path[i + 1];
-          if (!q) return false;
-          const x0 = Math.min(p.x, q.x) - 8;
-          const x1 = Math.max(p.x, q.x) + 8;
-          const y0 = Math.min(p.y, q.y) - 8;
-          const y1 = Math.max(p.y, q.y) + 4;
-          return r.x < x1 && r.x + r.w > x0 && r.y < y1 && r.y + r.h > y0;
-        }),
-      );
+    const nearWalk = (r: Rect) => onAWay(L, r, walks);
     const site = siteOf(L);
     const add = (kind: Item["kind"], canvas: HTMLCanvasElement, at: Rect) => {
       const r = { x: at.x, y: at.y, w: canvas.width, h: canvas.height };

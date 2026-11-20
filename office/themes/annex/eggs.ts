@@ -18,7 +18,7 @@ import { ctx2d } from "../../pixel.ts";
 import { cached, drawPixelText, floorPlan, Grid, OUTLINE, pixelTextWidth } from "../../themekit.ts";
 import { bareWall, chorus, ease, pick, rarely } from "../eggs.ts";
 import { P } from "./pal.ts";
-import { siteOf } from "./plan.ts";
+import { onAWay, siteOf } from "./plan.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -54,7 +54,7 @@ function boxOf(L: Layout): Rect | null {
   return cached(`annex-egg|box-at|${L.W}x${L.H}|${L.props.length}|${L.spots.length}`, () => {
     // Inside the building (the panel's edges can be the street or the brick outside).
     const s = siteOf(L);
-    const c = floorPlan(L).find(14, 13, 16, { x: s.x + 12, y: 0, w: s.w - 24, h: s.h - 12 });
+    const c = floorPlan(L).find(14, 13, 16, { x: s.x + 12, y: 0, w: s.w - 24, h: s.h - 12 }).filter((r) => !onAWay(L, r));
     return c[Math.floor(c.length * 0.7)] ?? null;
   });
 }

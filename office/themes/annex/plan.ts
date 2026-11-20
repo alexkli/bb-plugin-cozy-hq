@@ -31,6 +31,8 @@ import {
   type Spot,
   type WallSegment,
 } from "../../themekit.ts";
+import { stageOf } from "./fixtures.ts";
+import { learnWalkways, walkwaysOf } from "../../walkways.ts";
 
 export type CellKind = "pen" | "break" | "kitchen" | "storage" | "hall" | "waiting" | "games" | "archive" | "nook" | "walled" | "junk";
 
@@ -68,6 +70,15 @@ export function planOf(L: Layout): AnnexPlan | null {
 /** The building inside the panel (the whole panel for layouts that aren't ours). */
 export function siteOf(L: Layout): Site {
   return planOf(L)?.site ?? { x: 0, w: L.W, h: L.H };
+}
+
+/** Whether a rect of floor lies on (or just by) a way people walk: what gets left about keeps off them. */
+export function onAWay(L: Layout, r: Rect, extra: Point[][] = []): boolean {
+  if (!walkwaysOf(L.net)) learnWalkways(L);
+  const near = (p: Point, q: Point) =>
+    r.x < Math.max(p.x, q.x) + 8 && r.x + r.w > Math.min(p.x, q.x) - 8 && r.y < Math.max(p.y, q.y) + 4 && r.y + r.h > Math.min(p.y, q.y) - 8;
+  if (extra.some((path) => path.some((p, i) => i + 1 < path.length && near(p, path[i + 1]!)))) return true;
+  return (walkwaysOf(L.net) ?? []).some((s) => near(s.a, s.b));
 }
 
 const ALL = { t: true, b: true, l: true, r: true };
@@ -157,12 +168,43 @@ function done(L: Layout, cells: Cell[], site: Site): Layout {
   const plan: AnnexPlan = { annex: true, site, cells, flights: flightsOf(L.net), extra: [] };
   L.themeData = plan;
   plan.extra = extras(L);
+  L.walls = wallsOf(plan);
   // Events happen in the old hall only when the plan has one.
   const e = L.eventArea;
   const ex = e.x + e.w / 2;
   const ey = e.y + e.h / 2;
   if (cells.some((c) => c.kind === "hall" && ex >= c.r.x && ex <= c.r.x + c.r.w && ey >= c.r.y && ey <= c.r.y + c.r.h)) L.words = { "in the lounge": "in the old hall" };
   return L;
+}
+
+/**
+ * What nobody cuts across: the building's own walls (the street and the yard
+ * are outside), every partition, the storerooms and junk corners (crammed with
+ * boxes and cabinets), the banisters of the stair flights, and the old hall's
+ * stage and tea urn. The rest of the clutter keeps off the ways across (live.ts).
+ */
+function wallsOf(plan: AnnexPlan): Rect[] {
+  const s = plan.site;
+  const out: Rect[] = [
+    { x: s.x - 1, y: 0, w: 6, h: s.h },
+    { x: s.x + s.w - 5, y: 0, w: 6, h: s.h },
+    { x: s.x, y: s.h - 5, w: s.w, h: 6 },
+  ];
+  for (const c of plan.cells) {
+    const r = c.r;
+    if (c.kind === "storage" || c.kind === "junk") out.push(r);
+    if (c.sides.t) out.push({ x: r.x, y: r.y - 2, w: r.w, h: 6 });
+    if (c.sides.b) out.push({ x: r.x, y: r.y + r.h - 1, w: r.w, h: 8 });
+    if (c.sides.l) out.push({ x: r.x - 1, y: r.y, w: 4, h: r.h + 4 });
+    if (c.sides.r) out.push({ x: r.x + r.w - 3, y: r.y, w: 4, h: r.h + 4 });
+    if (c.kind === "hall") {
+      const st = stageOf(c);
+      if (st) out.push({ x: st.x - 3, y: st.y, w: st.w + 3, h: st.h + 3 });
+      if (r.h >= 40) out.push({ x: r.x + 5, y: r.y + 6, w: 18, h: 24 });
+    }
+  }
+  for (const f of plan.flights) out.push(f);
+  return out;
 }
 
 /**
