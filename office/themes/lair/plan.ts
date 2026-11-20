@@ -14,7 +14,7 @@
 // left, the lounge under the screen wall), dressed the same way, with a scale
 // model of the rocket in the antechamber; small phones keep it in the lounge.
 import type { Facing, Layout, Rect, Spot, WallSegment } from "../../layout.ts";
-import { BAY_DOORS, miniBay, rocketSize, type Bay, type BaySpot } from "./bay.ts";
+import { BAY_DOORS, miniBay, rocketBox, rocketSize, type Bay, type BaySpot } from "./bay.ts";
 import {
   bossToys,
   Builder,
@@ -273,6 +273,38 @@ function railSpotsFor(net: Network, rail: number, W: number): LairPlan["railSpot
 
 // ------------------------------------------------------------------ the wall
 
+/**
+ * Everything in the lair nobody cuts across (`L.walls`): the crater (its lip,
+ * the drop, the monorail and the lava), the rocket with its pad, its service
+ * tower and (on the big bay) the bulkhead with the launch doors behind it,
+ * the trapdoor, and the boulders on the crater ledge.
+ */
+function wallsOf(L: Layout, plan: LairPlan): Rect[] {
+  const out: Rect[] = [];
+  const c = plan.crater;
+  if (c) out.push({ x: 0, y: c.y, w: L.W, h: L.H - c.y });
+  const bay = plan.bay;
+  if (bay) {
+    const parts: Rect[] = [rocketBox(bay), bay.pad];
+    const g = bay.gantry;
+    if (g) parts.push({ x: g.x - 11, y: g.top - 3, w: (bay.scale === 1 ? 16 : 8) + 12, h: bay.base - g.top + 3 });
+    if (bay.bulkhead) parts.push(bay.bulkhead);
+    const x0 = Math.min(...parts.map((r) => r.x));
+    const y0 = Math.min(...parts.map((r) => r.y));
+    const x1 = Math.max(...parts.map((r) => r.x + r.w));
+    const y1 = Math.max(...parts.map((r) => r.y + r.h));
+    out.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+  }
+  const h = plan.hatch;
+  out.push({ x: h.x - 2, y: h.y - 2, w: h.w + 4, h: h.h + 4 });
+  if (plan.variant === "portrait" && c) {
+    // As the backdrop places them, on the ledge over the crater.
+    const top = L.eventArea.y - 6;
+    for (const [bx, by] of [[4, c.y - 16], [L.W - 22, top + 4], [L.W - 18, c.y - 14]] as const) out.push({ x: bx, y: by, w: 18, h: 12 });
+  }
+  return out;
+}
+
 /** Windows along a stretch of wall, avoiding some spans. */
 function windowsIn(x0: number, x1: number, y: number, h: number, avoid: [number, number][] = [], maxW = 48): Rect[] {
   const out: Rect[] = [];
@@ -456,6 +488,7 @@ function tallPlan(W: number, H: number, threads: number): Layout | null {
   // The launch doors are the last window: the office draws the sky (and the weather) in them.
   L.wall.windows.push(doors);
   L.themeData = plan;
+  L.walls = wallsOf(L, plan);
   L.words = { "in the lounge": "in the launch bay" };
   return L;
 }
@@ -497,6 +530,7 @@ function shortPlan(W: number, H: number, threads: number): Layout {
     bay,
   };
   L.themeData = plan;
+  L.walls = wallsOf(L, plan);
   return L;
 }
 
@@ -707,6 +741,7 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
     button: buttonOf(boss.desk),
   };
   L.themeData = plan;
+  L.walls = wallsOf(L, plan);
   if (ledge) L.words = { "in the lounge": "out on the crater ledge" };
   return L;
 }
