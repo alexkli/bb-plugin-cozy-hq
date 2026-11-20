@@ -87,6 +87,96 @@ export function planOf(L: Layout): ShipPlan | null {
   return d && d.ship === true ? (d as ShipPlan) : null;
 }
 
+// ------------------------------------------------------------------ bulkheads
+
+/** A low bulkhead along one edge of an open compartment (at: its line; from, to: its run; gaps: where people pass). */
+export interface Bulkhead {
+  horizontal: boolean;
+  at: number;
+  from: number;
+  to: number;
+  /** Shows its face (the top and bottom edges). */
+  face: boolean;
+  gaps: [number, number][];
+}
+
+/** Bulkhead pieces shorter than this aren't built. */
+export const BULKHEAD_MIN = 6;
+
+/** Gaps in a room's edge where people pass: spot paths crossing or running along it, aisles and halls. */
+function openings(L: Layout, horizontal: boolean, at: number, from: number, to: number): [number, number][] {
+  const out: [number, number][] = [];
+  const add = (a: number, z: number) => out.push([Math.max(from, a), Math.min(to, z)]);
+  const seg = (ax: number, ay: number, bx: number, by: number) => {
+    // In the edge's frame: u along it, v across it.
+    const [au, av, bu, bv] = horizontal ? [ax, ay, bx, by] : [ay, ax, by, bx];
+    if (Math.max(au, bu) < from - 9 || Math.min(au, bu) > to + 9) return;
+    if (av === bv) {
+      if (Math.abs(av - at) <= 6) add(Math.min(au, bu) - 9, Math.max(au, bu) + 9);
+      return;
+    }
+    if ((av - at) * (bv - at) > 0) return;
+    const k = (at - av) / (bv - av);
+    const u = au + (bu - au) * k;
+    add(u - 9, u + 9);
+  };
+  for (const s of L.spots) for (let i = 1; i < s.path.length; i++) seg(s.path[i - 1]!.x, s.path[i - 1]!.y, s.path[i]!.x, s.path[i]!.y);
+  for (let i = 1; i < L.entrancePath.length; i++) seg(L.entrancePath[i - 1]!.x, L.entrancePath[i - 1]!.y, L.entrancePath[i]!.x, L.entrancePath[i]!.y);
+  for (const x of L.net.aisles) seg(x, 0, x, L.H);
+  for (const y of L.net.halls) seg(0, y, L.W, y);
+  return out.filter(([a, z]) => z > a).sort((p, q) => p[0] - q[0]);
+}
+
+/** The bulkheads round an open compartment: on the sides that don't meet the hull wall or the panel edge. */
+export function bulkheadsOf(r: Rect, L: Layout, plan: ShipPlan | null): Bulkhead[] {
+  const E = plan?.edgeX ?? 0;
+  const seg = L.segments.find((s) => r.x + 4 >= s.x0 && r.x + 4 < s.x1);
+  const atWall = seg !== undefined && r.y <= seg.depth + 6;
+  // Rooms that host the office's get-togethers stay open toward their hallway.
+  const ev = L.eventArea;
+  const hosts = ev.x >= r.x - 2 && ev.x + ev.w <= r.x + r.w + 2 && ev.y >= r.y - 2 && ev.y + ev.h <= r.y + r.h + 2;
+  const hallAbove = L.net.halls.some((h) => h < r.y && r.y - h < 30);
+  const hallBelow = L.net.halls.some((h) => h > r.y + r.h && h - (r.y + r.h) < 30);
+  const out: Bulkhead[] = [];
+  const add = (horizontal: boolean, at: number, from: number, to: number, face: boolean) => out.push({ horizontal, at, from, to, face, gaps: openings(L, horizontal, at, from, to) });
+  if (!atWall && !(hosts && hallAbove)) add(true, r.y - 3, r.x - 2, r.x + r.w + 2, true);
+  if (r.y + r.h < L.H - 8 - (plan?.edgeY ?? 0) && !(hosts && hallBelow)) add(true, r.y + r.h + 2, r.x - 2, r.x + r.w + 2, true);
+  if (r.x > E + 8) add(false, r.x - 3, r.y - 2, r.y + r.h + 2, false);
+  if (r.x + r.w < L.W - E - 8) add(false, r.x + r.w + 2, r.y - 2, r.y + r.h + 2, false);
+  return out;
+}
+
+/**
+ * Everything on the deck nobody cuts across (`L.walls`): the bulkheads round
+ * the open compartments (their door gaps stay open), the hull at the sides
+ * and the bottom, and the ship's fixtures on the floor: the suit locker, the
+ * drive core, crates, hydroponic troughs or the grow tower.
+ */
+function wallsOf(L: Layout, plan: ShipPlan): Rect[] {
+  const out: Rect[] = [];
+  for (const room of L.rooms) {
+    if (room.walls || room.kind === "pod") continue;
+    for (const e of bulkheadsOf(room.rect, L, plan)) {
+      let u = e.from;
+      const piece = (a: number, z: number) => {
+        if (z - a < BULKHEAD_MIN) return;
+        out.push(e.horizontal ? { x: a, y: e.at - 2, w: z - a, h: e.face ? 5 : 3 } : { x: e.at - 1, y: a, w: 3, h: z - a });
+      };
+      for (const [a, z] of e.gaps) {
+        if (a > u) piece(u, a);
+        u = Math.max(u, z);
+      }
+      if (u < e.to) piece(u, e.to);
+    }
+  }
+  const E = plan.edgeX;
+  const EB = plan.edgeY;
+  if (E > 0) out.push({ x: 0, y: 0, w: E, h: L.H }, { x: L.W - E, y: 0, w: E, h: L.H });
+  if (EB > 0) out.push({ x: 0, y: L.H - EB, w: L.W, h: EB });
+  for (const q of [plan.airlock, plan.core, ...plan.crates, ...plan.troughs]) if (q) out.push({ ...q });
+  return out;
+}
+
 // ------------------------------------------------------------------ compartments
 
 /**
@@ -776,6 +866,7 @@ function widePlan(W: number, H: number, threads: number): Layout {
   dressWall(L, plan, bridgeSeg, wallTv);
   suitLocker(L, plan);
   growTower(L, plan);
+  L.walls = wallsOf(L, plan);
   if (plan.cargo) L.words = { "in the lounge": "in the cargo bay", "on the lounge floor": "in the cargo bay" };
   return L;
 }
@@ -944,6 +1035,7 @@ function portraitPlan(W: number, H: number, threads: number): Layout | null {
   dressWall(L, plan, bridgeSeg);
   suitLocker(L, plan);
   growTower(L, plan);
+  L.walls = wallsOf(L, plan);
   if (plan.cargo) L.words = { "in the lounge": "in the cargo bay", "on the lounge floor": "in the cargo bay" };
   return L;
 }

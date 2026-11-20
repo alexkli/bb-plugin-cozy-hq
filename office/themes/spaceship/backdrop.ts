@@ -10,7 +10,7 @@ import type { BackgroundSteps } from "../../theme.ts";
 import type { Layout, Rect, Room } from "../../layout.ts";
 import { Grid, OUTLINE, drawPixelText, hash, mix, rect, shade } from "../../themekit.ts";
 import { P, hazard, panel, rivets } from "./pal.ts";
-import { planOf, type ShipPlan } from "./plan.ts";
+import { BULKHEAD_MIN, bulkheadsOf, planOf, type Bulkhead, type ShipPlan } from "./plan.ts";
 import { screenPath } from "./space.ts";
 
 const blit = (ctx: CanvasRenderingContext2D, g: Grid, x: number, y: number) => ctx.drawImage(g.toCanvas(), Math.round(x), Math.round(y));
@@ -135,36 +135,12 @@ function hullEdges(ctx: CanvasRenderingContext2D, L: Layout, plan: ShipPlan): vo
 
 // ------------------------------------------------------------------ compartments
 
-/** Gaps in a room's edge where people pass: spot paths crossing or running along it, aisles and halls. */
-function openings(L: Layout, horizontal: boolean, at: number, from: number, to: number): [number, number][] {
-  const out: [number, number][] = [];
-  const add = (a: number, z: number) => out.push([Math.max(from, a), Math.min(to, z)]);
-  const seg = (ax: number, ay: number, bx: number, by: number) => {
-    // In the edge's frame: u along it, v across it.
-    const [au, av, bu, bv] = horizontal ? [ax, ay, bx, by] : [ay, ax, by, bx];
-    if (Math.max(au, bu) < from - 9 || Math.min(au, bu) > to + 9) return;
-    if (av === bv) {
-      if (Math.abs(av - at) <= 6) add(Math.min(au, bu) - 9, Math.max(au, bu) + 9);
-      return;
-    }
-    if ((av - at) * (bv - at) > 0) return;
-    const k = (at - av) / (bv - av);
-    const u = au + (bu - au) * k;
-    add(u - 9, u + 9);
-  };
-  for (const s of L.spots) for (let i = 1; i < s.path.length; i++) seg(s.path[i - 1]!.x, s.path[i - 1]!.y, s.path[i]!.x, s.path[i]!.y);
-  for (let i = 1; i < L.entrancePath.length; i++) seg(L.entrancePath[i - 1]!.x, L.entrancePath[i - 1]!.y, L.entrancePath[i]!.x, L.entrancePath[i]!.y);
-  for (const x of L.net.aisles) seg(x, 0, x, L.H);
-  for (const y of L.net.halls) seg(0, y, L.W, y);
-  return out.filter(([a, z]) => z > a).sort((p, q) => p[0] - q[0]);
-}
-
 /** A low bulkhead along a room's edge, open where people walk through (a door frame either side). */
-function bulkhead(ctx: CanvasRenderingContext2D, L: Layout, horizontal: boolean, at: number, from: number, to: number, face: boolean): void {
-  const gaps = openings(L, horizontal, at, from, to);
+function bulkhead(ctx: CanvasRenderingContext2D, e: Bulkhead): void {
+  const { horizontal, at, from, to, face, gaps } = e;
   let u = from;
   const piece = (a: number, z: number) => {
-    if (z - a < 6) return;
+    if (z - a < BULKHEAD_MIN) return;
     if (horizontal) {
       rect(ctx, a, at - 2, z - a, 3, P.steelDk);
       rect(ctx, a, at - 2, z - a, 1, P.panelMid);
@@ -195,22 +171,6 @@ function bulkhead(ctx: CanvasRenderingContext2D, L: Layout, horizontal: boolean,
     u = Math.max(u, z);
   }
   if (u < to) piece(u, to);
-}
-
-/** The compartment around an open room: bulkheads on the sides that don't meet the hull wall or the panel edge. */
-function compartment(ctx: CanvasRenderingContext2D, r: Rect, L: Layout, plan: ShipPlan | null): void {
-  const E = plan?.edgeX ?? 0;
-  const seg = L.segments.find((s) => r.x + 4 >= s.x0 && r.x + 4 < s.x1);
-  const atWall = seg !== undefined && r.y <= seg.depth + 6;
-  // Rooms that host the office's get-togethers stay open toward their hallway.
-  const ev = L.eventArea;
-  const hosts = ev.x >= r.x - 2 && ev.x + ev.w <= r.x + r.w + 2 && ev.y >= r.y - 2 && ev.y + ev.h <= r.y + r.h + 2;
-  const hallAbove = L.net.halls.some((h) => h < r.y && r.y - h < 30);
-  const hallBelow = L.net.halls.some((h) => h > r.y + r.h && h - (r.y + r.h) < 30);
-  if (!atWall && !(hosts && hallAbove)) bulkhead(ctx, L, true, r.y - 3, r.x - 2, r.x + r.w + 2, true);
-  if (r.y + r.h < L.H - 8 - (plan?.edgeY ?? 0) && !(hosts && hallBelow)) bulkhead(ctx, L, true, r.y + r.h + 2, r.x - 2, r.x + r.w + 2, true);
-  if (r.x > E + 8) bulkhead(ctx, L, false, r.x - 3, r.y - 2, r.y + r.h + 2, false);
-  if (r.x + r.w < L.W - E - 8) bulkhead(ctx, L, false, r.x + r.w + 2, r.y - 2, r.y + r.h + 2, false);
 }
 
 // ------------------------------------------------------------------ room floors
@@ -598,7 +558,7 @@ export const BACKGROUND: Partial<BackgroundSteps> = {
   room(ctx, room, L) {
     const plan = planOf(L);
     roomFloor(ctx, room, L, plan);
-    if (!room.walls && room.kind !== "pod") compartment(ctx, room.rect, L, plan);
+    if (!room.walls && room.kind !== "pod") for (const e of bulkheadsOf(room.rect, L, plan)) bulkhead(ctx, e);
   },
   roomWalls(ctx, room, L) {
     const r = room.rect;
