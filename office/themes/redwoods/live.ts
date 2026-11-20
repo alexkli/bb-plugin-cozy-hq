@@ -8,6 +8,7 @@ import { C, cached, Grid } from "./kit.ts";
 import { decorSprite, type DecorKind } from "./decor.ts";
 import { creekShimmer, festoonGlow, festoonLights, forestItems, treeLanterns } from "./forest.ts";
 import { campData } from "./plan.ts";
+import { walkwaysOf } from "../../walkways.ts";
 import { bindTentCtx, tentItems, tentLights } from "./tents.ts";
 import { gateOpen } from "./treeline.ts";
 import { clickItems, clickLights, clickOverlay, clickUnderlay, fireBoost } from "./clicks.ts";
@@ -385,6 +386,8 @@ function spots(L: Layout): Spots {
     used.push({ x: ev.x - 10, y: ev.y - 16, w: ev.w + 20, h: ev.h + 26 });
     for (const t of campData(L)?.trees ?? []) used.push({ x: t.x - 10, y: t.base - 24, w: t.w + 20, h: 30 });
     for (const c of campData(L)?.creek ? [campData(L)!.strips[1]!] : []) used.push({ x: c.x - 4, y: 0, w: c.w + 8, h: L.H });
+    // And off the walkways, the ways across the open floor included.
+    for (const s of walkwaysOf(L.net) ?? []) used.push({ x: Math.min(s.a.x, s.b.x) - 2, y: Math.min(s.a.y, s.b.y) - 2, w: Math.abs(s.b.x - s.a.x) + 4, h: Math.abs(s.b.y - s.a.y) + 4 });
     const clash = (q: Rect) => used.some((u) => q.x < u.x + u.w + 6 && q.x + q.w + 6 > u.x && q.y < u.y + u.h + 6 && q.y + q.h + 6 > u.y);
     let ki = 0;
     for (let tries = 0; tries < 15 && items.length < Math.round((L.W * L.H) / (campData(L)?.tents ? 8000 : 14000)); tries++) {

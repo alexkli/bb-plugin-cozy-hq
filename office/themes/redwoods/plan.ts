@@ -584,5 +584,51 @@ export function campPortrait(W: number, H: number, threads: number): Layout {
 export function campLayout(W: number, H: number, opts: { threads: number; portrait: boolean }): Layout | null {
   const L = opts.portrait ? campPortrait(W, H, opts.threads) : (campBold(W, H, opts.threads) ?? campWide(W, H, opts.threads));
   outdoors(L);
+  L.walls = campWalls(L);
   return L;
+}
+
+/**
+ * What stands on the camp floor besides the furniture, for the ways across it
+ * (`L.walls`): the giants (trunk and root flare), the creek, the desk tents'
+ * back canvas, poles and guy-rope stakes, the porch tent's canopy hem and
+ * poles, the kitchen pavilion's front posts and the treehouse's rope ladder.
+ * The ferns, logs and stumps are placed when drawn (live.ts), off the walkways.
+ */
+function campWalls(L: Layout): Rect[] {
+  const d = campData(L);
+  if (!d) return [];
+  const out: Rect[] = [];
+  const post = (x: number, y: number) => out.push({ x: x - 2, y: y - 4, w: 6, h: 5 });
+  for (const t of d.trees) {
+    const flare = Math.max(4, Math.round(t.w * 0.32));
+    out.push({ x: t.x, y: t.base - t.h, w: t.w, h: t.h }, { x: t.x - flare, y: t.base - 10, w: t.w + 2 * flare, h: 12 });
+  }
+  const c = d.creek;
+  if (c) {
+    const xs = c.pts.map((p) => p.x);
+    const x0 = Math.min(...xs) - c.w / 2 - 4;
+    out.push({ x: Math.floor(x0), y: c.pts[0]!.y - 2, w: Math.ceil(Math.max(...xs) + c.w / 2 + 4 - x0), h: L.H - c.pts[0]!.y + 2 });
+  }
+  for (const T of d.tents ?? []) {
+    // The back canvas, the poles at the corners and halfway down, the stakes of the guy ropes.
+    out.push({ x: T.x - 7, y: T.y - 10, w: T.w + 14, h: 11 });
+    const back = T.y - 4;
+    const front = T.y + T.h + 1;
+    for (const x of [T.x - 7, T.x + T.w + 4]) for (const y of [back, T.y + Math.round(T.h / 2), front]) post(x, y);
+    out.push({ x: T.x - 17, y: back - 2, w: 11, h: 6 }, { x: T.x + T.w + 4, y: back - 2, w: 11, h: 6 });
+    out.push({ x: T.x - 17, y: front - 2, w: 11, h: 7 }, { x: T.x + T.w + 4, y: front - 2, w: 11, h: 7 });
+  }
+  for (const room of L.rooms) {
+    const r = room.rect;
+    if (room.kind === "waiting") {
+      out.push({ x: r.x, y: r.y - 2, w: r.w, h: 8 });
+      for (const x of [r.x + 1, r.x + r.w - 4]) for (const y of [r.y + 1, r.y + r.h]) post(x + 1, y);
+    } else if (room.kind === "kitchen") {
+      for (const x of [r.x - 1, r.x + r.w - 2]) post(x + 1, r.y + r.h);
+    } else if (room.kind === "boss" && room.doorX !== undefined && room.doorSide === "top") {
+      out.push({ x: room.doorX - 7, y: r.y - 13, w: 14, h: 10 });
+    }
+  }
+  return out;
 }
