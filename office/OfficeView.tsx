@@ -831,6 +831,7 @@ export function OfficeView(input: OfficeProps) {
         },
         overflow: overflowRef.current,
         targets: targetsRef.current,
+        walkways: walkwaysRef.current,
         ...seasonsFor(dbg.season, date),
       });
       // At whole device pixels per pixel the page scales it up crisply (CSS
@@ -996,6 +997,18 @@ export function OfficeView(input: OfficeProps) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // P (hidden): the walkways drawn over the office, for working on floor plans. Not remembered.
+  const walkwaysRef = useRef(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "p" || e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+      const el = e.target;
+      if (el instanceof HTMLElement && (el.isContentEditable || el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT")) return;
+      walkwaysRef.current = !walkwaysRef.current;
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const [anchors, setAnchors] = useState<LabelAnchor[]>([]);
   const [speech, setSpeech] = useState<SpeechBubble[]>([]);
   useEffect(() => {

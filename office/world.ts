@@ -23,7 +23,7 @@ import {
   type Look,
 } from "./characters.ts";
 import { Crew, drawLanyard, type DeskWork } from "./crew.ts";
-import { learnWalkways } from "./walkways.ts";
+import { learnWalkways, walkwaysOf } from "./walkways.ts";
 import { buildProps, paintBackground, roombaSprite, speakerSprite, type Prop } from "./furniture.ts";
 import type { Facing, Green, Layout, Point, PokeKind, Rect, Spot } from "./layout.ts";
 import { waitsForYou, type DeskStyle, type Mood, type WaitKind } from "./model.ts";
@@ -387,6 +387,8 @@ export interface Env {
   seasons: Season[];
   /** Outline everything you can click (while Alt is held). */
   targets?: boolean;
+  /** Draw the walkways over the office (the hidden P key). */
+  walkways?: boolean;
 }
 
 /** Something you can click, and its box (round: the circle inside it). */
@@ -4015,7 +4017,66 @@ export class World {
     for (const a of this.agents.values()) this.drawBubble(ctx, a);
     this.crew.drawOverlay(ctx, this.theme);
     if (env.targets) this.drawTargets(ctx);
+    if (env.walkways) this.drawWalkways(ctx);
     this.drawHover(ctx, env);
+  }
+
+  /**
+   * Where people can walk (the hidden P key): every spot's own way in (faint), the walkways everyone
+   * uses (blue), ways across open floor (pink), walls and walled rooms (red), the rest of each walk (yellow).
+   */
+  private drawWalkways(ctx: CanvasRenderingContext2D): void {
+    const L = this.L!;
+    const segs = walkwaysOf(L.net);
+    if (!segs) return;
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = "#ff3b30";
+    for (const r of [...(L.walls ?? []), ...L.rooms.filter((r) => r.walls).map((r) => r.rect)]) {
+      ctx.fillRect(Math.round(r.x), Math.round(r.y), Math.max(1, Math.round(r.w)), 1);
+      ctx.fillRect(Math.round(r.x), Math.round(r.y + r.h) - 1, Math.max(1, Math.round(r.w)), 1);
+      ctx.fillRect(Math.round(r.x), Math.round(r.y), 1, Math.max(1, Math.round(r.h)));
+      ctx.fillRect(Math.round(r.x + r.w) - 1, Math.round(r.y), 1, Math.max(1, Math.round(r.h)));
+    }
+    // Every spot's own way in, faint (in walled rooms these aren't walkways for others).
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = "#00e5ff";
+    for (const path of [...L.spots.map((sp) => sp.path), ...(L.boss.way ? [L.boss.way] : [])]) {
+      for (let i = 1; i < path.length; i++) {
+        const a = path[i - 1]!;
+        const b = path[i]!;
+        const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y)));
+        for (let k = 0; k <= n; k++) ctx.fillRect(Math.round(a.x + ((b.x - a.x) * k) / n), Math.round(a.y + ((b.y - a.y) * k) / n), 1, 1);
+      }
+    }
+    ctx.globalAlpha = 0.85;
+    for (const across of [false, true]) {
+      ctx.fillStyle = across ? "#ff2bd6" : "#2f8cff";
+      for (const s of segs) {
+        if (!!s.across !== across) continue;
+        const x0 = Math.round(Math.min(s.a.x, s.b.x));
+        const y0 = Math.round(Math.min(s.a.y, s.b.y));
+        const w = Math.round(Math.abs(s.b.x - s.a.x));
+        const h = Math.round(Math.abs(s.b.y - s.a.y));
+        // Walkways are straight across or straight down; anything else, as dots.
+        if (w === 0 || h === 0) ctx.fillRect(x0, y0, Math.max(1, w + (h === 0 ? 1 : 0)), Math.max(1, h + (w === 0 ? 1 : 0)));
+        else {
+          const n = Math.ceil(Math.hypot(w, h) / 2);
+          for (let k = 0; k <= n; k++) ctx.fillRect(Math.round(s.a.x + ((s.b.x - s.a.x) * k) / n), Math.round(s.a.y + ((s.b.y - s.a.y) * k) / n), 1, 1);
+        }
+      }
+    }
+    // Where people are headed: the rest of each walk.
+    ctx.fillStyle = "#ffd60a";
+    for (const a of this.agents.values()) {
+      let p = { x: a.x, y: a.y };
+      for (const q of a.path) {
+        const n = Math.ceil(Math.hypot(q.x - p.x, q.y - p.y) / 3);
+        for (let k = 0; k <= n; k += 1) ctx.fillRect(Math.round(p.x + ((q.x - p.x) * k) / Math.max(1, n)), Math.round(p.y + ((q.y - p.y) * k) / Math.max(1, n)), 1, 1);
+        p = q;
+      }
+    }
+    ctx.restore();
   }
 
   private drawPropExtras(ctx: CanvasRenderingContext2D, p: Prop, env: Env): void {

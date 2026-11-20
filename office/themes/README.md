@@ -140,8 +140,10 @@ an empty list when there are none) and people may also cut straight across
 open floor between two lanes side by side, wherever nothing stands in between
 (furniture, desks, seats, clickables, walled rooms, your walls). Leave it out
 and they keep to the walkways. The classic office and the Mountain Cabin set
-it; check with the overlay in the preview (`window.__cozyWalkways`) before
-you do, since anything you draw that isn't listed gets walked through.
+it; check before you do, since anything you draw that isn't listed gets
+walked through: press **P** in the office (a hidden key) to see every spot's
+way in (cyan), the walkways everyone uses (blue), the ways across open floor
+(pink), the walls and walled rooms (red) and where everyone's headed (yellow).
 
 **Room builders** (in themekit) lay out a room and its spots, props and
 clickables inside a rect; compose them anywhere, or write your own rooms

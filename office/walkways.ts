@@ -11,6 +11,8 @@ import type { Layout, Network, Point, Rect } from "./layout.ts";
 interface Seg {
   a: Point;
   b: Point;
+  /** A way across open floor (see `acrossFloor`), not a hallway, aisle or spot's path. */
+  across?: boolean;
 }
 
 type Edge = [to: number, length: number];
@@ -181,7 +183,7 @@ function acrossFloor(L: Layout, segs: Seg[], walled: Rect[], walls: Rect[]): Seg
     const k = `${a.x},${a.y},${b.x},${b.y}`;
     if (seen.has(k)) return;
     seen.add(k);
-    out.push({ a, b });
+    out.push({ a, b, across: true });
   };
   /** Runs of clear ways side by side: one at each end and one in the middle. */
   const runs = (list: { at: number; from: number; to: number }[], make: (at: number, from: number, to: number) => void) => {
@@ -240,7 +242,7 @@ function link(adj: Edge[][] | Map<number, Edge[]>, u: number, v: number, d: numb
 }
 
 /** The floor plan's walkways (for a look at them), or null when they haven't been learned. */
-export function walkwaysOf(net: Network): readonly { a: Point; b: Point }[] | null {
+export function walkwaysOf(net: Network): readonly { a: Point; b: Point; across?: boolean }[] | null {
   return known.get(net)?.segs ?? null;
 }
 
