@@ -103,6 +103,11 @@ function life(L: Layout): TerraceLife | null {
   });
 }
 
+/** Where the festoon poles stand on the deck (their feet), from the plan alone. */
+export function terracePoles(L: Layout): { x: number; y: number }[] {
+  return life(L)?.poles ?? [];
+}
+
 function tubShell(w: number, h: number): HTMLCanvasElement {
   // A travertine-rimmed hot tub with a teak step.
   return sprite(`tub-${w}x${h}`, w + 2, h + 2, (g) => {

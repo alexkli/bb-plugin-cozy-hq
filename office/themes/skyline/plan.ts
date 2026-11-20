@@ -22,6 +22,7 @@ import {
   type Access,
   type Network,
 } from "../../themekit.ts";
+import { terracePoles } from "./terrace.ts";
 
 export type SegKind = "glass" | "core" | "feature";
 
@@ -657,6 +658,46 @@ function buildBossTop(b: Builder, r: Rect, hallY: number): Layout["boss"] {
 
 /** The Sky Loft floor plan for a panel (null: the classic plan). */
 export function skylinePlan(W: number, H: number, opts: { threads: number; portrait: boolean }): Layout | null {
-  return opts.portrait ? portraitPlan(W, H, opts.threads) : widePlan(W, H, opts.threads);
+  const L = opts.portrait ? portraitPlan(W, H, opts.threads) : widePlan(W, H, opts.threads);
+  const plan = L && planOf(L);
+  if (L && plan) L.walls = wallsOf(L, plan);
+  return L;
+}
+
+/** The runs of [a, b) left once the gaps are taken out. */
+function minus(a: number, b: number, gaps: [number, number][]): [number, number][] {
+  let runs: [number, number][] = [[a, b]];
+  for (const [g0, g1] of gaps) runs = runs.flatMap(([s, e]): [number, number][] => (g1 <= s || g0 >= e ? [[s, e]] : ([[s, g0], [g1, e]] as [number, number][]).filter(([p, q]) => q > p)));
+  return runs;
+}
+
+/**
+ * What stands in the loft besides the furniture, for the ways across the
+ * floor (`L.walls`): the glass wall and side between inside and the terrace
+ * (open at their doors), the balustrade, the glass round the edges and the
+ * drop beyond it, the elevator's doorway, and on the deck the fire table, the
+ * hot tub, the loungers, the telescope and the festoon poles. The vase, the
+ * sculpture and the spiral stair are placed when drawn (live.ts), off the
+ * walkways.
+ */
+function wallsOf(L: Layout, p: SkyPlan): Rect[] {
+  const out: Rect[] = [...p.rails, ...p.beyond];
+  const E = p.edgeX;
+  const FB = L.H - p.edgeY;
+  for (const [y0, y1] of p.glassLeft) out.push(E >= 8 ? { x: E - 3, y: y0, w: 5, h: Math.min(y1, FB) - y0 } : { x: 0, y: y0, w: 5, h: y1 - y0 });
+  for (const [y0, y1] of p.glassRight) out.push(E >= 8 ? { x: L.W - E - 2, y: y0, w: 5, h: Math.min(y1, FB) - y0 } : { x: L.W - 5, y: y0, w: 5, h: y1 - y0 });
+  for (const [x0, x1] of p.glassBottom) out.push(p.edgeY >= 8 ? { x: x0, y: FB - 3, w: x1 - x0, h: 5 } : { x: x0, y: L.H - 5, w: x1 - x0, h: 5 });
+  const wall = p.terraceWall;
+  if (wall) for (const [a, b] of minus(wall.x0, wall.x1, wall.gaps)) out.push({ x: a - 2, y: wall.y - 7, w: b - a + 4, h: 9 });
+  const side = p.terraceSide;
+  if (side) for (const [a, b] of minus(side.y0, side.y1, side.gaps)) out.push({ x: side.x - 2, y: a, w: 5, h: b - a });
+  const d = L.wall.door;
+  out.push({ x: d.x - 2, y: d.y + d.h - 4, w: d.w + 4, h: 5 });
+  if (p.fire) out.push({ x: p.fire.x - 1, y: p.fire.y - 2, w: p.fire.w + 2, h: 18 });
+  if (p.tub) out.push({ x: p.tub.x - 1, y: p.tub.y - 1, w: p.tub.w + 2, h: p.tub.h + 4 });
+  for (const l of p.loungers) out.push({ x: l.x - 10, y: l.y - 19, w: 20, h: 28 });
+  if (p.scope) out.push({ x: p.scope.x - 8, y: p.scope.y - 4, w: 16, h: 5 });
+  for (const q of terracePoles(L)) out.push({ x: q.x - 3, y: q.y - 4, w: 7, h: 6 });
+  return out;
 }
 

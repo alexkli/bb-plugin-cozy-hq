@@ -9,6 +9,7 @@ import { C, clamp, sprite } from "./kit.ts";
 import { drawBeyond, drawLowerPanes, duskness } from "./view.ts";
 import { outdoors, terraceDecor, terraceLights } from "./terrace.ts";
 import { planOf } from "./plan.ts";
+import { walkwaysOf } from "../../walkways.ts";
 import { spiralStair } from "./luxe.ts";
 
 const layoutKey = (L: Layout) => `${L.W}x${L.H}|${L.props.length}|${L.spots.length}`;
@@ -283,11 +284,14 @@ function plan(L: Layout): DecorPlan {
     const apart = (r: Rect, o: Rect, m: number) => r.x + r.w < o.x - m || r.x > o.x + o.w + m || r.y + r.h < o.y - m || r.y > o.y + o.h + m;
     const closed = [...L.rooms.filter((room) => room.walls).map((room) => room.rect), ...outdoors(L)];
     const clearOfEvents = (r: Rect) => apart(r, ev, 8) && closed.every((c) => apart(r, c, 4));
+    // Its foot off the walkways, the ways across the open floor included.
+    const ways = (walkwaysOf(L.net) ?? []).map((s) => ({ x: Math.min(s.a.x, s.b.x), y: Math.min(s.a.y, s.b.y), w: Math.abs(s.b.x - s.a.x), h: Math.abs(s.b.y - s.a.y) }));
+    const offWays = (r: Rect) => ways.every((o) => apart({ x: r.x, y: r.y + r.h - 12, w: r.w, h: 12 }, o, 3));
     const place = (kind: DecorKind, within: Rect | undefined, pick: "first" | "last" = "first", anywhere = false) => {
       const { w, h } = DECOR[kind];
       const spots = fp
         .find(w + 2, h, 24, within)
-        .filter((r) => (anywhere ? apart(r, ev, 8) && outdoors(L).every((o) => apart(r, o, 4)) : clearOfEvents(r)) && !taken.some((o) => Math.abs(o.x - r.x) < 48 && Math.abs(o.y - r.y) < 48));
+        .filter((r) => (anywhere ? apart(r, ev, 8) && outdoors(L).every((o) => apart(r, o, 4)) : clearOfEvents(r)) && offWays(r) && !taken.some((o) => Math.abs(o.x - r.x) < 48 && Math.abs(o.y - r.y) < 48));
       const r = pick === "first" ? spots[0] : spots[spots.length - 1];
       if (!r) return false;
       taken.push(r);
